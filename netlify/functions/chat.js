@@ -13,6 +13,7 @@ export async function handler(event) {
     const data = await response.json();
     return { statusCode: response.status, headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) };
   } catch (err) {
-    return { statusCode: 500, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ error: err.message }) };
+    return { statusCode: 500, headers: { "Content-Type": "application/json" },body: JSON.stringify({ model: "claude-haiku-4-5-20251001", max_tokens: 1024, ...body }),
+ }) };
   }
 }
