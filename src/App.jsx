@@ -234,6 +234,7 @@ const ADDR={
   "Precision Flooring - Norcross":"1750 Corporate Drive, Suite 740, Norcross, GA 30093",
   "Premier - Suwanee":"605 Satellite Blvd, Suite 200, Suwanee, GA 30024",
   "Premier - Norcross":"605 Satellite Blvd, Suite 200, Suwanee, GA 30024",
+  "NOCO Contracting":"1028 Branch Dr, Alpharetta, GA 30004",
   "Prestigious - Alpharetta":"795 Branch Drive, Alpharetta, GA 30004",
   "ProSource - Marietta":"2260 Northwest Parkway SE, Marietta, GA 30067",
   "ProSource - Norcross":"3000 Miller Court West, Norcross, GA 30071",
@@ -317,7 +318,7 @@ const getAddr=(s)=>ADDR[s]||"";
 const DEFAULT_INSTRUCTIONS={
   // EMSER
   "Atlanta West - Lithia Springs":"Product pick up at either or both Emser locations",
-  "Atlanta Flooring - Suwanee":"After 9 unless requested — not after 1",
+  "Atlanta Flooring - Suwanee":"Must deliver between 9:30 AM – 1:00 PM",
   "Elite Flooring - Norcross":"Deliveries always made here",
   "Britts - Lawrenceville":"Not before 9",
   "Stocco - Alpharetta":"Product pick up at either or both Emser locations",
@@ -359,7 +360,7 @@ const getDefaultInstr=(s)=>DEFAULT_INSTRUCTIONS[s]||"";
 /* ── CUSTOMERS ── */
 const CUSTOMERS={
 "Emser Tile":{rate_type:"hourly",rate:102.50,min_hours:4,pickup:"Norcross &/or Roswell",note:"$102.50/hr, 4hr min",
-deliveries:["Advanced Flooring Design - Mableton","American Flooring Services","Atlanta Flooring - Suwanee","Atlanta West - Lithia Springs","BEC - Alpharetta","Britts - Lawrenceville","Construction Resources - Decatur","D3 - Woodstock","Dalton Carpet Outlet - Smyrna","DCO Athens","DCO Eatonton","DCO Lakes Pkwy","DCO Smyrna","DCO Tech Dr - Lawrenceville","Drop Ship Liftgate","Elite Flooring - Norcross","Flooring Design Group - Doraville","Floorworx - Norcross","Gel & Associates - Atlanta","Hillman - Sugar Hill","Idlewood - Norcross","JSJ/ProSource - Marietta","Madison Flooring Group","NE Corner - Flowery Branch","Peachwood Floor Covering","Precision Flooring - Norcross","Premier - Suwanee","Prestigious - Alpharetta","ProSource - Marietta","ProSource - Norcross","SE Commercial - Woodstock","Sherwin Williams - Norcross","Sherwin Williams - Smyrna","Stocco - Alpharetta","Transfer - Norcross","Transfer - Roswell","Valufloor - Doraville","Vanguard - Norcross"]},
+deliveries:["Advanced Flooring Design - Mableton","American Flooring Services","Atlanta Flooring - Suwanee","Atlanta West - Lithia Springs","BEC - Alpharetta","Britts - Lawrenceville","Construction Resources - Decatur","D3 - Woodstock","Dalton Carpet Outlet - Smyrna","DCO Athens","DCO Eatonton","DCO Lakes Pkwy","DCO Smyrna","DCO Tech Dr - Lawrenceville","Drop Ship Liftgate","Elite Flooring - Norcross","Flooring Design Group - Doraville","Floorworx - Norcross","Gel & Associates - Atlanta","Hillman - Sugar Hill","Idlewood - Norcross","JSJ/ProSource - Marietta","Madison Flooring Group","NE Corner - Flowery Branch","NOCO Contracting","Peachwood Floor Covering","Precision Flooring - Norcross","Premier - Suwanee","Prestigious - Alpharetta","ProSource - Marietta","ProSource - Norcross","SE Commercial - Woodstock","Sherwin Williams - Norcross","Sherwin Williams - Smyrna","Stocco - Alpharetta","Transfer - Norcross","Transfer - Roswell","Valufloor - Doraville","Vanguard - Norcross"]},
 "Florida Tile":{rate_type:"flat",pickup:"Norcross",fuel_surcharge:0.15,note:"Flat rate + 15% fuel (separate)",
 deliveries:[{s:"3 Little Dogs - Cumming",r:200},{s:"Atlanta West - Lithia Springs",r:200},{s:"BEC - Alpharetta",r:175},{s:"Britts - Lawrenceville",r:125},{s:"Construction Resources - Decatur",r:175},{s:"DCO Lakes Pkwy - Lawrenceville",r:125},{s:"DCO Tech Dr - Lawrenceville",r:125},{s:"Floor Works - Dallas",r:250},{s:"Hillman - Sugar Hill",r:150},{s:"JSJ/ProSource - Marietta",r:150},{s:"Moda",r:150},{s:"NE Corner - Flowery Branch",r:150},{s:"Precision Flooring - Norcross",r:125},{s:"Premier - Suwanee",r:125},{s:"ProSource - Norcross",r:125},{s:"Remodel Republic",r:150},{s:"SE Commercial - Woodstock",r:175},{s:"Tile House",r:175},{s:"Vanguard - Norcross",r:125}]},
 "Specialty":{rate_type:"flat",pickup:"Norcross",fuel_included:true,note:"Flat rate (15% fuel included)",priority:true,priorityNote:"Be on dock first thing",
@@ -413,6 +414,29 @@ function getWeekDates(off=0){const now=new Date();const d=now.getDay();const mon
 function fmt(n){return "$"+n.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g,",");}
 
 /* ── DELIVERY CONFIRMATION (typed name) ── */
+/* ── INLINE RATE EDITOR ── */
+function InlineRate({value,isHourly,onSave,accent}){
+const[editing,setEditing]=useState(false);
+const[val,setVal]=useState("");
+const inputRef=useRef(null);
+const start=(e)=>{if(isHourly)return;e.stopPropagation();setVal(value.toFixed(2));setEditing(true);};
+const commit=()=>{const n=parseFloat(val);if(!isNaN(n)&&n>=0)onSave(n);setEditing(false);};
+if(editing)return(
+<input ref={inputRef} value={val} onChange={e=>setVal(e.target.value)} onBlur={commit}
+autoFocus
+inputMode="decimal"
+onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();commit();}if(e.key==="Escape")setEditing(false);}}
+onClick={e=>e.stopPropagation()}
+style={{width:80,border:"2px solid "+(accent||"#2563eb"),borderRadius:6,padding:"4px 8px",fontSize:13,fontWeight:700,outline:"none",textAlign:"right",fontVariantNumeric:"tabular-nums",background:"#fffbeb",WebkitAppearance:"none"}}/>
+);
+return(
+<span onClick={start} title={isHourly?"Hourly rate":"Tap to edit price"}
+style={{fontVariantNumeric:"tabular-nums",fontSize:12,fontWeight:700,color:isHourly?"#44403c":"#1e5b92",cursor:isHourly?"default":"pointer",borderBottom:isHourly?"none":"1px dashed #93c5fd",paddingBottom:1,WebkitTapHighlightColor:"rgba(0,0,0,0.1)"}}>
+{isHourly?"HR":"$"+value.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g,",")}
+</span>
+);
+}
+
 function SignaturePad({onSave,onCancel}){
 const[name,setName]=useState("");
 return(
@@ -459,7 +483,9 @@ const [mapReady,setMapReady]=useState(false);
 const stopsJsonRef=useRef("");     /* track last rendered stops to avoid needless redraws */
 const driversJsonRef=useRef("");
 const activeDriverRef=useRef(activeDriver);
+const onAssignStopRef=useRef(onAssignStop);
 useEffect(()=>{activeDriverRef.current=activeDriver;},[activeDriver]);
+useEffect(()=>{onAssignStopRef.current=onAssignStop;},[onAssignStop]);
 
 /* Initialize map ONCE */
 useEffect(()=>{
@@ -523,16 +549,20 @@ polylinesRef.current.forEach(p=>p.setMap(null));
 },[]);/* eslint-disable-line react-hooks/exhaustive-deps */
 
 /* Helper — build a DOM-based label overlay above a marker for dueBy */
-const makeDueLabel=(map,pos,text,isAfter)=>{
+const makeDueLabel=(map,pos,text)=>{
 if(!window.google?.maps?.OverlayView)return null;
+/* Determine color and display text based on format */
+const isWindow=text.includes("–")||text.includes("-")&&text.match(/\d.*–.*\d/);
+const isPickup=text.toLowerCase().startsWith("pickup");
+const isAfter=text.toLowerCase().startsWith("after");
+const bg=isWindow?"#7c3aed":isPickup?"#16a34a":isAfter?"#2563eb":"#dc2626";
+const display=text.replace(/^(By|After)\s*/i,"");
 class DueLabel extends window.google.maps.OverlayView{
-constructor(){super();this.pos=pos;this.text=text;this.isAfter=isAfter;this.div=null;}
+constructor(){super();this.pos=pos;this.div=null;}
 onAdd(){
 const d=document.createElement("div");
-d.style.cssText=`position:absolute;white-space:nowrap;font-family:'DM Sans',system-ui,sans-serif;
-font-size:10px;font-weight:700;color:#fff;padding:2px 6px;border-radius:4px;pointer-events:none;
-background:${isAfter?"#2563eb":"#dc2626"};box-shadow:0 1px 4px rgba(0,0,0,0.3);`;
-d.textContent=(isAfter?"After ":"")+text.replace(/^(After|By)\s*/i,"");
+d.style.cssText=`position:absolute;white-space:nowrap;font-family:'DM Sans',system-ui,sans-serif;font-size:10px;font-weight:700;color:#fff;padding:2px 6px;border-radius:4px;pointer-events:none;background:${bg};box-shadow:0 1px 4px rgba(0,0,0,0.3);`;
+d.textContent=display;
 this.div=d;
 this.getPanes().floatPane.appendChild(d);
 }
@@ -612,8 +642,7 @@ cursor:onAssignStop?"pointer":"default",
 /* dueBy label above marker */
 let labelOverlay=null;
 if(s.dueBy){
-const isAfter=s.dueBy.startsWith("After");
-labelOverlay=makeDueLabel(map,pos,s.dueBy,isAfter);
+labelOverlay=makeDueLabel(map,pos,s.dueBy);
 }
 
 /* Build rich info window */
@@ -624,7 +653,7 @@ if(isPU)badges.push('<span style="background:#2563eb;color:#fff;padding:1px 5px;
 if(isP)badges.push('<span style="background:#f59e0b;color:#fff;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:700">PRIORITY</span>');
 if(done)badges.push('<span style="background:#16a34a;color:#fff;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:700">DONE</span>');
 if(onSite&&!done)badges.push('<span style="background:#f59e0b;color:#fff;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:700">ON SITE</span>');
-if(s.dueBy){const bg=s.dueBy.startsWith("After")?"#2563eb":"#dc2626";badges.push(`<span style="background:${bg};color:#fff;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:700">⏰ ${s.dueBy}</span>`);}
+if(s.dueBy){const bg=s.dueBy.includes("-")?"#7c3aed":s.dueBy.startsWith("After")?"#2563eb":"#dc2626";badges.push(`<span style="background:${bg};color:#fff;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:700">⏰ ${s.dueBy}</span>`);}
 if(s.shipPlan)badges.push(`<span style="background:#ea580c;color:#fff;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:700">SP# ${s.shipPlan}</span>`);
 
 const infoContent=`<div style="font-family:DM Sans,system-ui,sans-serif;max-width:240px;padding:2px">
@@ -643,9 +672,10 @@ const infoWindow=new window.google.maps.InfoWindow({content:infoContent,maxWidth
 
 marker.addListener("click",()=>{
 const curActive=activeDriverRef.current;
-if(curActive&&onAssignStop){
+const curAssign=onAssignStopRef.current;
+if(curActive&&curAssign){
 /* Assign mode — click assigns stop to active driver, no info window */
-onAssignStop(s.id,curActive);
+curAssign(s.id,curActive);
 return;
 }
 /* Info mode — show info window */
@@ -839,7 +869,7 @@ return(
 {departed&&<span style={{fontSize:9,background:"#16a34a",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700}}>DONE</span>}
 {arrived&&!departed&&<span style={{fontSize:9,background:"#f59e0b",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700}}>ON SITE</span>}
 {wantsShipPlan&&<span style={{fontSize:9,background:"#ea580c",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700}}>SHIP PLAN REQ</span>}
-{entry.dueBy&&<span style={{fontSize:9,background:entry.dueBy.startsWith("After")?"#2563eb":"#dc2626",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700,display:"inline-flex",alignItems:"center",gap:2}}>{"\u23F0"} {entry.dueBy}</span>}
+{entry.dueBy&&<span style={{fontSize:9,background:entry.dueBy.includes("-")?"#7c3aed":entry.dueBy.startsWith("After")?"#2563eb":"#dc2626",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700,display:"inline-flex",alignItems:"center",gap:2}}>{"\u23F0"} {entry.dueBy}</span>}
 </div>
 <div style={{fontSize:16,fontWeight:700,color:"#1c1917",marginBottom:2}}>{entry.stop}</div>
 <div style={{fontSize:12,color:c.accent,fontWeight:600}}>{entry.customer}</div>
@@ -948,8 +978,11 @@ return(
 }
 
 /* ── MANIFEST STOP ── */
-function ManifestStop({entry,eIdx,total,drivers,onMove,onReassign,onRemove,onUpdateInstructions,onShipPlan,onDueBy,onWeight,onLoadNum,maxLoad,onDragStart,onDragOver,onDrop,isDragOver,isDragging}){
-const[expanded,setExpanded]=useState(false);const[instrText,setInstrText]=useState(entry.instructions||"");const[dueByInput,setDueByInput]=useState(entry.dueBy||"");const[dueType,setDueType]=useState(entry.dueBy?(entry.dueBy.startsWith("After")?"after":"by"):"by");
+function ManifestStop({entry,eIdx,total,drivers,onMove,onReassign,onRemove,onUpdateInstructions,onShipPlan,onDueBy,onWeight,onLoadNum,onRate,maxLoad,onDragStart,onDragOver,onDrop,isDragOver,isDragging}){
+const[expanded,setExpanded]=useState(false);const[instrText,setInstrText]=useState(entry.instructions||"");const[dueByInput,setDueByInput]=useState(entry.dueBy||"");const[dueType,setDueType]=useState(entry.dueBy?(entry.dueBy.startsWith("After")?"after":"by"):"by");const[lastHour,setLastHour]=useState(()=>{if(entry.dueBy){const m=entry.dueBy.match(/(\d+(?::\d+)?\s*[AP]M)/);return m?m[1].replace(/:\d+/,""):""}return "";});
+const buildTime=(hour,mins)=>{if(!hour)return "";const[h,period]=hour.split(" ");return mins===":00"?`${h} ${period}`:`${h}${mins} ${period}`;};
+const applyHour=(hour)=>{const mins=dueByInput?dueByInput.match(/:\d+/)?.[0]||":00":":00";const t=buildTime(hour,mins);setLastHour(hour);setDueByInput(dueType==="by"?"By "+t:"After "+t);};
+const applyMins=(mins)=>{const hour=lastHour;if(!hour)return;const t=buildTime(hour,mins);setDueByInput(dueType==="by"?"By "+t:"After "+t);};
 const c=CC[entry.customer]||CC["One-Off Delivery"];const addr=entry.addr||getAddr(entry.stop);const isP=entry.priority;const isPU=entry.stopType==="pickup";const hasI=entry.instructions?.trim();const isImetco=entry.customer==="IMETCO";const hasDue=!!entry.dueBy;
 return(
 <div data-drv={entry.driverId} data-idx={eIdx}>
@@ -964,7 +997,7 @@ style={{color:isDragging?"#16a34a":"#a8a29e",fontSize:20,cursor:"grab",padding:"
 {isPU&&<span style={{fontSize:9,background:"#2563eb",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700}}>PICKUP</span>}
 {isP&&<span style={{fontSize:9,background:"#f59e0b",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700}}>PRIORITY</span>}
 {entry.status==="departed"&&<span style={{fontSize:9,background:"#16a34a",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700}}>DONE</span>}
-{hasDue&&<span style={{fontSize:9,background:entry.dueBy.startsWith("After")?"#2563eb":"#dc2626",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700,display:"inline-flex",alignItems:"center",gap:2}}>{"\u23F0"} {entry.dueBy}</span>}
+{hasDue&&<span style={{fontSize:9,background:entry.dueBy.includes("-")?"#7c3aed":entry.dueBy.startsWith("After")?"#2563eb":"#dc2626",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700,display:"inline-flex",alignItems:"center",gap:2}}>{"\u23F0"} {entry.dueBy}</span>}
 <span style={{fontSize:12,fontWeight:700,color:"#1c1917"}}>{entry.stop}</span>
 </div>
 <div style={{fontSize:10,color:c.accent,fontWeight:600}}>{entry.customer}</div>
@@ -975,7 +1008,7 @@ style={{color:isDragging?"#16a34a":"#a8a29e",fontSize:20,cursor:"grab",padding:"
 {entry.shipPlan&&!expanded&&<div style={{fontSize:10,color:"#ea580c",fontWeight:700,marginTop:1}}>SP# {entry.shipPlan}</div>}
 {entry.weight>0&&!expanded&&<div style={{fontSize:10,color:BRAND.main,fontWeight:700,marginTop:1}}>{entry.weight.toLocaleString()} lbs {(entry.loadNum||1)>1?"(Load "+(entry.loadNum||1)+")":""}</div>}
 </div>
-<span style={{fontSize:11,fontWeight:700,fontVariantNumeric:"tabular-nums",color:"#44403c",whiteSpace:"nowrap"}}>{entry.isHourly?"HR":fmt(entry.baseRate)}</span>
+<span onClick={e=>e.stopPropagation()}><InlineRate value={entry.baseRate} isHourly={entry.isHourly} onSave={r=>onRate&&onRate(r)}/></span>
 <div style={{display:"flex",flexDirection:"column",gap:2}}>
 <select value={entry.driverId} onChange={e=>{e.stopPropagation();onReassign(Number(e.target.value));}} style={{background:"#e7e5e4",border:"none",borderRadius:6,padding:"3px 2px",fontSize:10,color:"#44403c",cursor:"pointer",maxWidth:62}}><option value={0}>None</option>{drivers.map(dd=><option key={dd.id} value={dd.id}>{dd.name}</option>)}</select>
 <button onClick={e=>{e.stopPropagation();onRemove();}} style={{background:"none",border:"none",color:"#dc2626",fontSize:9,cursor:"pointer",padding:0}}>Remove</button>
@@ -992,17 +1025,28 @@ style={{flex:1,maxWidth:120,border:entry.shipPlan?"1px solid #bbf7d0":"1px solid
 style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px",fontSize:13,outline:"none",resize:"vertical",fontFamily:"inherit"}}/>
 <div style={{marginTop:8,background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:10,padding:"8px 10px"}}>
 <div style={{display:"flex",gap:4,marginBottom:8}}>
-<button onClick={e=>{e.stopPropagation();setDueType("by");}} style={{flex:1,padding:"6px",borderRadius:6,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,background:dueType==="by"?"#dc2626":"#e7e5e4",color:dueType==="by"?"#fff":"#57534e"}}>{"\u23F0"} Due By</button>
-<button onClick={e=>{e.stopPropagation();setDueType("after");}} style={{flex:1,padding:"6px",borderRadius:6,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,background:dueType==="after"?"#2563eb":"#e7e5e4",color:dueType==="after"?"#fff":"#57534e"}}>Deliver After</button>
+<button onClick={e=>{e.stopPropagation();setDueType("by");if(dueByInput)setDueByInput("By "+dueByInput.replace(/^(By |After )/,""));}} style={{flex:1,padding:"6px",borderRadius:6,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,background:dueType==="by"?"#dc2626":"#e7e5e4",color:dueType==="by"?"#fff":"#57534e"}}>{"\u23F0"} Due By</button>
+<button onClick={e=>{e.stopPropagation();setDueType("after");if(dueByInput)setDueByInput("After "+dueByInput.replace(/^(By |After )/,""));}} style={{flex:1,padding:"6px",borderRadius:6,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,background:dueType==="after"?"#2563eb":"#e7e5e4",color:dueType==="after"?"#fff":"#57534e"}}>Deliver After</button>
 </div>
-<div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
-{["8 AM","9 AM","10 AM","11 AM","12 PM","1 PM","2 PM"].map(t=>{const selected=dueByInput===(dueType==="by"?"By "+t:"After "+t);return(
-<button key={t} onClick={e=>{e.stopPropagation();const val=dueType==="by"?"By "+t:"After "+t;setDueByInput(selected?"":val);}}
-style={{padding:"6px 10px",borderRadius:6,border:"none",cursor:"pointer",fontSize:12,fontWeight:700,background:selected?(dueType==="by"?"#dc2626":"#2563eb"):"#fff",color:selected?"#fff":"#1c1917",minWidth:44,textAlign:"center"}}>{t}</button>);})}
+<div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:6}}>
+{["8 AM","9 AM","10 AM","11 AM","12 PM","1 PM","2 PM"].map(t=>{
+const sel=lastHour===t&&!!dueByInput;
+return(<button key={t} onClick={e=>{e.stopPropagation();if(sel&&!dueByInput.match(/:\d+/)){setLastHour("");setDueByInput("");}else{applyHour(t);}}}
+style={{padding:"6px 10px",borderRadius:6,border:"none",cursor:"pointer",fontSize:12,fontWeight:700,background:sel?(dueType==="by"?"#dc2626":"#2563eb"):"#fff",color:sel?"#fff":"#1c1917",minWidth:44,textAlign:"center"}}>{t}</button>);
+})}
+</div>
+<div style={{display:"flex",gap:4,marginBottom:2}}>
+{[":00",":15",":30",":45"].map(m=>{
+const curMins=dueByInput.match(/:\d+/)?.[0]||":00";
+const sel=!!lastHour&&!!dueByInput&&curMins===m;
+const disabled=!lastHour;
+return(<button key={m} onClick={e=>{e.stopPropagation();if(!disabled)applyMins(m);}}
+style={{flex:1,padding:"5px 2px",borderRadius:6,border:"none",cursor:disabled?"default":"pointer",fontSize:11,fontWeight:700,background:sel?(dueType==="by"?"#dc2626":"#2563eb"):disabled?"#f5f5f4":"#e7e5e4",color:sel?"#fff":disabled?"#c4c4c4":"#44403c",opacity:disabled?0.5:1}}>{m}</button>);
+})}
 </div>
 {dueByInput&&<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:6}}>
 <span style={{fontSize:12,fontWeight:700,color:dueType==="by"?"#dc2626":"#2563eb"}}>{dueByInput}</span>
-<button onClick={e=>{e.stopPropagation();setDueByInput("");}} style={{background:"#fff",border:"1px solid #d6d3d1",borderRadius:5,padding:"2px 8px",cursor:"pointer",fontSize:10,color:"#78716c"}}>Clear</button>
+<button onClick={e=>{e.stopPropagation();setDueByInput("");setLastHour("");}} style={{background:"#fff",border:"1px solid #d6d3d1",borderRadius:5,padding:"2px 8px",cursor:"pointer",fontSize:10,color:"#78716c"}}>Clear</button>
 </div>}
 </div>
 {/* Weight & Load */}
@@ -1058,6 +1102,7 @@ const COORDS={
 "1750 Corporate Drive, Suite 740, Norcross, GA 30093":{lat:33.9265,lng:-84.2175},
 "605 Satellite Blvd, Suite 200, Suwanee, GA 30024":{lat:34.0395,lng:-84.0555},
 "795 Branch Drive, Alpharetta, GA 30004":{lat:34.1125,lng:-84.2790},
+"1028 Branch Dr, Alpharetta, GA 30004":{lat:34.1132,lng:-84.2798},
 "2260 Northwest Parkway SE, Marietta, GA 30067":{lat:33.9135,lng:-84.4620},
 "3000 Miller Court West, Norcross, GA 30071":{lat:33.9165,lng:-84.2065},
 "6513 Warren Drive, Norcross, GA 30071":{lat:33.9215,lng:-84.2165},
@@ -1562,12 +1607,17 @@ useEffect(()=>{
 const addDel=(cust,stop,rate,drvId,ex={})=>{
 const cd=CUSTOMERS[cust];
 const instrForStop=customInstr[stop]!==undefined?customInstr[stop]:getDefaultInstr(stop);
-const entry={id:Date.now()+Math.random(),customer:cust,stop,baseRate:rate,fuelPct:ex.fuelPct||0,isHourly:ex.isHourly||false,note:ex.note||null,driverId:drvId,addr:ex.addr||getAddr(stop),stopType:ex.stopType||"delivery",priority:ex.priority||(cd?.priority)||false,instructions:ex.instructions!==undefined?ex.instructions:instrForStop,status:null,arrivedAt:null,departedAt:null,eta:null,photos:[],signature:null,dueBy:ex.dueBy||null,weight:ex.weight||0,loadNum:ex.loadNum||1};
+/* Auto time constraints for specific stops */
+const autoDueBy=ex.dueBy||(stop==="Atlanta Flooring - Suwanee"?"9:30–1:00 PM":null);
+const autoDeliverAfter=(cust==="Specialty"&&!ex.dueBy)?"Pickup 7:30 AM":null;
+const entry={id:Date.now()+Math.random(),customer:cust,stop,baseRate:rate,fuelPct:ex.fuelPct||0,isHourly:ex.isHourly||false,note:ex.note||null,driverId:drvId,addr:ex.addr||getAddr(stop),stopType:ex.stopType||"delivery",priority:ex.priority||(cd?.priority)||false,instructions:ex.instructions!==undefined?ex.instructions:instrForStop,status:null,arrivedAt:null,departedAt:null,eta:null,photos:[],signature:null,dueBy:autoDueBy||autoDeliverAfter||null,weight:ex.weight||0,loadNum:ex.loadNum||1};
 setLog(p=>({...p,[dk]:[...(p[dk]||[]),entry]}));
 /* DCO Eatonton: auto-add 1 bonus hour to Emser billing (long-distance run) */
 if(stop==="DCO Eatonton"&&cust==="Emser Tile"){
 setEmH(p=>{const key=`${dk}-emser`;const cur=p[key]||4;return{...p,[key]:cur+1,[`${dk}-eatonton-bonus`]:true};});
 showToast("DCO Eatonton added — +1 bonus hr applied");
+}else if(stop==="Atlanta Flooring - Suwanee"){
+showToast("Atlanta Flooring added — 9:30 AM–1 PM window");
 }else{
 showToast(`${stop} added`);
 }
@@ -1575,8 +1625,9 @@ if(quoteMode)setQuoteMode(null);
 };
 const addMulti=(cust,stops,drvId)=>{
 const cd=CUSTOMERS[cust];
+const isSpecialty=cust==="Specialty";
 const newEntries=stops.map(s=>{const isStr=typeof s==="string";const stop=isStr?s:s.s;const rate=isStr?0:s.r;const instrForStop=customInstr[stop]!==undefined?customInstr[stop]:getDefaultInstr(stop);
-return{id:Date.now()+Math.random(),customer:cust,stop,baseRate:rate,fuelPct:(cd.fuel_surcharge&&!cd.fuel_included)?cd.fuel_surcharge:0,isHourly:cd.rate_type==="hourly",note:isStr?null:s.n||null,driverId:drvId,addr:getAddr(stop),stopType:"delivery",priority:cd.priority||false,instructions:instrForStop,status:null,arrivedAt:null,departedAt:null,eta:null,photos:[],signature:null,dueBy:null,weight:0,loadNum:1};
+return{id:Date.now()+Math.random(),customer:cust,stop,baseRate:rate,fuelPct:(cd.fuel_surcharge&&!cd.fuel_included)?cd.fuel_surcharge:0,isHourly:cd.rate_type==="hourly",note:isStr?null:s.n||null,driverId:drvId,addr:getAddr(stop),stopType:"delivery",priority:cd.priority||false,instructions:instrForStop,status:null,arrivedAt:null,departedAt:null,eta:null,photos:[],signature:null,dueBy:isSpecialty?"Pickup 7:30 AM":null,weight:0,loadNum:1};
 });
 setLog(p=>({...p,[dk]:[...(p[dk]||[]),...newEntries]}));showToast(`${stops.length} stops added`);setMultiSelect(false);setMultiChecked([]);
 };
@@ -1593,6 +1644,7 @@ if(oldDrv&&oldDid>0)sendNotificationToDriver(oldDid,"🔄 ROUTE CHANGED\nStop re
 }
 };
 const updateInstructions=(eid,text)=>setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,instructions:text}:e)}));
+const updateRate=(eid,rate)=>setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,baseRate:parseFloat(rate)||0}:e)}));
 const updateStatus=(eid,status)=>{const now=new Date().toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,status,arrivedAt:status==="arrived"?now:e.arrivedAt,departedAt:status==="departed"?now:e.departedAt}:e)}));};
 const addPhoto=(eid,dataUrl)=>setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,photos:[...(e.photos||[]),dataUrl]}:e)}));
 const addSignature=(eid,dataUrl)=>setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,signature:dataUrl}:e)}));
@@ -1751,13 +1803,16 @@ return de.filter(e=>e.stopType==="delivery").slice(-count);
 
 /* ── AI CHAT ── */
 const buildSystemPrompt=()=>{
-const drvSummary=drivers.map(d=>{const de=drvEntries(d.id);return`${d.name} (id:${d.id}, phone:${d.phone||"none"}): ${de.length} stops — ${de.map((e,i)=>`${i+1}. ${e.stop} (${e.customer}${e.addr?", "+e.addr:""})`).join("; ")||"no stops"}`;}).join("\n");
+const drvSummary=drivers.map(d=>{const de=drvEntries(d.id);return`${d.name} (id:${d.id}, phone:${d.phone||"none"}): ${de.length} stops — ${de.map((e,i)=>{let s=`${i+1}. ${e.stop} (${e.customer}${e.addr?", "+e.addr:""})`;if(e.dueBy)s+=` [⏰ ${e.dueBy}]`;if(e.instructions)s+=` [📋 ${e.instructions}]`;return s;}).join("; ")||"no stops"}`;}).join("\n");
 const unassigned=dl.filter(e=>e.driverId===0);
-const uaSummary=unassigned.length?unassigned.map(e=>`${e.stop} (${e.customer})`).join(", "):"none";
+const uaSummary=unassigned.length?unassigned.map(e=>{let s=`${e.stop} (${e.customer})`;if(e.dueBy)s+=` [⏰ ${e.dueBy}]`;return s;}).join(", "):"none";
 const custList=Object.entries(CUSTOMERS).map(([name,cd])=>{
 const dels=cd.deliveries.map(d=>typeof d==="string"?d:`${d.s} $${d.r}`).join(", ");
 return`${name}: ${cd.rate_type==="hourly"?"$102.50/hr":cd.note}. Pickup: ${cd.pickup}. Deliveries: ${dels}`;
 }).join("\n");
+/* Build time constraints summary from active stops */
+const allStopsWithTimes=dl.filter(e=>e.dueBy);
+const timeConstraintLines=allStopsWithTimes.length?allStopsWithTimes.map(e=>{const drv=drivers.find(d=>d.id===e.driverId);return`- ${e.stop}: ${e.dueBy}${drv?" (assigned to "+drv.name+")":"  (unassigned)"}`;}).join("\n"):"None today";
 return`You are the AI dispatch assistant for Davis Delivery Dispatch & Delivery, a trucking company in Atlanta, GA.
 You help the owner manage routes, quote deliveries, optimize stops, and answer questions about the business.
 
@@ -1770,6 +1825,28 @@ ${drvSummary}
 
 UNASSIGNED STOPS: ${uaSummary}
 
+TIME CONSTRAINTS ON TODAY'S STOPS:
+${timeConstraintLines}
+
+STANDING TIME RULES (always apply these when routing):
+- Specialty (ALL stops): Pickup at Specialty dock by 7:30 AM — must be FIRST stop of the day
+- Atlanta Flooring - Suwanee: Deliver between 9:30 AM and 1:00 PM only
+- DCO Eatonton: Long-distance run — schedule early, allow 2+ hours travel
+- LaVista/Waffle House (Specialty): Must have appointment time, normally 10 AM
+- MM Systems - Pendergrass: Closed 11:45 AM–12:30 PM for lunch
+- Thermal Products - Norcross: Closed 1:00–2:00 PM for lunch
+- Britts - Lawrenceville: Not before 9 AM
+- DCO Tech Dr: Not before 10 AM
+
+ROUTING RULES — ALWAYS FOLLOW THESE:
+1. Any stop with a time constraint (shown as ⏰ in manifests) must be scheduled to meet that window
+2. Specialty pickup is ALWAYS first — driver must be at Specialty dock at 7:30 AM
+3. "Pickup X:XX AM" tags mean the driver must arrive at pickup no later than that time
+4. "By X:XX PM" tags mean delivery must be COMPLETED before that time
+5. "X:XX–X:XX" window tags mean delivery must happen within that window
+6. After meeting time-constrained stops, optimize remaining stops by geography
+7. Never suggest a route that violates a time constraint — flag conflicts explicitly
+
 CONTRACT CUSTOMERS & RATES:
 ${custList}
 
@@ -1777,14 +1854,15 @@ QUOTE CUSTOMERS: ${QUOTE_CUSTOMERS.map(q=>q.name).join(", ")}
 QUOTE PRICING: ≤10mi=$100, ≤20mi=$150, ≤30mi=$200, ≤40mi=$250, then +$50/10mi. Liftgate +$75 (replaces 15% fuel). Gravel +$25. 4-5 pallets +$25.
 
 You can help with:
-- Suggesting optimal route order for a driver's stops
+- Suggesting optimal route order respecting all time constraints
 - Calculating quotes for deliveries
 - Summarizing the day/week
 - Answering questions about customer rates, addresses, instructions
+- Flagging scheduling conflicts between time-constrained stops
 - Drafting invoice summaries
-- General dispatch strategy
 
-When suggesting route orders, consider geographic proximity in the Atlanta metro.
+When suggesting route orders, ALWAYS show time constraints first, then order remaining stops by geographic proximity in the Atlanta metro.
+If two stops have conflicting time windows, flag the conflict clearly before suggesting a route.
 Keep responses concise and actionable — the owner is on mobile.
 Use dollar amounts with tabular formatting when discussing money.
 Never make up addresses or rates — only use data provided above.`;
@@ -1965,7 +2043,7 @@ return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius
 {entry.priority&&<span style={{fontSize:9,background:"#f59e0b",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700}}>PRIORITY</span>}
 {done&&<span style={{fontSize:9,background:"#16a34a",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700}}>DONE</span>}
 {onSite&&!done&&<span style={{fontSize:9,background:"#f59e0b",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700}}>ON SITE</span>}
-{entry.dueBy&&<span style={{fontSize:9,background:entry.dueBy.startsWith("After")?"#2563eb":"#dc2626",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700}}>⏰ {entry.dueBy}</span>}
+{entry.dueBy&&<span style={{fontSize:9,background:entry.dueBy.includes("-")?"#7c3aed":entry.dueBy.startsWith("After")?"#2563eb":"#dc2626",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700}}>⏰ {entry.dueBy}</span>}
 {drv&&<span style={{fontSize:9,background:DCOL[di]||"#78716c",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:600}}>{drv.name.split(" ")[0]}</span>}
 </div>
 <div style={{fontSize:14,fontWeight:600}}>{entry.stop}</div>
@@ -1974,7 +2052,7 @@ return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius
 {entry.shipPlan&&<div style={{fontSize:11,color:"#ea580c",fontWeight:700,marginTop:2}}>SP# {entry.shipPlan}</div>}
 </div>
 <div style={{textAlign:"right",marginLeft:10,flexShrink:0}}>
-<div style={{fontSize:15,fontWeight:700,fontVariantNumeric:"tabular-nums"}}>{entry.isHourly?"Hourly":fmt(entry.baseRate)}</div>
+<div style={{fontSize:15,fontWeight:700,fontVariantNumeric:"tabular-nums"}}><InlineRate value={entry.baseRate} isHourly={entry.isHourly} onSave={r=>updateRate(entry.id,r)}/></div>
 <button onClick={()=>rmDel(entry.id)} style={{background:"none",border:"none",color:"#dc2626",fontSize:10,cursor:"pointer",padding:"4px 0 0",opacity:0.7}}>Remove</button>
 </div>
 </div>
@@ -2048,7 +2126,7 @@ return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius
 {entry.shipPlan&&<span style={{fontSize:10,color:"#ea580c",fontWeight:700,flexShrink:0}}>SP#{entry.shipPlan}</span>}
 {drv&&<span style={{fontSize:9,background:DCOL[di2]||"#78716c",color:"#fff",padding:"1px 4px",borderRadius:3,fontWeight:600,flexShrink:0}}>{drv.name.split(" ")[0]}</span>}
 </div>
-<span style={{fontVariantNumeric:"tabular-nums",fontSize:12,fontWeight:600,color:"#44403c",flexShrink:0,marginLeft:8}}>{entry.isHourly?"HR":fmt(entry.baseRate)}</span>
+<InlineRate value={entry.baseRate} isHourly={entry.isHourly} onSave={r=>updateRate(entry.id,r)}/>
 </div>);})}
 </div>);})}
 {wkD.every(d=>!d.entries.length)&&<div style={{textAlign:"center",padding:"60px 20px",color:"#a8a29e"}}><p>No deliveries this week</p></div>}
@@ -2106,30 +2184,53 @@ return(<div key={drv.id} style={{background:"#fff",border:"1px solid #e7e5e4",bo
 </div>
 <button onClick={()=>addEmserShift(drv.id)} style={{background:BRAND.pale,border:"1px solid "+BRAND.light,borderRadius:6,padding:"4px 12px",cursor:"pointer",fontSize:12,fontWeight:600,color:BRAND.main}}>+ Shift</button>
 </div>
-{drvShifts.map((shift,si)=>{const mins=calcShiftMins(shift);return(
+{drvShifts.map((shift,si)=>{
+const mins=calcShiftMins(shift);
+const HOURS=["7","8","9","10","11","12","1","2","3","4","5"];
+const AMPM=(h)=>parseInt(h)>=7&&parseInt(h)<=11?"AM":"PM";
+const hourTo24=(h)=>{let n=parseInt(h);const ap=AMPM(h);if(ap==="PM"&&n!==12)n+=12;if(ap==="AM"&&n===12)n=0;return String(n).padStart(2,"0");};
+const h24ToDisplay=(h24)=>{if(!h24)return"";const n=parseInt(h24);if(n===0)return"12";if(n>12)return String(n-12);return String(n);};
+const startDispHour=shift.start?h24ToDisplay(shift.start.split(":")[0]):"";
+const endDispHour=shift.end?h24ToDisplay(shift.end.split(":")[0]):"";
+const setHour=(field,h)=>{const h24=hourTo24(h);const curVal=field==="start"?shift.start:shift.end;const curMin=curVal?curVal.split(":")[1]:"00";updateEmserShift(shift.id,field,h24+":"+curMin);};
+const setMin=(field,v)=>{const curVal=field==="start"?shift.start:shift.end;if(!curVal)return;updateEmserShift(shift.id,field,curVal.split(":")[0]+":"+v);};
+const MINS=[{l:":00",v:"00"},{l:":15",v:"15"},{l:":30",v:"30"},{l:":45",v:"45"}];
+const btnBase={padding:"3px 0",borderRadius:4,border:"none",cursor:"pointer",fontSize:9,fontWeight:700,textAlign:"center"};
+return(
 <div key={shift.id} style={{background:"#fafaf9",border:"1px solid #e7e5e4",borderRadius:10,padding:"10px 12px",marginBottom:8}}>
-<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
 <span style={{fontSize:11,fontWeight:600,color:"#57534e"}}>Shift {si+1}</span>
 <div style={{display:"flex",alignItems:"center",gap:6}}>
 {mins>0&&<span style={{fontSize:12,fontWeight:700,color:BRAND.main}}>{formatMins(mins)}</span>}
 <button onClick={()=>removeEmserShift(shift.id)} style={{background:"#fef2f2",border:"none",borderRadius:5,padding:"2px 7px",cursor:"pointer",fontSize:10,color:"#dc2626"}}>✕</button>
 </div>
 </div>
-<div style={{display:"flex",gap:10,alignItems:"center",marginBottom:6}}>
-<div style={{flex:1}}><label style={{fontSize:10,fontWeight:600,color:"#78716c",display:"block",marginBottom:3}}>Start</label><input type="time" value={shift.start} onChange={e=>updateEmserShift(shift.id,"start",e.target.value)} style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"7px 10px",fontSize:14,fontWeight:700,outline:"none"}}/></div>
-<div style={{fontSize:16,color:"#d6d3d1",paddingTop:18}}>→</div>
-<div style={{flex:1}}><label style={{fontSize:10,fontWeight:600,color:"#78716c",display:"block",marginBottom:3}}>End</label><input type="time" value={shift.end} onChange={e=>updateEmserShift(shift.id,"end",e.target.value)} style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"7px 10px",fontSize:14,fontWeight:700,outline:"none"}}/></div>
+<div style={{display:"flex",gap:12}}>
+{/* Start column */}
+<div style={{flex:1}}>
+<div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
+<label style={{fontSize:10,fontWeight:700,color:BRAND.main,width:28,flexShrink:0}}>Start</label>
+<input type="time" value={shift.start} onChange={e=>updateEmserShift(shift.id,"start",e.target.value)} style={{flex:1,border:"1px solid #bfdbfe",borderRadius:7,padding:"4px 8px",fontSize:13,fontWeight:700,outline:"none",background:shift.start?"#eff6ff":"#fafaf9"}}/>
 </div>
-<div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end",gap:6}}>
-<div style={{display:"flex",gap:3,flexWrap:"wrap",flex:1}}>
-{TIME_PRESETS.map(t=>{const t24=presetTo24(t);const isStart=shift.start===t24;const isEnd=shift.end===t24;return(<button key={t} onClick={()=>{if(!shift.start||isStart)updateEmserShift(shift.id,"start",t24);else if(!shift.end||isEnd)updateEmserShift(shift.id,"end",t24);}} style={{padding:"3px 7px",borderRadius:4,border:"none",cursor:"pointer",fontSize:9,fontWeight:600,background:isStart?BRAND.main:isEnd?"#16a34a":"#f5f5f4",color:isStart||isEnd?"#fff":"#78716c"}}>{t.replace(":00","").replace(" ","")}</button>);})}
+<div style={{display:"flex",gap:2,paddingLeft:34}}>
+{HOURS.map(h=>{const sel=startDispHour===h&&!!shift.start;return(<button key={h} onClick={()=>setHour("start",h)} style={{...btnBase,flex:1,background:sel?BRAND.main:"#e7e5e4",color:sel?"#fff":"#44403c"}}>{h}</button>);})}
 </div>
-<div style={{display:"flex",gap:3,flexShrink:0}}>
-{[15,30,45].map(m=>{
-const addMins=(base,add)=>{if(!base)return"";const[h,min]=base.split(":").map(Number);const total=h*60+min+add;return String(Math.floor(total/60)%24).padStart(2,"0")+":"+String(total%60).padStart(2,"0");};
-const newStart=shift.start?addMins(shift.start,m):"";
-const newEnd=shift.end?addMins(shift.end,m):"";
-return(<button key={m} onClick={()=>{if(shift.start&&!shift.end)updateEmserShift(shift.id,"end",addMins(shift.start,m));else if(shift.start)updateEmserShift(shift.id,"end",addMins(shift.start,m));}} title={`Set end = start + ${m}min`} style={{padding:"3px 8px",borderRadius:4,border:"1px solid #bfdbfe",cursor:"pointer",fontSize:9,fontWeight:700,background:"#eff6ff",color:"#2563eb"}}>+{m}</button>);})}
+<div style={{display:"flex",gap:2,paddingLeft:34,marginTop:2}}>
+{MINS.map(({l,v})=>{const sel=shift.start&&shift.start.split(":")[1]===v;const dis=!shift.start;return(<button key={v} onClick={()=>setMin("start",v)} style={{...btnBase,flex:1,background:sel?BRAND.main:dis?"#f5f5f4":"#dbeafe",color:sel?"#fff":dis?"#ccc":"#1d4ed8",opacity:dis?0.4:1,cursor:dis?"default":"pointer"}}>{l}</button>);})}
+</div>
+</div>
+{/* End column */}
+<div style={{flex:1}}>
+<div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
+<label style={{fontSize:10,fontWeight:700,color:"#16a34a",width:28,flexShrink:0}}>End</label>
+<input type="time" value={shift.end} onChange={e=>updateEmserShift(shift.id,"end",e.target.value)} style={{flex:1,border:"1px solid #bbf7d0",borderRadius:7,padding:"4px 8px",fontSize:13,fontWeight:700,outline:"none",background:shift.end?"#f0fdf4":"#fafaf9"}}/>
+</div>
+<div style={{display:"flex",gap:2,paddingLeft:34}}>
+{HOURS.map(h=>{const sel=endDispHour===h&&!!shift.end;return(<button key={h} onClick={()=>setHour("end",h)} style={{...btnBase,flex:1,background:sel?"#16a34a":"#e7e5e4",color:sel?"#fff":"#44403c"}}>{h}</button>);})}
+</div>
+<div style={{display:"flex",gap:2,paddingLeft:34,marginTop:2}}>
+{MINS.map(({l,v})=>{const sel=shift.end&&shift.end.split(":")[1]===v;const dis=!shift.end;return(<button key={v} onClick={()=>setMin("end",v)} style={{...btnBase,flex:1,background:sel?"#16a34a":dis?"#f5f5f4":"#dcfce7",color:sel?"#fff":dis?"#ccc":"#15803d",opacity:dis?0.4:1,cursor:dis?"default":"pointer"}}>{l}</button>);})}
+</div>
 </div>
 </div>
 </div>);})}
@@ -2216,7 +2317,7 @@ return(<div>
 </div>
 <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0,marginLeft:8}}>
 {drv&&<span style={{fontSize:9,background:DCOL[di]||"#78716c",color:"#fff",padding:"1px 4px",borderRadius:3,fontWeight:600}}>{drv.name.split(" ")[0]}</span>}
-<span style={{fontVariantNumeric:"tabular-nums",fontSize:12,fontWeight:600,color:"#44403c"}}>{entry.isHourly?"HR":fmt(entry.baseRate)}</span>
+<InlineRate value={entry.baseRate} isHourly={entry.isHourly} onSave={r=>updateRate(entry.id,r)}/>
 </div>
 </div>);})}
 </div>);});})()}
@@ -2297,13 +2398,13 @@ return(<div key={entry.id} style={{background:done?"#f0fdf4":onSite?"#fffbeb":ha
 {isP&&<span style={{fontSize:8,background:"#f59e0b",color:"#fff",padding:"1px 4px",borderRadius:2,fontWeight:700}}>PRIORITY</span>}
 {done&&<span style={{fontSize:8,background:"#16a34a",color:"#fff",padding:"1px 4px",borderRadius:2,fontWeight:700}}>DONE</span>}
 {onSite&&!done&&<span style={{fontSize:8,background:"#f59e0b",color:"#fff",padding:"1px 4px",borderRadius:2,fontWeight:700}}>ON SITE</span>}
-{hasDue&&<span style={{fontSize:8,background:entry.dueBy.startsWith("After")?"#2563eb":"#dc2626",color:"#fff",padding:"1px 4px",borderRadius:2,fontWeight:700,display:"inline-flex",alignItems:"center",gap:1}}>{"\u23F0"}{entry.dueBy}</span>}
+{hasDue&&<span style={{fontSize:8,background:entry.dueBy.includes("-")?"#7c3aed":entry.dueBy.startsWith("After")?"#2563eb":"#dc2626",color:"#fff",padding:"1px 4px",borderRadius:2,fontWeight:700,display:"inline-flex",alignItems:"center",gap:1}}>{"\u23F0"}{entry.dueBy}</span>}
 {isImetco&&<span style={{fontSize:8,background:"#ea580c",color:"#fff",padding:"1px 4px",borderRadius:2,fontWeight:700}}>SHIP PLAN REQ</span>}
 <span style={{fontSize:11,fontWeight:600,color:"#1c1917",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{entry.stop}</span>
 </div>
 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
 <div style={{fontSize:10,color:c.accent,fontWeight:600}}>{entry.customer}</div>
-<span style={{fontSize:10,fontWeight:700,color:"#44403c",fontVariantNumeric:"tabular-nums"}}>{entry.isHourly?"HR":fmt(entry.baseRate)}</span>
+<InlineRate value={entry.baseRate} isHourly={entry.isHourly} onSave={r=>updateRate(entry.id,r)}/>
 </div>
 {addr&&<div style={{fontSize:9,color:"#78716c",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:1}}>{addr}</div>}
 {entry.note&&<div style={{fontSize:9,color:"#a8a29e",marginTop:1}}>{entry.note}</div>}
@@ -2336,12 +2437,12 @@ return(<div key={entry.id} style={{background:done?"#f0fdf4":onSite?"#fffbeb":ha
 <div style={{display:"flex",alignItems:"center",gap:4,marginBottom:2,flexWrap:"wrap"}}>
 {entry.stopType==="pickup"&&<span style={{fontSize:8,background:"#2563eb",color:"#fff",padding:"1px 4px",borderRadius:2,fontWeight:700}}>PU</span>}
 {entry.priority&&<span style={{fontSize:8,background:"#f59e0b",color:"#fff",padding:"1px 4px",borderRadius:2,fontWeight:700}}>PRIORITY</span>}
-{entry.dueBy&&<span style={{fontSize:8,background:entry.dueBy.startsWith("After")?"#2563eb":"#dc2626",color:"#fff",padding:"1px 4px",borderRadius:2,fontWeight:700}}>{"\u23F0"}{entry.dueBy}</span>}
+{entry.dueBy&&<span style={{fontSize:8,background:entry.dueBy.includes("-")?"#7c3aed":entry.dueBy.startsWith("After")?"#2563eb":"#dc2626",color:"#fff",padding:"1px 4px",borderRadius:2,fontWeight:700}}>{"\u23F0"}{entry.dueBy}</span>}
 <span style={{fontSize:11,fontWeight:600}}>{entry.stop}</span>
 </div>
 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
 <div style={{fontSize:10,color:c.accent}}>{entry.customer}</div>
-<span style={{fontSize:10,fontWeight:700,color:"#44403c",fontVariantNumeric:"tabular-nums"}}>{entry.isHourly?"HR":fmt(entry.baseRate)}</span>
+<InlineRate value={entry.baseRate} isHourly={entry.isHourly} onSave={r=>updateRate(entry.id,r)}/>
 </div>
 {addr&&<div style={{fontSize:9,color:"#78716c",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:1}}>{addr}</div>}
 {entry.note&&<div style={{fontSize:9,color:"#a8a29e",marginTop:1}}>{entry.note}</div>}
@@ -2476,7 +2577,7 @@ onAssignStop={mapActiveDrv?(stopId,drvId)=>{reassign(stopId,drvId);showToast("St
 {entry.priority&&<span style={{fontSize:8,background:"#f59e0b",color:"#fff",padding:"1px 4px",borderRadius:2,fontWeight:700}}>PRIORITY</span>}
 {done&&<span style={{fontSize:8,background:"#16a34a",color:"#fff",padding:"1px 4px",borderRadius:2,fontWeight:700}}>DONE</span>}
 {onSite&&!done&&<span style={{fontSize:8,background:"#f59e0b",color:"#fff",padding:"1px 4px",borderRadius:2,fontWeight:700}}>ON SITE</span>}
-{entry.dueBy&&<span style={{fontSize:8,background:entry.dueBy.startsWith("After")?"#2563eb":"#dc2626",color:"#fff",padding:"1px 4px",borderRadius:2,fontWeight:700,display:"inline-flex",alignItems:"center",gap:1}}>{"\u23F0"}{entry.dueBy}</span>}
+{entry.dueBy&&<span style={{fontSize:8,background:entry.dueBy.includes("-")?"#7c3aed":entry.dueBy.startsWith("After")?"#2563eb":"#dc2626",color:"#fff",padding:"1px 4px",borderRadius:2,fontWeight:700,display:"inline-flex",alignItems:"center",gap:1}}>{"\u23F0"}{entry.dueBy}</span>}
 {drv&&<span style={{fontSize:9,background:DCOL[di]||"#78716c",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:600}}>{drv.name.split(" ")[0]}</span>}
 </div>
 <div style={{fontSize:13,fontWeight:600}}>{entry.stop}</div>
@@ -2491,7 +2592,7 @@ onAssignStop={mapActiveDrv?(stopId,drvId)=>{reassign(stopId,drvId);showToast("St
 {entry.signature&&<div style={{fontSize:9,color:"#16a34a",marginTop:1}}>✍ {entry.signature}</div>}
 {entry.photos&&entry.photos.length>0&&<div style={{display:"flex",gap:3,marginTop:3}}>{entry.photos.map((p,pi)=><img key={pi} src={p} alt="" style={{width:24,height:24,objectFit:"cover",borderRadius:4,border:"1px solid #e7e5e4"}}/>)}</div>}
 </div>
-<div style={{fontSize:14,fontWeight:700,fontVariantNumeric:"tabular-nums",flexShrink:0,marginLeft:8}}>{entry.isHourly?"HR":fmt(entry.baseRate)}</div>
+<InlineRate value={entry.baseRate} isHourly={entry.isHourly} onSave={r=>updateRate(entry.id,r)}/>
 </div>
 </div>);})}
 
@@ -2925,12 +3026,12 @@ handleDrop(dragOver.drvId,dragOver.idx);
 {over&&<span style={{fontSize:8,background:"#dc2626",color:"#fff",padding:"1px 4px",borderRadius:3,fontWeight:700}}>OVER</span>}
 </div>):null;});})()}
 {de.map((entry,eIdx)=><div key={entry.id}>
-<ManifestStop entry={entry} eIdx={eIdx} total={de.length} drivers={drivers} onMove={dir=>moveInDriver(drv.id,eIdx,dir)} onReassign={did=>reassign(entry.id,did)} onRemove={()=>rmDel(entry.id)} onUpdateInstructions={text=>updateInstructions(entry.id,text)} onShipPlan={val=>setShipPlan(entry.id,val)} onDueBy={time=>setDueBy(entry.id,time)} onWeight={w=>setWeight(entry.id,w)} onLoadNum={n=>setLoadNum(entry.id,n)} maxLoad={getMaxLoad(drv.id)}
+<ManifestStop entry={entry} eIdx={eIdx} total={de.length} drivers={drivers} onMove={dir=>moveInDriver(drv.id,eIdx,dir)} onReassign={did=>reassign(entry.id,did)} onRemove={()=>rmDel(entry.id)} onUpdateInstructions={text=>updateInstructions(entry.id,text)} onShipPlan={val=>setShipPlan(entry.id,val)} onDueBy={time=>setDueBy(entry.id,time)} onWeight={w=>setWeight(entry.id,w)} onLoadNum={n=>setLoadNum(entry.id,n)} onRate={r=>updateRate(entry.id,r)} maxLoad={getMaxLoad(drv.id)}
 isDragging={dragSrc?.drvId===drv.id&&dragSrc?.idx===eIdx} isDragOver={dragOver?.drvId===drv.id&&dragOver?.idx===eIdx} onDragStart={()=>setDragSrc({drvId:drv.id,idx:eIdx})} onDragOver={()=>setDragOver({drvId:drv.id,idx:eIdx})} onDrop={()=>handleDrop(drv.id,eIdx)}/>
 <button onClick={()=>setInsertPickupFor({driverId:drv.id,afterIdx:eIdx})} style={{display:"block",width:"100%",background:"none",border:"1px dashed #bfdbfe",borderRadius:6,padding:"3px",cursor:"pointer",fontSize:10,color:"#93c5fd",marginBottom:4,textAlign:"center"}}>+ insert pickup here</button>
 </div>)}
 </div>);})}
-{(()=>{const ua=dl.filter(e=>e.driverId===0);if(!ua.length)return null;return(<div style={{background:"#fff",border:"2px dashed #d6d3d1",borderRadius:14,padding:16,marginBottom:12}}><div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}><div style={{width:14,height:14,borderRadius:4,background:"#a8a29e"}}/><span style={{fontSize:15,fontWeight:700,color:"#78716c"}}>Unassigned</span><span style={{fontSize:12,color:"#a8a29e"}}>({ua.length})</span></div>{ua.map((entry,eIdx)=><ManifestStop key={entry.id} entry={entry} eIdx={eIdx} total={ua.length} drivers={drivers} onMove={dir=>moveInDriver(0,eIdx,dir)} onReassign={did=>reassign(entry.id,did)} onRemove={()=>rmDel(entry.id)} onUpdateInstructions={text=>updateInstructions(entry.id,text)} onShipPlan={val=>setShipPlan(entry.id,val)} onDueBy={time=>setDueBy(entry.id,time)} onWeight={w=>setWeight(entry.id,w)} onLoadNum={n=>setLoadNum(entry.id,n)} maxLoad={1}/>)}</div>);})()}
+{(()=>{const ua=dl.filter(e=>e.driverId===0);if(!ua.length)return null;return(<div style={{background:"#fff",border:"2px dashed #d6d3d1",borderRadius:14,padding:16,marginBottom:12}}><div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}><div style={{width:14,height:14,borderRadius:4,background:"#a8a29e"}}/><span style={{fontSize:15,fontWeight:700,color:"#78716c"}}>Unassigned</span><span style={{fontSize:12,color:"#a8a29e"}}>({ua.length})</span></div>{ua.map((entry,eIdx)=><ManifestStop key={entry.id} entry={entry} eIdx={eIdx} total={ua.length} drivers={drivers} onMove={dir=>moveInDriver(0,eIdx,dir)} onReassign={did=>reassign(entry.id,did)} onRemove={()=>rmDel(entry.id)} onUpdateInstructions={text=>updateInstructions(entry.id,text)} onShipPlan={val=>setShipPlan(entry.id,val)} onDueBy={time=>setDueBy(entry.id,time)} onWeight={w=>setWeight(entry.id,w)} onLoadNum={n=>setLoadNum(entry.id,n)} onRate={r=>updateRate(entry.id,r)} maxLoad={1}/>)}</div>);})()}
 </div>}
 
 {/* ═══ ROUTES ═══ */}
@@ -3001,7 +3102,7 @@ return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius
 <span style={{fontSize:11,fontWeight:600,color:c.accent,textTransform:"uppercase"}}>{entry.customer}</span>
 {entry.stopType==="pickup"&&<span style={{fontSize:9,background:"#2563eb",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700}}>PICKUP</span>}
 {entry.priority&&<span style={{fontSize:9,background:"#f59e0b",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700}}>PRIORITY</span>}
-{entry.dueBy&&<span style={{fontSize:9,background:entry.dueBy.startsWith("After")?"#2563eb":"#dc2626",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700,display:"inline-flex",alignItems:"center",gap:2}}>{"\u23F0"} {entry.dueBy}</span>}
+{entry.dueBy&&<span style={{fontSize:9,background:entry.dueBy.includes("-")?"#7c3aed":entry.dueBy.startsWith("After")?"#2563eb":"#dc2626",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700,display:"inline-flex",alignItems:"center",gap:2}}>{"\u23F0"} {entry.dueBy}</span>}
 <span style={{fontSize:10,background:drv?(DCOL[di]||"#78716c"):"#a8a29e",color:"#fff",padding:"1px 6px",borderRadius:4,fontWeight:600}}>{drv?.name||"Unassigned"}</span>
 </div>
 <div style={{fontSize:14,fontWeight:600}}>{entry.stop}</div>
@@ -3009,7 +3110,7 @@ return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius
 {entry.instructions&&<div style={{fontSize:11,color:"#2563eb",marginTop:2}}>📋 {entry.instructions}</div>}
 </div>
 <div style={{textAlign:"right",marginLeft:12}}>
-<div style={{fontSize:16,fontWeight:700,fontVariantNumeric:"tabular-nums"}}>{entry.isHourly?"Hourly":fmt(entry.baseRate)}</div>
+<div style={{fontSize:16,fontWeight:700,fontVariantNumeric:"tabular-nums"}}><InlineRate value={entry.baseRate} isHourly={entry.isHourly} onSave={r=>updateRate(entry.id,r)}/></div>
 <button onClick={()=>rmDel(entry.id)} style={{background:"none",border:"none",color:"#dc2626",fontSize:11,cursor:"pointer",padding:"4px 0 0",opacity:0.7}}>Remove</button>
 </div>
 </div>
@@ -3063,7 +3164,7 @@ style={{flex:1,border:entry.shipPlan?"1px solid #bbf7d0":"1px solid #fca5a5",bor
 {drivers.map((drv,di)=>{const mins=shiftByDrv[drv.id]||0;if(!mins)return null;const initials=drv.name.split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase();return(<span key={drv.id} style={{fontSize:11,background:DCOL[di],color:"#fff",padding:"1px 6px",borderRadius:4,fontWeight:600}}>{initials} {formatMins(mins)}</span>);})}
 <span style={{marginLeft:"auto",fontSize:11,fontWeight:700,color:"#1d4ed8",fontVariantNumeric:"tabular-nums"}}>{formatMins(shiftMins)}</span>
 </div>}
-{entries.map(entry=>{const c=getCustColor(entry.customer);const drv=drivers.find(d=>d.id===entry.driverId);const di2=drivers.findIndex(d=>d.id===entry.driverId);const isImetco=entry.customer==="IMETCO";return(<div key={entry.id}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 8px 6px 16px",borderLeft:`3px solid ${c.accent}`,marginTop:4,background:"#fff",borderRadius:isImetco?"0 8px 0 0":"0 8px 8px 0"}}><div style={{display:"flex",alignItems:"center",gap:4,flex:1,minWidth:0}}><span style={{fontSize:11,color:c.accent,fontWeight:600}}>{entry.customer}</span><span style={{fontSize:12,color:"#57534e",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{entry.stop}</span>{drv&&<span style={{fontSize:9,background:DCOL[di2]||"#78716c",color:"#fff",padding:"1px 4px",borderRadius:3,fontWeight:600,flexShrink:0}}>{drv.name.charAt(0)}</span>}</div><span style={{fontVariantNumeric:"tabular-nums",fontSize:12,fontWeight:600,color:"#44403c",flexShrink:0,marginLeft:4}}>{entry.isHourly?"HR":fmt(entry.baseRate)}</span></div>
+{entries.map(entry=>{const c=getCustColor(entry.customer);const drv=drivers.find(d=>d.id===entry.driverId);const di2=drivers.findIndex(d=>d.id===entry.driverId);const isImetco=entry.customer==="IMETCO";return(<div key={entry.id}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 8px 6px 16px",borderLeft:`3px solid ${c.accent}`,marginTop:4,background:"#fff",borderRadius:isImetco?"0 8px 0 0":"0 8px 8px 0"}}><div style={{display:"flex",alignItems:"center",gap:4,flex:1,minWidth:0}}><span style={{fontSize:11,color:c.accent,fontWeight:600}}>{entry.customer}</span><span style={{fontSize:12,color:"#57534e",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{entry.stop}</span>{drv&&<span style={{fontSize:9,background:DCOL[di2]||"#78716c",color:"#fff",padding:"1px 4px",borderRadius:3,fontWeight:600,flexShrink:0}}>{drv.name.charAt(0)}</span>}</div><InlineRate value={entry.baseRate} isHourly={entry.isHourly} onSave={r=>updateRate(entry.id,r)}/></div>
 {isImetco&&<div style={{padding:"4px 8px 6px 16px",borderLeft:`3px solid ${c.accent}`,background:"#fff",borderRadius:"0 0 8px 0",display:"flex",alignItems:"center",gap:6}}>
 <span style={{fontSize:10,fontWeight:700,color:"#ea580c",flexShrink:0}}>SP#:</span>
 <input value={entry.shipPlan||""} onChange={e=>{const eid=entry.id;const val=e.target.value;setLog(p=>({...p,[wk2]:(p[wk2]||[]).map(en=>en.id===eid?{...en,shipPlan:val}:en)}));}} placeholder="—"
@@ -3130,35 +3231,56 @@ return(<div key={drv.id} style={{background:"#fff",border:"1px solid #e7e5e4",bo
 <button onClick={()=>addEmserShift(drv.id)} style={{background:BRAND.pale,border:"1px solid "+BRAND.light,borderRadius:6,padding:"4px 10px",cursor:"pointer",fontSize:11,fontWeight:600,color:BRAND.main}}>+ Shift</button>
 </div>
 
-{drvShifts.map((shift,si)=>{const mins=calcShiftMins(shift);return(
+{drvShifts.map((shift,si)=>{
+const mins=calcShiftMins(shift);
+const HOURS=["7","8","9","10","11","12","1","2","3","4","5"];
+const AMPM=(h)=>parseInt(h)>=7&&parseInt(h)<=11?"AM":"PM";
+const hourTo24=(h)=>{let n=parseInt(h);const ap=AMPM(h);if(ap==="PM"&&n!==12)n+=12;if(ap==="AM"&&n===12)n=0;return String(n).padStart(2,"0");};
+const curStartHour=shift.start?String(parseInt(shift.start.split(":")[0])||""):"";
+const curStartMin=shift.start?":"+shift.start.split(":")[1]||":00":":00";
+const curEndHour=shift.end?String(parseInt(shift.end.split(":")[0])||""):"";
+const curEndMin=shift.end?":"+shift.end.split(":")[1]||":00":":00";
+/* Map 24h back to display hour */
+const h24ToDisplay=(h24)=>{if(!h24)return"";const n=parseInt(h24);if(n===0)return"12";if(n>12)return String(n-12);return String(n);};
+const startDispHour=shift.start?h24ToDisplay(shift.start.split(":")[0]):"";
+const endDispHour=shift.end?h24ToDisplay(shift.end.split(":")[0]):"";
+const setHour=(field,h)=>{const ap=AMPM(h);const h24=hourTo24(h);const curVal=field==="start"?shift.start:shift.end;const curMin=curVal?curVal.split(":")[1]:"00";updateEmserShift(shift.id,field,h24+":"+curMin);};
+const setMin=(field,m)=>{const curVal=field==="start"?shift.start:shift.end;if(!curVal)return;const h24=curVal.split(":")[0];updateEmserShift(shift.id,field,h24+":"+m);};
+const MINS=[{l:":00",v:"00"},{l:":15",v:"15"},{l:":30",v:"30"},{l:":45",v:"45"}];
+const btnBase={padding:"4px 0",borderRadius:5,border:"none",cursor:"pointer",fontSize:10,fontWeight:700,textAlign:"center"};
+return(
 <div key={shift.id} style={{background:"#fafaf9",border:"1px solid #e7e5e4",borderRadius:10,padding:"10px 12px",marginBottom:6}}>
-<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
 <span style={{fontSize:11,fontWeight:600,color:"#57534e"}}>Shift {si+1}</span>
 <div style={{display:"flex",alignItems:"center",gap:6}}>
 {mins>0&&<span style={{fontSize:12,fontWeight:700,color:BRAND.main}}>{formatMins(mins)}</span>}
-<button onClick={()=>removeEmserShift(shift.id)} style={{background:"#fef2f2",border:"none",borderRadius:5,padding:"2px 6px",cursor:"pointer",fontSize:10,color:"#dc2626"}}>{"✕"}</button>
+<button onClick={()=>removeEmserShift(shift.id)} style={{background:"#fef2f2",border:"none",borderRadius:5,padding:"2px 6px",cursor:"pointer",fontSize:10,color:"#dc2626"}}>✕</button>
 </div>
 </div>
-<div style={{display:"flex",gap:8,alignItems:"center",marginBottom:6}}>
-<div style={{flex:1}}>
-<label style={{fontSize:10,fontWeight:600,color:"#78716c",display:"block",marginBottom:3}}>Start</label>
-<input type="time" value={shift.start} onChange={e=>updateEmserShift(shift.id,"start",e.target.value)} style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px",fontSize:14,fontWeight:700,outline:"none",background:shift.start?"#fff":"#fafaf9"}}/>
+{/* Start row */}
+<div style={{marginBottom:8}}>
+<div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
+<label style={{fontSize:10,fontWeight:700,color:BRAND.main,width:30,flexShrink:0}}>Start</label>
+<input type="time" value={shift.start} onChange={e=>updateEmserShift(shift.id,"start",e.target.value)} style={{flex:1,border:"1px solid #bfdbfe",borderRadius:7,padding:"5px 8px",fontSize:13,fontWeight:700,outline:"none",background:shift.start?"#eff6ff":"#fafaf9"}}/>
 </div>
-<div style={{fontSize:16,color:"#d6d3d1",paddingTop:16}}>{"\u2192"}</div>
-<div style={{flex:1}}>
-<label style={{fontSize:10,fontWeight:600,color:"#78716c",display:"block",marginBottom:3}}>End</label>
-<input type="time" value={shift.end} onChange={e=>updateEmserShift(shift.id,"end",e.target.value)} style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px",fontSize:14,fontWeight:700,outline:"none",background:shift.end?"#fff":"#fafaf9"}}/>
+<div style={{display:"flex",gap:2,paddingLeft:36}}>
+{HOURS.map(h=>{const sel=startDispHour===h&&!!shift.start;return(<button key={h} onClick={()=>setHour("start",h)} style={{...btnBase,flex:1,background:sel?BRAND.main:"#e7e5e4",color:sel?"#fff":"#44403c"}}>{h}</button>);})}
+</div>
+<div style={{display:"flex",gap:2,paddingLeft:36,marginTop:2}}>
+{MINS.map(({l,v})=>{const sel=shift.start&&shift.start.split(":")[1]===v;const dis=!shift.start;return(<button key={v} onClick={()=>setMin("start",v)} style={{...btnBase,flex:1,background:sel?BRAND.main:dis?"#f5f5f4":"#dbeafe",color:sel?"#fff":dis?"#ccc":"#1d4ed8",opacity:dis?0.4:1,cursor:dis?"default":"pointer"}}>{l}</button>);})}
 </div>
 </div>
-<div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end",gap:4}}>
-<div style={{display:"flex",gap:3,flexWrap:"wrap",flex:1}}>
-{TIME_PRESETS.map(t=>{const t24=presetTo24(t);const isStart=shift.start===t24;const isEnd=shift.end===t24;return(
-<button key={t} onClick={()=>{if(!shift.start||isStart)updateEmserShift(shift.id,"start",t24);else if(!shift.end||isEnd)updateEmserShift(shift.id,"end",t24);}} style={{padding:"3px 6px",borderRadius:4,border:"none",cursor:"pointer",fontSize:9,fontWeight:600,background:isStart?BRAND.main:isEnd?"#16a34a":"#f5f5f4",color:isStart||isEnd?"#fff":"#78716c"}}>{t.replace(":00","").replace(" ","")}</button>);})}
+{/* End row */}
+<div>
+<div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
+<label style={{fontSize:10,fontWeight:700,color:"#16a34a",width:30,flexShrink:0}}>End</label>
+<input type="time" value={shift.end} onChange={e=>updateEmserShift(shift.id,"end",e.target.value)} style={{flex:1,border:"1px solid #bbf7d0",borderRadius:7,padding:"5px 8px",fontSize:13,fontWeight:700,outline:"none",background:shift.end?"#f0fdf4":"#fafaf9"}}/>
 </div>
-<div style={{display:"flex",gap:3,flexShrink:0}}>
-{[15,30,45].map(m=>{
-const addMins=(base,add)=>{if(!base)return"";const[h,min]=base.split(":").map(Number);const total=h*60+min+add;return String(Math.floor(total/60)%24).padStart(2,"0")+":"+String(total%60).padStart(2,"0");};
-return(<button key={m} onClick={()=>{if(shift.start)updateEmserShift(shift.id,"end",addMins(shift.start,m));}} title={`End = start + ${m}min`} style={{padding:"3px 7px",borderRadius:4,border:"1px solid #bfdbfe",cursor:"pointer",fontSize:9,fontWeight:700,background:"#eff6ff",color:"#2563eb"}}>+{m}</button>);})}
+<div style={{display:"flex",gap:2,paddingLeft:36}}>
+{HOURS.map(h=>{const sel=endDispHour===h&&!!shift.end;return(<button key={h} onClick={()=>setHour("end",h)} style={{...btnBase,flex:1,background:sel?"#16a34a":"#e7e5e4",color:sel?"#fff":"#44403c"}}>{h}</button>);})}
+</div>
+<div style={{display:"flex",gap:2,paddingLeft:36,marginTop:2}}>
+{MINS.map(({l,v})=>{const sel=shift.end&&shift.end.split(":")[1]===v;const dis=!shift.end;return(<button key={v} onClick={()=>setMin("end",v)} style={{...btnBase,flex:1,background:sel?"#16a34a":dis?"#f5f5f4":"#dcfce7",color:sel?"#fff":dis?"#ccc":"#15803d",opacity:dis?0.4:1,cursor:dis?"default":"pointer"}}>{l}</button>);})}
 </div>
 </div>
 </div>);})}
@@ -3269,7 +3391,7 @@ return(<div>
 </div>
 <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0,marginLeft:6}}>
 {drv&&<span style={{fontSize:9,background:DCOL[di]||"#78716c",color:"#fff",padding:"1px 4px",borderRadius:3,fontWeight:600}}>{drv.name.charAt(0)}</span>}
-<span style={{fontVariantNumeric:"tabular-nums",fontSize:12,fontWeight:600,color:"#44403c"}}>{entry.isHourly?"HR":fmt(entry.baseRate)}</span>
+<InlineRate value={entry.baseRate} isHourly={entry.isHourly} onSave={r=>updateRate(entry.id,r)}/>
 </div>
 </div>);})}
 </div>);});})()}
@@ -3756,7 +3878,7 @@ return(
 {departed&&<span style={{fontSize:9,background:"#16a34a",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700}}>DONE</span>}
 {arrived&&!departed&&<span style={{fontSize:9,background:"#f59e0b",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700}}>ON SITE</span>}
 {wantsShipPlan&&<span style={{fontSize:9,background:"#ea580c",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700}}>SHIP PLAN REQ</span>}
-{entry.dueBy&&<span style={{fontSize:9,background:entry.dueBy.startsWith("After")?"#2563eb":"#dc2626",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700,display:"inline-flex",alignItems:"center",gap:2}}>{"\u23F0"} {entry.dueBy}</span>}
+{entry.dueBy&&<span style={{fontSize:9,background:entry.dueBy.includes("-")?"#7c3aed":entry.dueBy.startsWith("After")?"#2563eb":"#dc2626",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700,display:"inline-flex",alignItems:"center",gap:2}}>{"\u23F0"} {entry.dueBy}</span>}
 </div>
 <div style={{fontSize:16,fontWeight:700,color:"#1c1917",marginBottom:2}}>{entry.stop}</div>
 {/* Customer name shown but NO pricing */}
