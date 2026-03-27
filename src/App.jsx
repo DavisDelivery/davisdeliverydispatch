@@ -1,37 +1,170 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 
-/*
- * FIREBASE CLOUD SYNC — HOW TO CONNECT
- * To enable sync: npm install firebase, create src/firebase.js,
- * implement the functions below, then swap the noopAsync stubs
- * with your real imports from firebase.js.
- *
- * Functions needed: saveManifestDay, subscribeManifests,
- * saveDrivers, subscribeDrivers, saveEmserHours,
- * subscribeEmserHours, saveDispatchNote, subscribeDispatchNotes,
- * sendNotificationToDriver, subscribeNotifications, markNotificationRead
- *
- * Firestore collections: manifests, drivers, emserHours,
- * dispatchNotes, notifications
- *
- * Until connected, app works offline (data resets on refresh).
- */
+/* ══════════════════════════════════════════════════════════════
+   FIREBASE — glorybounddispatch project
+   Loaded via CDN so no npm install needed on Netlify.
+   All data syncs in real-time across every device.
+══════════════════════════════════════════════════════════════ */
+const _fbCfg={apiKey:"AIzaSyB29mVeZXedDhLVT3eMVgl07EsOneWCUu4",authDomain:"glorybounddispatch.firebaseapp.com",projectId:"glorybounddispatch",storageBucket:"glorybounddispatch.appspot.com",messagingSenderId:"",appId:""};
 
-/* ── Offline fallbacks — replace with firebase.js imports to enable sync ── */
-const noop=()=>{};const noopAsync=async()=>{};
-const saveManifestDay=noopAsync;
-const subscribeManifests=(wo,cb)=>{cb({});return noop;};
-const getDayKey=noop;const getWeekKey=noop;
-const saveDrivers=noopAsync;
-const subscribeDrivers=(cb)=>{cb([]);return noop;};
-const sendNotificationToDriver=noopAsync;
-const subscribeNotifications=(id,cb)=>{cb([]);return noop;};
-const markNotificationRead=noopAsync;
-const saveEmserHours=noopAsync;
-const subscribeEmserHours=(cb)=>{cb({});return noop;};
-const saveDispatchNote=noopAsync;
-const subscribeDispatchNotes=(cb)=>{cb({});return noop;};
-const requestPushPermission=async()=>null;const onPushMessage=noop;const saveDriverToken=noopAsync;
+/* Lazy-load Firebase SDK from CDN — resolves once loaded */
+let _fbResolve,_fbReject;
+const _fbReady=new Promise((res,rej)=>{_fbResolve=res;_fbReject=rej;});
+(()=>{
+  if(window._fbLoaded){_fbResolve();return;}
+  const s=document.createElement("script");
+  s.type="module";
+  s.textContent=`
+    import{initializeApp}from"https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import{getFirestore,doc,setDoc,getDoc,onSnapshot,collection,addDoc,updateDoc,serverTimestamp,query,orderBy}from"https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+    const app=initializeApp(${JSON.stringify(_fbCfg)});
+    const db=getFirestore(app);
+    window._fb={db,doc,setDoc,getDoc,onSnapshot,collection,addDoc,updateDoc,serverTimestamp,query,orderBy};
+    window._fbLoaded=true;
+    window.dispatchEvent(new Event("fb_ready"));
+  `;
+  document.head.appendChild(s);
+  window.addEventListener("fb_ready",()=>_fbResolve(),{once:true});
+  setTimeout(()=>_fbReject("Firebase load timeout"),10000);
+})();
+
+const _db=()=>window._fb?.db;
+const _col=(...args)=>window._fb?.collection(...args);
+const _doc=(...args)=>window._fb?.doc(...args);
+const DAYNAMES_FB=["Mon","Tue","Wed","Thu","Fri"];
+
+/* ── Manifest ── */
+const saveManifestDay=async(wo,sd,entries)=>{
+  await _fbReady.catch(()=>{});
+  if(!_db())return;
+  const key=`${wo}-${DAYNAMES_FB[sd]}`;
+  /* Strip base64 photos before saving to Firestore (keep refs only) */
+  const safe=entries.map(e=>({...e,photos:(e.photos||[]).map((_,i)=>`photo_${e.id}_${i}`),signature:e.signature?"signed":null}));
+  await window._fb.setDoc(window._fb.doc(_db(),"manifests",key),{entries:safe,updatedAt:Date.now()});
+};
+const subscribeManifests=(wo,cb)=>{
+  if(!window._fbLoaded){
+    const h=()=>{
+      const unsubs=DAYNAMES_FB.map((abbr,i)=>{
+        const key=`${wo}-${abbr}`;
+        return window._fb.onSnapshot(window._fb.doc(_db(),"manifests",key),snap=>{
+          if(snap.exists())cb({[key]:snap.data().entries||[]});
+        });
+      });
+      window._fbManifestUnsubs=window._fbManifestUnsubs||[];
+      window._fbManifestUnsubs.push(...unsubs);
+    };
+    window.addEventListener("fb_ready",h,{once:true});
+    return()=>{window.removeEventListener("fb_ready",h);};
+  }
+  const unsubs=DAYNAMES_FB.map((abbr)=>{
+    const key=`${wo}-${abbr}`;
+    return window._fb.onSnapshot(window._fb.doc(_db(),"manifests",key),snap=>{
+      if(snap.exists())cb({[key]:snap.data().entries||[]});
+    });
+  });
+  return()=>unsubs.forEach(u=>u());
+};
+
+/* ── Drivers ── */
+const saveDrivers=async(drivers)=>{
+  await _fbReady.catch(()=>{});
+  if(!_db())return;
+  await window._fb.setDoc(window._fb.doc(_db(),"config","drivers"),{drivers,updatedAt:Date.now()});
+};
+const subscribeDrivers=(cb)=>{
+  const run=()=>{
+    return window._fb.onSnapshot(window._fb.doc(_db(),"config","drivers"),snap=>{
+      if(snap.exists()&&snap.data().drivers?.length)cb(snap.data().drivers);
+    });
+  };
+  if(window._fbLoaded)return run();
+  let unsub=()=>{};
+  window.addEventListener("fb_ready",()=>{unsub=run();},{once:true});
+  return()=>unsub();
+};
+
+/* ── Emser hours ── */
+const saveEmserHours=async(key,hours)=>{
+  await _fbReady.catch(()=>{});
+  if(!_db())return;
+  await window._fb.setDoc(window._fb.doc(_db(),"emserHours",key),{hours,updatedAt:Date.now()});
+};
+const subscribeEmserHours=(cb)=>{
+  const run=()=>{
+    return window._fb.onSnapshot(window._fb.collection(_db(),"emserHours"),snap=>{
+      const data={};snap.forEach(d=>{data[d.id]=d.data().hours;});cb(data);
+    });
+  };
+  if(window._fbLoaded)return run();
+  let unsub=()=>{};
+  window.addEventListener("fb_ready",()=>{unsub=run();},{once:true});
+  return()=>unsub();
+};
+
+/* ── Emser shifts ── */
+const saveEmserShifts=async(dayKey,shifts)=>{
+  await _fbReady.catch(()=>{});
+  if(!_db())return;
+  await window._fb.setDoc(window._fb.doc(_db(),"emserShifts",dayKey),{shifts,updatedAt:Date.now()});
+};
+const subscribeEmserShifts=(cb)=>{
+  const run=()=>{
+    return window._fb.onSnapshot(window._fb.collection(_db(),"emserShifts"),snap=>{
+      const data={};snap.forEach(d=>{data[d.id]=d.data().shifts||[];});cb(data);
+    });
+  };
+  if(window._fbLoaded)return run();
+  let unsub=()=>{};
+  window.addEventListener("fb_ready",()=>{unsub=run();},{once:true});
+  return()=>unsub();
+};
+
+/* ── Dispatch notes ── */
+const saveDispatchNote=async(dayKey,note)=>{
+  await _fbReady.catch(()=>{});
+  if(!_db())return;
+  await window._fb.setDoc(window._fb.doc(_db(),"dispatchNotes",dayKey),{note,updatedAt:Date.now()});
+};
+const subscribeDispatchNotes=(cb)=>{
+  const run=()=>{
+    return window._fb.onSnapshot(window._fb.collection(_db(),"dispatchNotes"),snap=>{
+      const data={};snap.forEach(d=>{data[d.id]=d.data().note||"";});cb(data);
+    });
+  };
+  if(window._fbLoaded)return run();
+  let unsub=()=>{};
+  window.addEventListener("fb_ready",()=>{unsub=run();},{once:true});
+  return()=>unsub();
+};
+
+/* ── Notifications ── */
+const sendNotificationToDriver=async(driverId,msg,type)=>{
+  await _fbReady.catch(()=>{});
+  if(!_db())return;
+  const col=window._fb.collection(_db(),"notifications",String(driverId),"items");
+  await window._fb.addDoc(col,{msg,type,time:Date.now(),read:false});
+};
+const subscribeNotifications=(driverId,cb)=>{
+  const run=()=>{
+    const col=window._fb.collection(_db(),"notifications",String(driverId),"items");
+    return window._fb.onSnapshot(col,snap=>{
+      cb(snap.docs.map(d=>({id:d.id,...d.data()})));
+    });
+  };
+  if(window._fbLoaded)return run();
+  let unsub=()=>{};
+  window.addEventListener("fb_ready",()=>{unsub=run();},{once:true});
+  return()=>unsub();
+};
+const markNotificationRead=async(driverId,notifId)=>{
+  await _fbReady.catch(()=>{});
+  if(!_db())return;
+  await window._fb.updateDoc(window._fb.doc(_db(),"notifications",String(driverId),"items",notifId),{read:true});
+};
+
+const getDayKey=()=>{};const getWeekKey=()=>{};
+const requestPushPermission=async()=>null;const onPushMessage=()=>{};const saveDriverToken=async()=>{};
 
 const DAYS = ["Monday","Tuesday","Wednesday","Thursday","Friday"];
 
@@ -54,9 +187,19 @@ useEffect(()=>{const h=()=>setIsD(getWidth()>=768);window.addEventListener("resi
 return isD;
 }
 
-/* Driver slug map — used for URL routing */
+/* Driver slug map — populated dynamically at runtime from the drivers array.
+   The slug is always the driver's first name lowercased.
+   Falls back to a static map for the initial load before drivers are known. */
 const DRIVER_SLUGS={"trevor":1,"brent":2,"trevarr":3};
-function getDriverSlug(name){return name.toLowerCase().split(" ")[0];}
+function getDriverSlug(name){return name.toLowerCase().split(" ")[0].replace(/[^a-z0-9]/g,"");}
+
+/* Resolve a slug to a driver ID — checks live drivers array first, then static map */
+function resolveDriverSlug(slug,driversArr){
+  if(!slug)return null;
+  const found=driversArr.find(d=>getDriverSlug(d.name)===slug.toLowerCase());
+  if(found)return found.id;
+  return DRIVER_SLUGS[slug.toLowerCase()]||null;
+}
 
 
 /* ── CORRECTED ADDRESSES (from spreadsheet warehouse addresses) ── */
@@ -1193,19 +1336,30 @@ style={{flex:1,border:"1px solid #d6d3d1",borderRadius:8,padding:"6px 10px",font
 );
 }
 
+/* ── LOCALSTORAGE HELPERS (offline persistence until Firebase connected) ── */
+const LS_DRIVERS="dd_drivers";
+const LS_LOG="dd_log";
+const LS_CUSTOM_INSTR="dd_custom_instr";
+const LS_DISP_NOTES="dd_disp_notes";
+const LS_EMH="dd_emh";
+const DEFAULT_DRIVERS=[{id:1,name:"Trevor Seyers",phone:"404-394-9891"},{id:2,name:"Brent Dixon",phone:""},{id:3,name:"Trevarr Howard",phone:""}];
+function lsGet(key,fallback){try{const v=localStorage.getItem(key);return v?JSON.parse(v):fallback;}catch{return fallback;}}
+function lsSet(key,val){try{localStorage.setItem(key,JSON.stringify(val));}catch{}}
+
 /* ══════════════ DISPATCH APP (owner view) ══════════════ */
 function DispatchApp(){
 const isDesktop=useIsDesktop();
 const[wo,setWo]=useState(0);
 const[sd,setSd]=useState(()=>{const d=new Date().getDay();return d>=1&&d<=5?d-1:0;});
-const[log,setLog]=useState({});
+const[log,setLog]=useState(()=>lsGet(LS_LOG,{}));
 const[view,setView]=useState("manifest");
 const[selCust,setSelCust]=useState(null);
 const[selStop,setSelStop]=useState(null);
-const[emH,setEmH]=useState({});
+const[emH,setEmH]=useState(()=>lsGet(LS_EMH,{}));
 const[toast,setToast]=useState(null);
-const[drivers,setDrivers]=useState([{id:1,name:"Trevor Seyers",phone:"404-394-9891"},{id:2,name:"Brent Dixon",phone:""},{id:3,name:"Trevarr Howard",phone:""}]);
+const[drivers,setDrivers]=useState(()=>lsGet(LS_DRIVERS,DEFAULT_DRIVERS));
 const[showDM,setShowDM]=useState(false);
+const[showLinkModal,setShowLinkModal]=useState(null); /* {name, url, phone} */
 const[editDrv,setEditDrv]=useState(null);const[editNm,setEditNm]=useState("");const[editPh,setEditPh]=useState("");
 const[newDN,setNewDN]=useState("");const[newDP,setNewDP]=useState("");
 const[quoteMode,setQuoteMode]=useState(null);
@@ -1217,7 +1371,7 @@ const[showDatePicker,setShowDatePicker]=useState(false);
 const[preAssignDriver,setPreAssignDriver]=useState(null);
 const[multiSelect,setMultiSelect]=useState(false);const[multiChecked,setMultiChecked]=useState([]);
 const[driverViewId,setDriverViewId]=useState(null);
-const[customInstr,setCustomInstr]=useState({});
+const[customInstr,setCustomInstr]=useState(()=>lsGet(LS_CUSTOM_INSTR,{}));
 const[showAddCustomDel,setShowAddCustomDel]=useState(false);
 const[customDelName,setCustomDelName]=useState("");
 const[customDelAddr,setCustomDelAddr]=useState("");
@@ -1241,8 +1395,8 @@ const[histDrvFilter,setHistDrvFilter]=useState("");
 const[histWeekRange,setHistWeekRange]=useState(4);
 const[histMode,setHistMode]=useState("deliveries"); /* deliveries | photos | emser */
 const[lightboxPhoto,setLightboxPhoto]=useState(null);
-const[emserShifts,setEmserShifts]=useState({}); /* {dayKey: [{id,driverId,start,end},...]} */
-const[dispNotes,setDispNotes]=useState({});
+const[emserShifts,setEmserShifts]=useState(()=>lsGet("dd_emser_shifts",{})); /* {dayKey: [{id,driverId,start,end},...]} */
+const[dispNotes,setDispNotes]=useState(()=>lsGet(LS_DISP_NOTES,{}));
 const[editingNote,setEditingNote]=useState(false);
 const[noteText,setNoteText]=useState("");
 const[showCustPickup,setShowCustPickup]=useState(false);
@@ -1262,8 +1416,9 @@ useEffect(()=>{
   });
   const unsubEmser=subscribeEmserHours((fbEmH)=>{setEmH(fbEmH);});
   const unsubNotes=subscribeDispatchNotes((fbNotes)=>{setDispNotes(p=>({...p,...fbNotes}));});
+  const unsubShifts=subscribeEmserShifts((fbShifts)=>{setEmserShifts(p=>({...p,...fbShifts}));});
   firebaseReady.current=true;
-  return()=>{unsubDrivers();unsubEmser();unsubNotes();};
+  return()=>{unsubDrivers();unsubEmser();unsubNotes();unsubShifts();};
 },[]);
 
 useEffect(()=>{
@@ -1317,6 +1472,35 @@ useEffect(()=>{
   return()=>clearTimeout(timer);
 },[dispNotes,dk]);
 
+useEffect(()=>{
+  if(!firebaseReady.current)return;
+  const timer=setTimeout(()=>{
+    const shifts=emserShifts[dk];
+    if(shifts!==undefined){
+      saveEmserShifts(dk,shifts||[]).catch(e=>console.error("Shifts save:",e));
+    }
+  },500);
+  return()=>clearTimeout(timer);
+},[emserShifts,dk]);
+
+/* ── LOCALSTORAGE PERSISTENCE (offline fallback — active until Firebase connected) ── */
+useEffect(()=>{lsSet(LS_DRIVERS,drivers);},[drivers]);
+useEffect(()=>{lsSet(LS_LOG,log);},[log]);
+useEffect(()=>{lsSet(LS_CUSTOM_INSTR,customInstr);},[customInstr]);
+useEffect(()=>{lsSet(LS_DISP_NOTES,dispNotes);},[dispNotes]);
+useEffect(()=>{lsSet(LS_EMH,emH);},[emH]);
+useEffect(()=>{lsSet("dd_emser_shifts",emserShifts);},[emserShifts]);
+useEffect(()=>{
+  if(!firebaseReady.current)return;
+  const timer=setTimeout(()=>{
+    /* Save each changed day's shifts */
+    Object.entries(emserShifts).forEach(([dayKey,shifts])=>{
+      saveEmserShifts(dayKey,shifts).catch(e=>console.error("Shifts save:",e));
+    });
+  },500);
+  return()=>clearTimeout(timer);
+},[emserShifts]);
+
 const addDel=(cust,stop,rate,drvId,ex={})=>{
 const cd=CUSTOMERS[cust];
 const instrForStop=customInstr[stop]!==undefined?customInstr[stop]:getDefaultInstr(stop);
@@ -1361,14 +1545,50 @@ const weightPct=(w)=>Math.min((w/TRUCK_LIMITS.default)*100,100);
 const weightColor=(w)=>w>TRUCK_LIMITS.default?"#dc2626":w>TRUCK_LIMITS.default*0.85?"#d97706":"#16a34a";
 
 /* ── EMSER SHIFT HELPERS ── */
-const parseTime=(str)=>{if(!str)return null;const m=str.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);if(!m)return null;let h=parseInt(m[1]);const min=parseInt(m[2]);const ap=m[3];if(ap){if(ap.toUpperCase()==="PM"&&h!==12)h+=12;if(ap.toUpperCase()==="AM"&&h===12)h=0;}return h*60+min;};
+/* parseTime accepts both "14:30" (from <input type=time>) and "2:30 PM" (legacy) */
+const parseTime=(str)=>{
+  if(!str)return null;
+  const m24=str.match(/^(\d{1,2}):(\d{2})$/);
+  if(m24)return parseInt(m24[1])*60+parseInt(m24[2]);
+  const m12=str.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if(!m12)return null;
+  let h=parseInt(m12[1]);const min=parseInt(m12[2]);const ap=m12[3].toUpperCase();
+  if(ap==="PM"&&h!==12)h+=12;
+  if(ap==="AM"&&h===12)h=0;
+  return h*60+min;
+};
+const presetTo24=(t)=>{const m=t.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);if(!m)return t;let h=parseInt(m[1]);const min=m[2];const ap=m[3].toUpperCase();if(ap==="PM"&&h!==12)h+=12;if(ap==="AM"&&h===12)h=0;return String(h).padStart(2,"0")+":"+min;};
 const formatMins=(totalMins)=>{const h=Math.floor(totalMins/60);const m=totalMins%60;return m>0?`${h}h ${m}m`:`${h}h`;};
 const calcShiftMins=(shift)=>{const s=parseTime(shift.start);const e=parseTime(shift.end);if(s===null||e===null||e<=s)return 0;return e-s;};
 const getEmserDayShifts=()=>emserShifts[dk]||[];
+
+/* Returns {byDriver:{driverId:mins}, totalMins} for any dayKey */
+const getShiftSummary=(dayKey)=>{
+  const shifts=emserShifts[dayKey]||[];
+  const byDriver={};
+  let totalMins=0;
+  shifts.forEach(s=>{
+    const m=calcShiftMins(s);
+    if(m>0){byDriver[s.driverId]=(byDriver[s.driverId]||0)+m;totalMins+=m;}
+  });
+  return{byDriver,totalMins};
+};
+
 const addEmserShift=(driverId)=>{const shifts=getEmserDayShifts();setEmserShifts(p=>({...p,[dk]:[...shifts,{id:Date.now()+Math.random(),driverId,start:"",end:""}]}));};
 const updateEmserShift=(shiftId,field,val)=>{setEmserShifts(p=>({...p,[dk]:(p[dk]||[]).map(s=>s.id===shiftId?{...s,[field]:val}:s)}));};
 const removeEmserShift=(shiftId)=>{setEmserShifts(p=>({...p,[dk]:(p[dk]||[]).filter(s=>s.id!==shiftId)}));};
 const calcAndApplyEmserHours=useCallback(()=>{const shifts=emserShifts[dk]||[];const totalMins=shifts.reduce((sum,s)=>sum+calcShiftMins(s),0);const hours=Math.round(totalMins/15)*15/60;if(hours>0){setEmH(p=>({...p,[`${dk}-emser`]:hours}));return hours;}return emH[`${dk}-emser`]||4;},[emserShifts,dk,emH]);
+
+/* Auto-apply shift totals to emH whenever shifts change for this day */
+useEffect(()=>{
+  const shifts=emserShifts[dk]||[];
+  if(!shifts.length)return;
+  const totalMins=shifts.reduce((sum,s)=>sum+calcShiftMins(s),0);
+  if(totalMins>0){
+    const hours=Math.round(totalMins/15)*15/60;
+    setEmH(p=>{if(p[`${dk}-emser`]===hours)return p;return{...p,[`${dk}-emser`]:hours};});
+  }
+},[emserShifts,dk]);
 
 /* ── 2-WAY MESSAGING ── */
 const getMsgKey=(ch)=>ch?"dm-"+ch:"group";
@@ -1624,15 +1844,30 @@ return(
 </div>
 </div>}
 {/* Emser hours */}
-{dl.some(e=>e.isHourly)&&<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:12,padding:"14px 16px",marginBottom:16}}>
-<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}><span style={{fontSize:14,color:"#2563eb",fontWeight:600}}>Emser Hours</span><span style={{fontSize:18,fontWeight:700,fontVariantNumeric:"tabular-nums"}}>{fmt(102.50*(emH[`${dk}-emser`]||4))}</span></div>
-<div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><span style={{fontSize:12,color:"#64748b"}}>{emH[`${dk}-emser`]||4}h × $102.50</span>
+{dl.some(e=>e.isHourly)&&(()=>{const {byDriver,totalMins}=getShiftSummary(dk);const hoursUsed=totalMins>0?Math.round(totalMins/15)*15/60:(emH[`${dk}-emser`]||4);return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:12,padding:"14px 16px",marginBottom:16}}>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+<span style={{fontSize:14,color:"#2563eb",fontWeight:600}}>Emser Hours</span>
+<span style={{fontSize:18,fontWeight:700,fontVariantNumeric:"tabular-nums"}}>{fmt(102.50*hoursUsed)}</span>
+</div>
+{/* Per-driver breakdown */}
+{totalMins>0&&<div style={{display:"flex",gap:6,marginBottom:8,flexWrap:"wrap"}}>
+{Object.entries(byDriver).map(([did,mins])=>{const drv=drivers.find(d=>d.id===Number(did));const di=drivers.findIndex(d=>d.id===Number(did));if(!drv)return null;const initials=drv.name.split(" ").map(n=>n[0]).join("");return(<div key={did} style={{display:"flex",alignItems:"center",gap:5,background:"#fff",border:`1px solid ${DCOL[di]||"#2563eb"}`,borderRadius:8,padding:"4px 10px"}}>
+<div style={{width:20,height:20,borderRadius:5,background:DCOL[di]||"#2563eb",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,color:"#fff",fontWeight:700}}>{initials}</div>
+<span style={{fontSize:12,fontWeight:700}}>{formatMins(mins)}</span>
+</div>);})}
+<div style={{display:"flex",alignItems:"center",gap:5,background:"#dbeafe",border:"1px solid #2563eb",borderRadius:8,padding:"4px 10px",marginLeft:"auto"}}>
+<span style={{fontSize:12,fontWeight:700,color:"#1e40af"}}>⏱ {formatMins(totalMins)} total</span>
+</div>
+</div>}
+{!totalMins&&<div style={{fontSize:11,color:"#64748b",marginBottom:8}}>💡 Log shifts in History → ⏱ Emser Hrs for auto-calculation</div>}
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+<span style={{fontSize:12,color:"#64748b"}}>{hoursUsed}h × $102.50</span>
 <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
-{[4,5,6,7,8,9,10].map(h=><button key={h} onClick={()=>setEmH(p=>({...p,[`${dk}-emser`]:h}))} style={{width:32,height:30,borderRadius:8,border:"none",cursor:"pointer",fontSize:13,fontWeight:600,background:(emH[`${dk}-emser`]||4)===h?"#2563eb":"#e7e5e4",color:(emH[`${dk}-emser`]||4)===h?"#fff":"#78716c"}}>{h}</button>)}
+{[4,5,6,7,8,9,10].map(h=><button key={h} onClick={()=>setEmH(p=>({...p,[`${dk}-emser`]:h}))} style={{width:32,height:30,borderRadius:8,border:"none",cursor:"pointer",fontSize:13,fontWeight:600,background:hoursUsed===h&&!totalMins?"#2563eb":"#e7e5e4",color:hoursUsed===h&&!totalMins?"#fff":"#78716c"}}>{h}</button>)}
 <button onClick={()=>setShowCustomHrs(!showCustomHrs)} style={{height:30,borderRadius:8,border:"none",cursor:"pointer",fontSize:11,fontWeight:600,padding:"0 10px",background:showCustomHrs?"#2563eb":"#dbeafe",color:showCustomHrs?"#fff":"#2563eb"}}>Other</button>
 </div></div>
 {showCustomHrs&&<div style={{display:"flex",gap:6,alignItems:"center",marginTop:8}}><input value={customHrsInput} onChange={e=>setCustomHrsInput(e.target.value)} placeholder="e.g. 4.5" type="number" step="0.25" min="1" style={{width:80,border:"1px solid #bfdbfe",borderRadius:8,padding:"6px 10px",fontSize:14,fontWeight:700,outline:"none",textAlign:"center"}}/><span style={{fontSize:12,color:"#64748b"}}>hrs</span><button onClick={()=>{const v=parseFloat(customHrsInput);if(v>0){setEmH(p=>({...p,[`${dk}-emser`]:v}));setShowCustomHrs(false);setCustomHrsInput("");}}} style={{background:"#2563eb",color:"#fff",border:"none",borderRadius:8,padding:"6px 14px",fontSize:12,fontWeight:600,cursor:"pointer"}}>Set</button></div>}
-</div>}
+</div>);})()}
 {/* Entry list */}
 {dl.length===0?<div style={{textAlign:"center",padding:"60px 20px",color:"#a8a29e"}}><div style={{fontSize:40,marginBottom:12}}>🚚</div><p style={{fontSize:14,margin:0}}>No deliveries logged for this day</p></div>
 :<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
@@ -1715,8 +1950,13 @@ return(
 {/* Week fuel */}
 {Object.keys(wkF).length>0&&<div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:14,padding:"14px 16px",marginBottom:16}}><div style={{fontSize:12,fontWeight:700,color:"#d97706",textTransform:"uppercase",marginBottom:8}}>Week Fuel Surcharges</div>{Object.entries(wkF).map(([cu,cf])=><div key={cu} style={{display:"flex",justifyContent:"space-between",padding:"4px 0"}}><span style={{fontSize:13}}>{cu} <span style={{fontSize:11,color:"#a8a29e"}}>{fmt(cf.base)} × {Math.round(cf.pct*100)}%</span></span><span style={{fontSize:14,fontWeight:700,color:"#d97706",fontVariantNumeric:"tabular-nums"}}>{fmt(cf.base*cf.pct)}</span></div>)}</div>}
 {/* Day-by-day breakdown */}
-{DAYS.map((day,i)=>{const{entries,calc}=wkD[i];if(!entries.length)return null;return(<div key={day} style={{marginBottom:14}}>
+{DAYS.map((day,i)=>{const{entries,calc}=wkD[i];const dayKey=`${wo}-${i}`;const{byDriver:shiftByDrv,totalMins:shiftMins}=getShiftSummary(dayKey);if(!entries.length&&!shiftMins)return null;return(<div key={day} style={{marginBottom:14}}>
 <div style={{display:"flex",justifyContent:"space-between",padding:"8px 4px",borderBottom:"1px solid #e7e5e4",marginBottom:6}}><span style={{fontSize:14,fontWeight:700}}>{day} — {wd[i].date}</span><span style={{fontVariantNumeric:"tabular-nums",fontWeight:700,color:"#16a34a",fontSize:14}}>{fmt(calc.total)}</span></div>
+{shiftMins>0&&<div style={{display:"flex",alignItems:"center",gap:6,padding:"5px 8px 5px 14px",borderLeft:"3px solid #2563eb",marginBottom:3,background:"#eff6ff",borderRadius:"0 8px 8px 0",flexWrap:"wrap"}}>
+<span style={{fontSize:11,color:"#2563eb",fontWeight:700,flexShrink:0}}>⏱ Emser</span>
+{drivers.map((drv,di)=>{const mins=shiftByDrv[drv.id]||0;if(!mins)return null;const initials=drv.name.split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase();return(<span key={drv.id} style={{fontSize:11,background:DCOL[di],color:"#fff",padding:"1px 6px",borderRadius:4,fontWeight:600}}>{initials} {formatMins(mins)}</span>);})}
+<span style={{marginLeft:"auto",fontSize:12,fontWeight:700,color:"#1d4ed8",fontVariantNumeric:"tabular-nums"}}>{formatMins(shiftMins)} total</span>
+</div>}
 {entries.map(entry=>{const c=getCustColor(entry.customer);const drv=drivers.find(d=>d.id===entry.driverId);const di2=drivers.findIndex(d=>d.id===entry.driverId);return(<div key={entry.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"5px 8px 5px 14px",borderLeft:`3px solid ${c.accent}`,marginBottom:3,background:"#fff",borderRadius:"0 8px 8px 0"}}>
 <div style={{display:"flex",alignItems:"center",gap:6,flex:1,minWidth:0}}>
 <span style={{fontSize:11,color:c.accent,fontWeight:600,flexShrink:0}}>{entry.customer}</span>
@@ -1725,11 +1965,24 @@ return(
 {drv&&<span style={{fontSize:9,background:DCOL[di2]||"#78716c",color:"#fff",padding:"1px 4px",borderRadius:3,fontWeight:600,flexShrink:0}}>{drv.name.split(" ")[0]}</span>}
 </div>
 <span style={{fontVariantNumeric:"tabular-nums",fontSize:12,fontWeight:600,color:"#44403c",flexShrink:0,marginLeft:8}}>{entry.isHourly?"HR":fmt(entry.baseRate)}</span>
-</div>);})}</div>);})}
+</div>);})}
+</div>);})}
 {wkD.every(d=>!d.entries.length)&&<div style={{textAlign:"center",padding:"60px 20px",color:"#a8a29e"}}><p>No deliveries this week</p></div>}
+{(()=>{const wkShiftByDrv={};let wkShiftTotal=0;DAYS.forEach((_,i)=>{const{byDriver,totalMins}=getShiftSummary(`${wo}-${i}`);wkShiftTotal+=totalMins;Object.entries(byDriver).forEach(([did,mins])=>{wkShiftByDrv[did]=(wkShiftByDrv[did]||0)+mins;});});if(!wkShiftTotal)return null;const wkShiftHrs=Math.round(wkShiftTotal/15)*15/60;return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:14,padding:"16px 18px",marginBottom:16}}>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+<span style={{fontSize:14,fontWeight:700,color:"#2563eb"}}>⏱ Week Emser Hours</span>
+<span style={{fontSize:18,fontWeight:700,fontVariantNumeric:"tabular-nums",color:"#1d4ed8"}}>{fmt(102.50*wkShiftHrs)}</span>
+</div>
+<div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:6}}>
+{drivers.map((drv,di)=>{const mins=wkShiftByDrv[drv.id]||0;if(!mins)return null;const initials=drv.name.split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase();const hrs=Math.round(mins/15)*15/60;return(<div key={drv.id} style={{display:"flex",alignItems:"center",gap:6,background:"#fff",border:`1px solid ${DCOL[di]}`,borderRadius:8,padding:"5px 12px"}}>
+<div style={{width:22,height:22,borderRadius:6,background:DCOL[di],display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,color:"#fff",fontWeight:700}}>{initials}</div>
+<div><div style={{fontSize:13,fontWeight:700}}>{formatMins(mins)}</div><div style={{fontSize:10,color:"#64748b"}}>{fmt(102.50*hrs)}</div></div>
+</div>);})}
+</div>
+<div style={{fontSize:12,color:"#64748b"}}>{formatMins(wkShiftTotal)} total · $102.50/hr</div>
+</div>);})()} 
+{Object.keys(wkF).length>0&&<div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:14,padding:"14px 16px",marginBottom:16}}><div style={{fontSize:12,fontWeight:700,color:"#d97706",textTransform:"uppercase",marginBottom:8}}>Week Fuel Surcharges</div>{Object.entries(wkF).map(([cu,cf])=><div key={cu} style={{display:"flex",justifyContent:"space-between",padding:"4px 0"}}><span style={{fontSize:13}}>{cu} <span style={{fontSize:11,color:"#a8a29e"}}>{fmt(cf.base)} × {Math.round(cf.pct*100)}%</span></span><span style={{fontSize:14,fontWeight:700,color:"#d97706",fontVariantNumeric:"tabular-nums"}}>{fmt(cf.base*cf.pct)}</span></div>)}</div>}
 </div>}
-
-{/* History */}
 {view==="history"&&<div style={{maxWidth:1000,margin:"0 auto"}}>
 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
 <h2 style={{margin:0,fontSize:18,fontWeight:700}}>Delivery History</h2>
@@ -1747,7 +2000,7 @@ const shifts=getEmserDayShifts();
 const totalMins=shifts.reduce((sum,s)=>sum+calcShiftMins(s),0);
 const totalHrs=Math.round(totalMins/15)*15/60;
 const perDriver={};shifts.forEach(s=>{if(!perDriver[s.driverId])perDriver[s.driverId]=0;perDriver[s.driverId]+=calcShiftMins(s);});
-const TIME_PRESETS=["5:00 AM","5:30 AM","6:00 AM","6:30 AM","7:00 AM","7:30 AM","8:00 AM","8:30 AM","9:00 AM","9:30 AM","10:00 AM","10:30 AM","11:00 AM","11:30 AM","12:00 PM","12:30 PM","1:00 PM","1:30 PM","2:00 PM","2:30 PM","3:00 PM","3:30 PM","4:00 PM","4:30 PM","5:00 PM","5:30 PM","6:00 PM"];
+const TIME_PRESETS=["7:00 AM","8:00 AM","9:00 AM","10:00 AM","11:00 AM","12:00 PM","1:00 PM","2:00 PM","3:00 PM","4:00 PM","5:00 PM"];
 return(<div>
 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
 <span style={{fontSize:15,fontWeight:700}}>{wd[sd].name} — {wd[sd].date}</span>
@@ -1783,8 +2036,17 @@ return(<div key={drv.id} style={{background:"#fff",border:"1px solid #e7e5e4",bo
 <div style={{fontSize:16,color:"#d6d3d1",paddingTop:18}}>→</div>
 <div style={{flex:1}}><label style={{fontSize:10,fontWeight:600,color:"#78716c",display:"block",marginBottom:3}}>End</label><input type="time" value={shift.end} onChange={e=>updateEmserShift(shift.id,"end",e.target.value)} style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"7px 10px",fontSize:14,fontWeight:700,outline:"none"}}/></div>
 </div>
-<div style={{display:"flex",gap:3,flexWrap:"wrap"}}>
-{TIME_PRESETS.filter((_,i)=>i%2===0).map(t=>{const isStart=shift.start===t;const isEnd=shift.end===t;return(<button key={t} onClick={()=>{if(!shift.start||isStart)updateEmserShift(shift.id,"start",t);else if(!shift.end||isEnd)updateEmserShift(shift.id,"end",t);}} style={{padding:"3px 7px",borderRadius:4,border:"none",cursor:"pointer",fontSize:9,fontWeight:600,background:isStart?BRAND.main:isEnd?"#16a34a":"#f5f5f4",color:isStart||isEnd?"#fff":"#78716c"}}>{t.replace(":00","").replace(" ","")}</button>);})}
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end",gap:6}}>
+<div style={{display:"flex",gap:3,flexWrap:"wrap",flex:1}}>
+{TIME_PRESETS.map(t=>{const t24=presetTo24(t);const isStart=shift.start===t24;const isEnd=shift.end===t24;return(<button key={t} onClick={()=>{if(!shift.start||isStart)updateEmserShift(shift.id,"start",t24);else if(!shift.end||isEnd)updateEmserShift(shift.id,"end",t24);}} style={{padding:"3px 7px",borderRadius:4,border:"none",cursor:"pointer",fontSize:9,fontWeight:600,background:isStart?BRAND.main:isEnd?"#16a34a":"#f5f5f4",color:isStart||isEnd?"#fff":"#78716c"}}>{t.replace(":00","").replace(" ","")}</button>);})}
+</div>
+<div style={{display:"flex",gap:3,flexShrink:0}}>
+{[15,30,45].map(m=>{
+const addMins=(base,add)=>{if(!base)return"";const[h,min]=base.split(":").map(Number);const total=h*60+min+add;return String(Math.floor(total/60)%24).padStart(2,"0")+":"+String(total%60).padStart(2,"0");};
+const newStart=shift.start?addMins(shift.start,m):"";
+const newEnd=shift.end?addMins(shift.end,m):"";
+return(<button key={m} onClick={()=>{if(shift.start&&!shift.end)updateEmserShift(shift.id,"end",addMins(shift.start,m));else if(shift.start)updateEmserShift(shift.id,"end",addMins(shift.start,m));}} title={`Set end = start + ${m}min`} style={{padding:"3px 8px",borderRadius:4,border:"1px solid #bfdbfe",cursor:"pointer",fontSize:9,fontWeight:700,background:"#eff6ff",color:"#2563eb"}}>+{m}</button>);})}
+</div>
 </div>
 </div>);})}
 </div>);})}
@@ -2085,15 +2347,24 @@ return(
 </div>
 </div>
 
-{dl.some(e=>e.isHourly)&&<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:10,padding:"10px 14px",marginBottom:12}}>
-<div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+{dl.some(e=>e.isHourly)&&(()=>{const {byDriver,totalMins}=getShiftSummary(dk);const hoursUsed=totalMins>0?Math.round(totalMins/15)*15/60:(emH[`${dk}-emser`]||4);return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:10,padding:"10px 14px",marginBottom:12}}>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
 <span style={{fontSize:12,color:"#2563eb",fontWeight:600}}>Emser Hours</span>
-<span style={{fontSize:14,fontWeight:700,fontVariantNumeric:"tabular-nums"}}>{fmt(102.50*(emH[`${dk}-emser`]||4))}</span>
+<span style={{fontSize:14,fontWeight:700,fontVariantNumeric:"tabular-nums"}}>{fmt(102.50*hoursUsed)}</span>
 </div>
-<div style={{display:"flex",gap:3,marginTop:6}}>
-{[4,5,6,7,8,9,10].map(h=><button key={h} onClick={()=>setEmH(p=>({...p,[`${dk}-emser`]:h}))} style={{width:28,height:26,borderRadius:6,border:"none",cursor:"pointer",fontSize:12,fontWeight:600,background:(emH[`${dk}-emser`]||4)===h?"#2563eb":"#e7e5e4",color:(emH[`${dk}-emser`]||4)===h?"#fff":"#78716c"}}>{h}</button>)}
+{totalMins>0&&<div style={{display:"flex",gap:4,marginBottom:6,flexWrap:"wrap"}}>
+{Object.entries(byDriver).map(([did,mins])=>{const drv=drivers.find(d=>d.id===Number(did));const di=drivers.findIndex(d=>d.id===Number(did));if(!drv)return null;const hrs=Math.round(mins/15)*15/60;const initials=drv.name.split(" ").map(n=>n[0]).join("");return(<div key={did} style={{display:"flex",alignItems:"center",gap:4,background:"#fff",border:`1px solid ${DCOL[di]||"#2563eb"}`,borderRadius:6,padding:"3px 8px"}}>
+<div style={{width:16,height:16,borderRadius:4,background:DCOL[di]||"#2563eb",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,color:"#fff",fontWeight:700}}>{initials}</div>
+<span style={{fontSize:11,fontWeight:700,color:"#1c1917"}}>{formatMins(mins)}</span>
+</div>);})}
+<div style={{display:"flex",alignItems:"center",gap:4,background:"#dbeafe",border:"1px solid #2563eb",borderRadius:6,padding:"3px 8px",marginLeft:"auto"}}>
+<span style={{fontSize:11,fontWeight:700,color:"#1e40af"}}>Total: {formatMins(totalMins)}</span>
 </div>
 </div>}
+<div style={{display:"flex",gap:3}}>
+{[4,5,6,7,8,9,10].map(h=><button key={h} onClick={()=>setEmH(p=>({...p,[`${dk}-emser`]:h}))} style={{width:28,height:26,borderRadius:6,border:"none",cursor:"pointer",fontSize:12,fontWeight:600,background:hoursUsed===h?"#2563eb":"#e7e5e4",color:hoursUsed===h?"#fff":"#78716c"}}>{h}</button>)}
+</div>
+</div>);})()}
 
 {dl.length===0?<div style={{textAlign:"center",padding:"40px 20px",color:"#a8a29e"}}><div style={{fontSize:28,marginBottom:8}}>{"\uD83D\uDE9A"}</div><div style={{fontSize:13}}>No deliveries yet</div></div>
 :dl.map(entry=>{const c=getCustColor(entry.customer);const drv=drivers.find(d=>d.id===entry.driverId);const di=drivers.findIndex(d=>d.id===entry.driverId);const done=entry.status==="departed";const onSite=entry.status==="arrived";const addr=entry.addr||getAddr(entry.stop);const hasInstr=entry.instructions?.trim();return(
@@ -2151,7 +2422,7 @@ return(
 <div style={{display:"flex",gap:6}}><input value={editPh} onChange={e=>setEditPh(e.target.value)} placeholder="Phone (optional)" onKeyDown={e=>e.key==="Enter"&&saveDrv(d.id)} style={{flex:1,border:"1px solid #d6d3d1",borderRadius:8,padding:"6px 10px",fontSize:13,outline:"none"}}/><button onClick={()=>saveDrv(d.id)} style={{background:"#16a34a",color:"#fff",border:"none",borderRadius:8,padding:"6px 12px",cursor:"pointer",fontSize:12,fontWeight:600}}>Save</button></div>
 </div>:<>
 <div style={{flex:1}}><div style={{fontSize:15,fontWeight:600}}>{d.name}</div>{d.phone&&<div style={{fontSize:11,color:"#78716c"}}>{d.phone}</div>}</div>
-<button onClick={()=>{const slug=getDriverSlug(d.name);const url=`${window.location.origin}${window.location.pathname}#/driver/${slug}`;navigator.clipboard.writeText(url).then(()=>showToast(`Link copied for ${d.name}`)).catch(()=>showToast(`#/driver/${slug}`));}} style={{background:"#f0fdf4",border:"none",borderRadius:6,padding:"4px 8px",cursor:"pointer",fontSize:10,fontWeight:600,color:"#16a34a"}}>Link</button>
+<button onClick={()=>{const slug=getDriverSlug(d.name);const url=`${window.location.origin}${window.location.pathname}#/driver/${slug}`;setShowLinkModal({name:d.name,url,phone:d.phone||""});}} style={{background:"#f0fdf4",border:"none",borderRadius:6,padding:"4px 8px",cursor:"pointer",fontSize:10,fontWeight:600,color:"#16a34a"}}>🔗 Link</button>
 <button onClick={()=>setDriverViewId(d.id)} style={{background:"#eff6ff",border:"none",borderRadius:6,padding:"4px 8px",cursor:"pointer",fontSize:10,fontWeight:600,color:"#2563eb"}}>View</button>
 <button onClick={()=>{setEditDrv(d.id);setEditNm(d.name);setEditPh(d.phone||"");}} style={{background:"#f5f5f4",border:"none",borderRadius:6,padding:"4px 10px",cursor:"pointer",fontSize:12}}>Edit</button>
 {drivers.length>1&&<button onClick={()=>rmDrv(d.id)} style={{background:"#fef2f2",border:"none",borderRadius:6,padding:"4px 10px",cursor:"pointer",fontSize:12,color:"#dc2626"}}>✕</button>}
@@ -2165,6 +2436,33 @@ return(
 <button onClick={addDrvr} disabled={!newDN.trim()||drivers.length>=4} style={{background:newDN.trim()&&drivers.length<4?"#16a34a":"#d6d3d1",color:"#fff",border:"none",borderRadius:8,padding:"6px 12px",cursor:newDN.trim()&&drivers.length<4?"pointer":"default",fontSize:12,fontWeight:600,flexShrink:0}}>Add</button>
 </div>
 {drivers.length>=4&&<p style={{fontSize:10,color:"#a8a29e",margin:"6px 0 0"}}>Max 4 drivers reached</p>}
+</div>
+</div>
+</div>}
+
+{/* Driver Link Modal */}
+{showLinkModal&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",padding:20}} onClick={()=>setShowLinkModal(null)}>
+<div style={{background:"#fff",borderRadius:20,padding:24,width:"100%",maxWidth:400,boxShadow:"0 24px 64px rgba(0,0,0,0.25)"}} onClick={e=>e.stopPropagation()}>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+<h3 style={{margin:0,fontSize:17,fontWeight:700}}>🔗 {showLinkModal.name}'s Link</h3>
+<button onClick={()=>setShowLinkModal(null)} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:"#78716c",lineHeight:1}}>✕</button>
+</div>
+<p style={{fontSize:12,color:"#78716c",margin:"0 0 10px"}}>Send this link to {showLinkModal.name.split(" ")[0]} — they'll see only their stops, no pricing.</p>
+{/* URL display box */}
+<div style={{background:"#f5f5f4",borderRadius:10,padding:"10px 14px",marginBottom:14,display:"flex",alignItems:"center",gap:8}}>
+<span style={{flex:1,fontSize:12,color:"#1c1917",wordBreak:"break-all",fontFamily:"monospace"}}>{showLinkModal.url}</span>
+</div>
+{/* Action buttons */}
+<div style={{display:"flex",flexDirection:"column",gap:8}}>
+<button onClick={()=>{navigator.clipboard.writeText(showLinkModal.url).then(()=>{showToast(`Link copied for ${showLinkModal.name}`);setShowLinkModal(null);}).catch(()=>{const ta=document.createElement("textarea");ta.value=showLinkModal.url;document.body.appendChild(ta);ta.select();document.execCommand("copy");document.body.removeChild(ta);showToast("Link copied");setShowLinkModal(null);});}}
+style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,width:"100%",background:BRAND.main,color:"#fff",border:"none",borderRadius:12,padding:"13px 16px",cursor:"pointer",fontSize:14,fontWeight:700}}>
+📋 Copy Link
+</button>
+{showLinkModal.phone&&<button onClick={()=>{window.open(`sms:${showLinkModal.phone}?&body=${encodeURIComponent(`Here's your Davis Delivery driver link:\n${showLinkModal.url}`)}`,`_blank`);setShowLinkModal(null);}}
+style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,width:"100%",background:"#16a34a",color:"#fff",border:"none",borderRadius:12,padding:"13px 16px",cursor:"pointer",fontSize:14,fontWeight:700}}>
+💬 Text to {showLinkModal.name.split(" ")[0]}
+</button>}
+{!showLinkModal.phone&&<p style={{fontSize:11,color:"#a8a29e",textAlign:"center",margin:0}}>No phone number saved — add one in Drivers to enable texting.</p>}
 </div>
 </div>
 </div>}
@@ -2310,7 +2608,7 @@ style={{flex:1,border:v.k==="add"?"2px solid #16a34a":v.k==="routes"?"2px solid 
 <div style={{display:"flex",gap:6}}><input value={editPh} onChange={e=>setEditPh(e.target.value)} placeholder="Phone" onKeyDown={e=>e.key==="Enter"&&saveDrv(d.id)} style={{flex:1,border:"1px solid #d6d3d1",borderRadius:8,padding:"6px 10px",fontSize:13,outline:"none"}}/><button onClick={()=>saveDrv(d.id)} style={{background:"#16a34a",color:"#fff",border:"none",borderRadius:8,padding:"6px 12px",cursor:"pointer",fontSize:12,fontWeight:600}}>Save</button></div>
 </div>:<>
 <div style={{flex:1}}><div style={{fontSize:15,fontWeight:600}}>{d.name}</div>{d.phone&&<div style={{fontSize:11,color:"#78716c"}}>{d.phone}</div>}</div>
-<button onClick={()=>{const slug=getDriverSlug(d.name);const url=`${window.location.origin}${window.location.pathname}#/driver/${slug}`;navigator.clipboard.writeText(url).then(()=>showToast(`Link copied for ${d.name}`)).catch(()=>showToast(`Link: #/driver/${slug}`));}} style={{background:"#f0fdf4",border:"none",borderRadius:6,padding:"4px 8px",cursor:"pointer",fontSize:10,fontWeight:600,color:"#16a34a"}}>Link</button>
+<button onClick={()=>{const slug=getDriverSlug(d.name);const url=`${window.location.origin}${window.location.pathname}#/driver/${slug}`;setShowLinkModal({name:d.name,url,phone:d.phone||""});}} style={{background:"#f0fdf4",border:"none",borderRadius:6,padding:"4px 8px",cursor:"pointer",fontSize:10,fontWeight:600,color:"#16a34a"}}>🔗 Link</button>
 <button onClick={()=>setDriverViewId(d.id)} style={{background:"#eff6ff",border:"none",borderRadius:6,padding:"4px 8px",cursor:"pointer",fontSize:10,fontWeight:600,color:"#2563eb"}}>View</button>
 <button onClick={()=>{setEditDrv(d.id);setEditNm(d.name);setEditPh(d.phone||"");}} style={{background:"#f5f5f4",border:"none",borderRadius:6,padding:"4px 10px",cursor:"pointer",fontSize:12}}>Edit</button>
 {drivers.length>1&&<button onClick={()=>rmDrv(d.id)} style={{background:"#fef2f2",border:"none",borderRadius:6,padding:"4px 10px",cursor:"pointer",fontSize:12,color:"#dc2626"}}>✕</button>}
@@ -2563,11 +2861,38 @@ style={{width:"100%",border:"1px solid #d8b4fe",borderRadius:8,padding:"10px 12p
 <button onClick={()=>{setDispNotes(p=>({...p,[dk]:noteText.trim()}));setEditingNote(false);showToast("Notes saved");}} style={{background:"#7c3aed",color:"#fff",border:"none",borderRadius:6,padding:"5px 14px",cursor:"pointer",fontSize:11,fontWeight:600}}>Save</button>
 </div>
 </div>}
-{dl.some(e=>e.isHourly)&&<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:12,padding:"12px 16px",marginBottom:12}}>
-<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}><span style={{fontSize:13,color:"#2563eb",fontWeight:600}}>Emser Hours</span><span style={{fontSize:16,fontWeight:700,fontVariantNumeric:"tabular-nums"}}>{fmt(102.50*(emH[`${dk}-emser`]||4))}</span></div>
-<div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><span style={{fontSize:12,color:"#64748b",fontVariantNumeric:"tabular-nums"}}>{emH[`${dk}-emser`]||4}h x $102.50</span><div style={{display:"flex",gap:4,alignItems:"center",flexWrap:"wrap",justifyContent:"flex-end"}}>{[4,5,6,7,8,9,10].map(h=><button key={h} onClick={()=>{setEmH(p=>({...p,[`${dk}-emser`]:h}));setShowCustomHrs(false);}} style={{width:30,height:30,borderRadius:8,border:"none",cursor:"pointer",fontSize:13,fontWeight:600,background:!showCustomHrs&&(emH[`${dk}-emser`]||4)===h?"#2563eb":"#e7e5e4",color:!showCustomHrs&&(emH[`${dk}-emser`]||4)===h?"#fff":"#78716c"}}>{h}</button>)}<button onClick={()=>setShowCustomHrs(!showCustomHrs)} style={{height:30,borderRadius:8,border:"none",cursor:"pointer",fontSize:11,fontWeight:600,padding:"0 8px",background:showCustomHrs?"#2563eb":"#dbeafe",color:showCustomHrs?"#fff":"#2563eb"}}>Other</button></div></div>
+{dl.some(e=>e.isHourly)&&(()=>{
+const{byDriver,totalMins}=getShiftSummary(dk);
+const hasShifts=totalMins>0;
+const hrs=emH[`${dk}-emser`]||4;
+return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:12,padding:"12px 16px",marginBottom:12}}>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+<span style={{fontSize:13,color:"#2563eb",fontWeight:600}}>Emser Hours</span>
+<span style={{fontSize:16,fontWeight:700,fontVariantNumeric:"tabular-nums"}}>{fmt(102.50*hrs)}</span>
+</div>
+{hasShifts?(<>
+<div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:8}}>
+{drivers.map((drv,di)=>{const mins=byDriver[drv.id]||0;if(!mins)return null;const initials=drv.name.split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase();return(<div key={drv.id} style={{display:"flex",alignItems:"center",gap:4,background:"#fff",border:`1px solid ${DCOL[di]}`,borderRadius:8,padding:"4px 10px"}}>
+<div style={{width:20,height:20,borderRadius:6,background:DCOL[di],display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,color:"#fff",fontWeight:700}}>{initials}</div>
+<span style={{fontSize:12,fontWeight:700,color:DCOL[di]}}>{formatMins(mins)}</span>
+</div>);})}
+<div style={{display:"flex",alignItems:"center",gap:4,background:"#dbeafe",borderRadius:8,padding:"4px 10px",marginLeft:"auto"}}>
+<span style={{fontSize:11,color:"#1d4ed8",fontWeight:600}}>Total:</span>
+<span style={{fontSize:13,fontWeight:800,color:"#1d4ed8"}}>{formatMins(totalMins)}</span>
+</div>
+</div>
+<div style={{fontSize:11,color:"#64748b"}}>{hrs}h billed × $102.50 — auto-updated from shifts</div>
+</>):(<>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><span style={{fontSize:12,color:"#64748b"}}>{hrs}h × $102.50</span>
+<div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+{[4,5,6,7,8,9,10].map(h=><button key={h} onClick={()=>{setEmH(p=>({...p,[`${dk}-emser`]:h}));setShowCustomHrs(false);}} style={{width:30,height:30,borderRadius:8,border:"none",cursor:"pointer",fontSize:13,fontWeight:600,background:!showCustomHrs&&hrs===h?"#2563eb":"#e7e5e4",color:!showCustomHrs&&hrs===h?"#fff":"#78716c"}}>{h}</button>)}
+<button onClick={()=>setShowCustomHrs(!showCustomHrs)} style={{height:30,borderRadius:8,border:"none",cursor:"pointer",fontSize:11,fontWeight:600,padding:"0 8px",background:showCustomHrs?"#2563eb":"#dbeafe",color:showCustomHrs?"#fff":"#2563eb"}}>Other</button>
+</div></div>
 {showCustomHrs&&<div style={{display:"flex",gap:6,alignItems:"center",marginTop:8}}><input value={customHrsInput} onChange={e=>setCustomHrsInput(e.target.value)} placeholder="e.g. 4.5" type="number" step="0.25" min="1" style={{width:80,border:"1px solid #bfdbfe",borderRadius:8,padding:"6px 10px",fontSize:14,fontWeight:700,outline:"none",textAlign:"center",background:"#fff"}}/><span style={{fontSize:12,color:"#64748b"}}>hrs</span><button onClick={()=>{const v=parseFloat(customHrsInput);if(v>0){setEmH(p=>({...p,[`${dk}-emser`]:v}));setShowCustomHrs(false);setCustomHrsInput("");}}} style={{background:"#2563eb",color:"#fff",border:"none",borderRadius:8,padding:"6px 14px",fontSize:12,fontWeight:600,cursor:"pointer"}}>Set</button></div>}
-</div>}
+<div style={{fontSize:11,color:"#64748b",marginTop:6}}>💡 Log shifts in History → ⏱ Emser Hrs for auto-calculation</div>
+</>)}
+</div>);
+})()}
 {dl.length===0?<div style={{textAlign:"center",padding:"48px 20px",color:"#a8a29e"}}><div style={{fontSize:36,marginBottom:12}}>🚚</div><p style={{fontSize:14,margin:0}}>No deliveries logged</p></div>:<>
 {dl.map(entry=>{const c=getCustColor(entry.customer);const drv=drivers.find(d=>d.id===entry.driverId);const di=drivers.findIndex(d=>d.id===entry.driverId);const isImetco=entry.customer==="IMETCO";return(
 <div key={entry.id} style={{background:"#fff",border:"1px solid #e7e5e4",borderRadius:14,padding:"12px 16px",marginBottom:8,borderLeft:`4px solid ${entry.priority?"#f59e0b":entry.stopType==="pickup"?"#2563eb":c.accent}`}}>
@@ -2633,7 +2958,13 @@ style={{flex:1,border:entry.shipPlan?"1px solid #bbf7d0":"1px solid #fca5a5",bor
 <div style={{display:"flex",alignItems:"center",gap:4}}><div style={{width:8,height:8,borderRadius:2,background:"#16a34a"}}/><span style={{fontSize:9,color:"#a8a29e"}}>This wk</span></div>
 </div>
 </div>
-{DAYS.map((day,i)=>{const{entries,calc}=wkD[i];const wk2=`${wo}-${i}`;if(!entries.length)return null;return(<div key={day} style={{marginBottom:16}}><div style={{display:"flex",justifyContent:"space-between",padding:"8px 4px",borderBottom:"1px solid #e7e5e4"}}><span style={{fontSize:14,fontWeight:700}}>{day} — {wd[i].date}</span><span style={{fontVariantNumeric:"tabular-nums",fontWeight:700,color:"#16a34a",fontSize:14}}>{fmt(calc.total)}</span></div>{entries.map(entry=>{const c=getCustColor(entry.customer);const drv=drivers.find(d=>d.id===entry.driverId);const di2=drivers.findIndex(d=>d.id===entry.driverId);const isImetco=entry.customer==="IMETCO";return(<div key={entry.id}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 8px 6px 16px",borderLeft:`3px solid ${c.accent}`,marginTop:4,background:"#fff",borderRadius:isImetco?"0 8px 0 0":"0 8px 8px 0"}}><div style={{display:"flex",alignItems:"center",gap:4,flex:1,minWidth:0}}><span style={{fontSize:11,color:c.accent,fontWeight:600}}>{entry.customer}</span><span style={{fontSize:12,color:"#57534e",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{entry.stop}</span>{drv&&<span style={{fontSize:9,background:DCOL[di2]||"#78716c",color:"#fff",padding:"1px 4px",borderRadius:3,fontWeight:600,flexShrink:0}}>{drv.name.charAt(0)}</span>}</div><span style={{fontVariantNumeric:"tabular-nums",fontSize:12,fontWeight:600,color:"#44403c",flexShrink:0,marginLeft:4}}>{entry.isHourly?"HR":fmt(entry.baseRate)}</span></div>
+{DAYS.map((day,i)=>{const{entries,calc}=wkD[i];const wk2=`${wo}-${i}`;const{byDriver:shiftByDrv,totalMins:shiftMins}=getShiftSummary(`${wo}-${i}`);if(!entries.length&&!shiftMins)return null;return(<div key={day} style={{marginBottom:16}}><div style={{display:"flex",justifyContent:"space-between",padding:"8px 4px",borderBottom:"1px solid #e7e5e4"}}><span style={{fontSize:14,fontWeight:700}}>{day} — {wd[i].date}</span><span style={{fontVariantNumeric:"tabular-nums",fontWeight:700,color:"#16a34a",fontSize:14}}>{fmt(calc.total)}</span></div>
+{shiftMins>0&&<div style={{display:"flex",alignItems:"center",gap:5,padding:"5px 8px 5px 14px",borderLeft:"3px solid #2563eb",marginTop:4,background:"#eff6ff",borderRadius:"0 8px 8px 0",flexWrap:"wrap"}}>
+<span style={{fontSize:11,color:"#2563eb",fontWeight:700,flexShrink:0}}>⏱ Emser</span>
+{drivers.map((drv,di)=>{const mins=shiftByDrv[drv.id]||0;if(!mins)return null;const initials=drv.name.split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase();return(<span key={drv.id} style={{fontSize:11,background:DCOL[di],color:"#fff",padding:"1px 6px",borderRadius:4,fontWeight:600}}>{initials} {formatMins(mins)}</span>);})}
+<span style={{marginLeft:"auto",fontSize:11,fontWeight:700,color:"#1d4ed8",fontVariantNumeric:"tabular-nums"}}>{formatMins(shiftMins)}</span>
+</div>}
+{entries.map(entry=>{const c=getCustColor(entry.customer);const drv=drivers.find(d=>d.id===entry.driverId);const di2=drivers.findIndex(d=>d.id===entry.driverId);const isImetco=entry.customer==="IMETCO";return(<div key={entry.id}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 8px 6px 16px",borderLeft:`3px solid ${c.accent}`,marginTop:4,background:"#fff",borderRadius:isImetco?"0 8px 0 0":"0 8px 8px 0"}}><div style={{display:"flex",alignItems:"center",gap:4,flex:1,minWidth:0}}><span style={{fontSize:11,color:c.accent,fontWeight:600}}>{entry.customer}</span><span style={{fontSize:12,color:"#57534e",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{entry.stop}</span>{drv&&<span style={{fontSize:9,background:DCOL[di2]||"#78716c",color:"#fff",padding:"1px 4px",borderRadius:3,fontWeight:600,flexShrink:0}}>{drv.name.charAt(0)}</span>}</div><span style={{fontVariantNumeric:"tabular-nums",fontSize:12,fontWeight:600,color:"#44403c",flexShrink:0,marginLeft:4}}>{entry.isHourly?"HR":fmt(entry.baseRate)}</span></div>
 {isImetco&&<div style={{padding:"4px 8px 6px 16px",borderLeft:`3px solid ${c.accent}`,background:"#fff",borderRadius:"0 0 8px 0",display:"flex",alignItems:"center",gap:6}}>
 <span style={{fontSize:10,fontWeight:700,color:"#ea580c",flexShrink:0}}>SP#:</span>
 <input value={entry.shipPlan||""} onChange={e=>{const eid=entry.id;const val=e.target.value;setLog(p=>({...p,[wk2]:(p[wk2]||[]).map(en=>en.id===eid?{...en,shipPlan:val}:en)}));}} placeholder="—"
@@ -2641,6 +2972,20 @@ style={{width:80,border:"1px solid #e7e5e4",borderRadius:6,padding:"3px 6px",fon
 </div>}
 </div>);})}</div>);})}
 {wkD.every(d=>!d.entries.length)&&<div style={{textAlign:"center",padding:"48px 20px",color:"#a8a29e"}}><p>No deliveries this week</p></div>}
+{(()=>{const wkShiftByDrv={};let wkShiftTotal=0;DAYS.forEach((_,i)=>{const{byDriver,totalMins}=getShiftSummary(`${wo}-${i}`);wkShiftTotal+=totalMins;Object.entries(byDriver).forEach(([did,mins])=>{wkShiftByDrv[did]=(wkShiftByDrv[did]||0)+mins;});});if(!wkShiftTotal)return null;const wkShiftHrs=Math.round(wkShiftTotal/15)*15/60;return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:14,padding:"14px 16px",marginBottom:12}}>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+<span style={{fontSize:13,fontWeight:700,color:"#2563eb"}}>⏱ Week Emser Hours</span>
+<span style={{fontSize:16,fontWeight:700,fontVariantNumeric:"tabular-nums",color:"#1d4ed8"}}>{fmt(102.50*wkShiftHrs)}</span>
+</div>
+<div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:4}}>
+{drivers.map((drv,di)=>{const mins=wkShiftByDrv[drv.id]||0;if(!mins)return null;const initials=drv.name.split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase();const hrs=Math.round(mins/15)*15/60;return(<div key={drv.id} style={{display:"flex",alignItems:"center",gap:5,background:"#fff",border:`1px solid ${DCOL[di]}`,borderRadius:8,padding:"4px 10px"}}>
+<div style={{width:18,height:18,borderRadius:5,background:DCOL[di],display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,color:"#fff",fontWeight:700}}>{initials}</div>
+<span style={{fontSize:12,fontWeight:700}}>{formatMins(mins)}</span>
+<span style={{fontSize:10,color:"#64748b"}}>{fmt(102.50*hrs)}</span>
+</div>);})}
+</div>
+<div style={{fontSize:11,color:"#64748b",fontVariantNumeric:"tabular-nums"}}>{formatMins(wkShiftTotal)} total across all drivers</div>
+</div>);})()} 
 {Object.keys(wkF).length>0&&<div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:14,padding:"14px 16px",marginBottom:12}}><div style={{fontSize:12,fontWeight:700,color:"#d97706",textTransform:"uppercase",marginBottom:8}}>Week Fuel</div>{Object.entries(wkF).map(([cu,cf])=><div key={cu} style={{display:"flex",justifyContent:"space-between",padding:"4px 0"}}><span style={{fontSize:13}}>{cu} <span style={{fontSize:11,color:"#a8a29e",fontVariantNumeric:"tabular-nums"}}>{fmt(cf.base)} x {Math.round(cf.pct*100)}%</span></span><span style={{fontSize:14,fontWeight:700,color:"#d97706",fontVariantNumeric:"tabular-nums"}}>{fmt(cf.base*cf.pct)}</span></div>)}</div>}
 </div>}
 
@@ -2661,7 +3006,7 @@ const shifts=getEmserDayShifts();
 const totalMins=shifts.reduce((sum,s)=>sum+calcShiftMins(s),0);
 const totalHrs=Math.round(totalMins/15)*15/60;
 const perDriver={};shifts.forEach(s=>{if(!perDriver[s.driverId])perDriver[s.driverId]=0;perDriver[s.driverId]+=calcShiftMins(s);});
-const TIME_PRESETS=["5:00 AM","5:30 AM","6:00 AM","6:30 AM","7:00 AM","7:30 AM","8:00 AM","8:30 AM","9:00 AM","9:30 AM","10:00 AM","10:30 AM","11:00 AM","11:30 AM","12:00 PM","12:30 PM","1:00 PM","1:30 PM","2:00 PM","2:30 PM","3:00 PM","3:30 PM","4:00 PM","4:30 PM","5:00 PM","5:30 PM","6:00 PM"];
+const TIME_PRESETS=["7:00 AM","8:00 AM","9:00 AM","10:00 AM","11:00 AM","12:00 PM","1:00 PM","2:00 PM","3:00 PM","4:00 PM","5:00 PM"];
 return(<div>
 {/* Day header */}
 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"0 4px",marginBottom:12}}>
@@ -2706,9 +3051,16 @@ return(<div key={drv.id} style={{background:"#fff",border:"1px solid #e7e5e4",bo
 <input type="time" value={shift.end} onChange={e=>updateEmserShift(shift.id,"end",e.target.value)} style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px",fontSize:14,fontWeight:700,outline:"none",background:shift.end?"#fff":"#fafaf9"}}/>
 </div>
 </div>
-<div style={{display:"flex",gap:3,flexWrap:"wrap"}}>
-{TIME_PRESETS.filter((_,i)=>i%2===0).map(t=>{const isStart=shift.start===t;const isEnd=shift.end===t;return(
-<button key={t} onClick={()=>{if(!shift.start||isStart)updateEmserShift(shift.id,"start",t);else if(!shift.end||isEnd)updateEmserShift(shift.id,"end",t);}} style={{padding:"3px 6px",borderRadius:4,border:"none",cursor:"pointer",fontSize:9,fontWeight:600,background:isStart?BRAND.main:isEnd?"#16a34a":"#f5f5f4",color:isStart||isEnd?"#fff":"#78716c"}}>{t.replace(":00","").replace(" ","")}</button>);})}
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-end",gap:4}}>
+<div style={{display:"flex",gap:3,flexWrap:"wrap",flex:1}}>
+{TIME_PRESETS.map(t=>{const t24=presetTo24(t);const isStart=shift.start===t24;const isEnd=shift.end===t24;return(
+<button key={t} onClick={()=>{if(!shift.start||isStart)updateEmserShift(shift.id,"start",t24);else if(!shift.end||isEnd)updateEmserShift(shift.id,"end",t24);}} style={{padding:"3px 6px",borderRadius:4,border:"none",cursor:"pointer",fontSize:9,fontWeight:600,background:isStart?BRAND.main:isEnd?"#16a34a":"#f5f5f4",color:isStart||isEnd?"#fff":"#78716c"}}>{t.replace(":00","").replace(" ","")}</button>);})}
+</div>
+<div style={{display:"flex",gap:3,flexShrink:0}}>
+{[15,30,45].map(m=>{
+const addMins=(base,add)=>{if(!base)return"";const[h,min]=base.split(":").map(Number);const total=h*60+min+add;return String(Math.floor(total/60)%24).padStart(2,"0")+":"+String(total%60).padStart(2,"0");};
+return(<button key={m} onClick={()=>{if(shift.start)updateEmserShift(shift.id,"end",addMins(shift.start,m));}} title={`End = start + ${m}min`} style={{padding:"3px 7px",borderRadius:4,border:"1px solid #bfdbfe",cursor:"pointer",fontSize:9,fontWeight:700,background:"#eff6ff",color:"#2563eb"}}>+{m}</button>);})}
+</div>
 </div>
 </div>);})}
 
@@ -3080,14 +3432,14 @@ style={{background:chatInput.trim()&&!chatLoading?"#d97706":"#e7e5e4",color:chat
 function DriverPage({driverSlug}){
 const[wo]=useState(0);
 const[sd]=useState(()=>{const d=new Date().getDay();return d>=1&&d<=5?d-1:0;});
-const[log,setLog]=useState({});
+const[log,setLog]=useState(()=>lsGet(LS_LOG,{}));
 const[toast,setToast]=useState(null);
 const[pinEntry,setPinEntry]=useState("");
 const[authenticated,setAuthenticated]=useState(false);
 const getPin=(phone)=>{const digits=(phone||"").replace(/\D/g,"");return digits.length>=4?digits.slice(-4):"0000";};
 const[sigStop,setSigStop]=useState(null);
 const[shipPlanInputs,setShipPlanInputs]=useState({});
-const[allDrivers,setAllDrivers]=useState([{id:1,name:"Trevor Seyers",phone:"404-394-9891"},{id:2,name:"Brent Dixon",phone:""},{id:3,name:"Trevarr Howard",phone:""}]);
+const[allDrivers,setAllDrivers]=useState(()=>lsGet(LS_DRIVERS,DEFAULT_DRIVERS));
 const[driverNotifs,setDriverNotifs]=useState([]);
 const[showDriverMsg,setShowDriverMsg]=useState(false);
 const[driverMsgInput,setDriverMsgInput]=useState("");
@@ -3098,8 +3450,8 @@ const[driverMsgTab,setDriverMsgTab]=useState("private"); /* private | group */
 const wd=getWeekDates(wo);const dk=`${wo}-${sd}`;const dl=log[dk]||[];
 const showToast=useCallback(m=>{setToast(m);setTimeout(()=>setToast(null),2000);},[]);
 
-/* Resolve driver from slug */
-const driverId=DRIVER_SLUGS[driverSlug];
+/* Resolve driver from slug — checks live drivers first so any driver name works */
+const driverId=resolveDriverSlug(driverSlug,allDrivers);
 const driver=allDrivers.find(d=>d.id===driverId);
 const entries=dl.filter(e=>e.driverId===driverId);
 
@@ -3137,8 +3489,9 @@ useEffect(()=>{
   }
 },[authenticated,driverId]);
 
-/* Save driver status updates back to Firestore */
+/* Save driver status updates back to Firestore AND localStorage */
 const saveDriverLog=useCallback((newLog)=>{
+  lsSet(LS_LOG,newLog);
   const entries2=newLog[dk]||[];
   saveManifestDay(wo,sd,entries2).catch(e=>console.error("Driver save:",e));
 },[dk,wo,sd]);
