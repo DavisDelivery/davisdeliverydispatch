@@ -1052,6 +1052,11 @@ const[showChat,setShowChat]=useState(false);
 const[chatMessages,setChatMessages]=useState([]);
 const[chatInput,setChatInput]=useState("");
 const[chatLoading,setChatLoading]=useState(false);
+/* 2-Way Messaging */
+const[showMsgPanel,setShowMsgPanel]=useState(false);
+const[msgChannel,setMsgChannel]=useState(null); /* null=group, driverId=private */
+const[msgInput,setMsgInput]=useState("");
+const[allMessages,setAllMessages]=useState({}); /* {channelKey: [{id,from,text,time,fromName},...]} */
 const[histSearch,setHistSearch]=useState("");
 const[histCustFilter,setHistCustFilter]=useState("");
 const[histDrvFilter,setHistDrvFilter]=useState("");
@@ -1172,6 +1177,22 @@ const addEmserShift=(driverId)=>{const shifts=getEmserDayShifts();setEmserShifts
 const updateEmserShift=(shiftId,field,val)=>{setEmserShifts(p=>({...p,[dk]:(p[dk]||[]).map(s=>s.id===shiftId?{...s,[field]:val}:s)}));};
 const removeEmserShift=(shiftId)=>{setEmserShifts(p=>({...p,[dk]:(p[dk]||[]).filter(s=>s.id!==shiftId)}));};
 const calcAndApplyEmserHours=useCallback(()=>{const shifts=emserShifts[dk]||[];const totalMins=shifts.reduce((sum,s)=>sum+calcShiftMins(s),0);const hours=Math.round(totalMins/15)*15/60;if(hours>0){setEmH(p=>({...p,[`${dk}-emser`]:hours}));return hours;}return emH[`${dk}-emser`]||4;},[emserShifts,dk,emH]);
+
+/* ── 2-WAY MESSAGING ── */
+const getMsgKey=(ch)=>ch?"dm-"+ch:"group";
+const getMessages=(ch)=>allMessages[getMsgKey(ch)]||[];
+const sendMsg=(ch)=>{
+if(!msgInput.trim())return;
+const key=getMsgKey(ch);
+const now=new Date().toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});
+const msg={id:Date.now()+Math.random(),from:"dispatch",fromName:"Dispatch",text:msgInput.trim(),time:now,read:false};
+setAllMessages(p=>({...p,[key]:[...(p[key]||[]),msg]}));
+setMsgInput("");
+/* In production, save to Firestore for real-time sync */
+};
+const getUnreadCount=(ch)=>{const msgs=getMessages(ch);return msgs.filter(m=>m.from!=="dispatch"&&!m.read).length;};
+const getTotalUnread=()=>{let c=getUnreadCount(null);drivers.forEach(d=>{c+=getUnreadCount(d.id);});return c;};
+const markMsgsRead=(ch)=>{const key=getMsgKey(ch);setAllMessages(p=>({...p,[key]:(p[key]||[]).map(m=>m.from!=="dispatch"?{...m,read:true}:m)}));};
 
 const moveInDriver=(drvId,fromIdx,dir)=>{const toIdx=fromIdx+dir;setLog(p=>{const all=[...(p[dk]||[])];const de=all.filter(e=>e.driverId===drvId);const rest=all.filter(e=>e.driverId!==drvId);if(toIdx<0||toIdx>=de.length)return p;[de[fromIdx],de[toIdx]]=[de[toIdx],de[fromIdx]];return{...p,[dk]:[...rest,...de]};});};
 const insertPickup=(drvId,afterIdx)=>{if(!pickupStop)return;const forLabel=pickupForDel?` → ${pickupForDel}`:"";const entry={id:Date.now()+Math.random(),customer:pickupCustomer||"Pickup",stop:`${pickupCustomer||"Pickup"}${forLabel}`,baseRate:0,fuelPct:0,isHourly:false,note:pickupNote||(pickupForDel?`Picking up for ${pickupForDel}`:null),driverId:drvId,addr:pickupAddr||"",stopType:"pickup",priority:false,pickupFrom:pickupStop,pickupFor:pickupForDel,instructions:"",status:null,arrivedAt:null,departedAt:null,eta:null,photos:[],signature:null};setLog(p=>{const all=[...(p[dk]||[])];const de=all.filter(e=>e.driverId===drvId);const rest=all.filter(e=>e.driverId!==drvId);de.splice(afterIdx+1,0,entry);return{...p,[dk]:[...rest,...de]};});setInsertPickupFor(null);setPickupCustomer("");setPickupStop("");setPickupAddr("");setPickupForDel("");setPickupNote("");showToast(`Pickup added`);};
@@ -1303,8 +1324,6 @@ const response=await fetch("/.netlify/functions/chat",{
 method:"POST",
 headers:{"Content-Type":"application/json"},
 body:JSON.stringify({
-model:"claude-sonnet-4-20250514",
-max_tokens:1000,
 system:buildSystemPrompt(),
 messages:newMessages.map(m=>({role:m.role,content:m.content})),
 }),
@@ -1313,7 +1332,7 @@ const data=await response.json();
 const assistantText=data.content?.map(c=>c.type==="text"?c.text:"").join("")||"Sorry, I couldn't process that.";
 setChatMessages(prev=>[...prev,{role:"assistant",content:assistantText}]);
 }catch(err){
-setChatMessages(prev=>[...prev,{role:"assistant",content:"Connection error — this works when deployed to Netlify with API access."}]);
+setChatMessages(prev=>[...prev,{role:"assistant",content:"Connection error — check that the Netlify function is deployed and ANTHROPIC_API_KEY is set in environment variables."}]);
 }
 setChatLoading(false);
 };
@@ -1364,6 +1383,7 @@ return(
 </div>
 <div style={{display:"flex",alignItems:"center",gap:10}}>
 {[{k:"daily",l:"Daily"},{k:"weekly",l:"Weekly"},{k:"history",l:"History"},{k:"add",l:"+ Add"}].map(v=><button key={v.k} onClick={()=>{setView(v.k);setSelCust(null);setQuoteMode(null);}} style={{background:v.k==="add"?"#16a34a":"#fff",border:v.k==="add"?"none":"1px solid #e7e5e4",color:v.k==="add"?"#fff":"#57534e",borderRadius:8,padding:"7px 14px",cursor:"pointer",fontSize:12,fontWeight:600}}>{v.l}</button>)}
+<button onClick={()=>{setShowMsgPanel(true);setMsgChannel(null);markMsgsRead(null);}} style={{background:"#fff",border:"1px solid #e7e5e4",color:"#57534e",borderRadius:8,padding:"7px 16px",cursor:"pointer",fontSize:12,fontWeight:600,position:"relative"}}>{"💬"} Messages{getTotalUnread()>0&&<span style={{position:"absolute",top:-4,right:-4,background:"#dc2626",color:"#fff",fontSize:9,fontWeight:700,padding:"1px 5px",borderRadius:8,minWidth:16,textAlign:"center"}}>{getTotalUnread()}</span>}</button>
 <button onClick={()=>setShowChat(true)} style={{background:BRAND.main,border:"none",color:"#fff",borderRadius:8,padding:"7px 16px",cursor:"pointer",fontSize:12,fontWeight:600}}>{"\uD83E\uDD16 AI"}</button>
 <button onClick={()=>setShowDM(true)} style={{background:"#fff",border:"1px solid #e7e5e4",color:"#57534e",borderRadius:8,padding:"7px 16px",cursor:"pointer",fontSize:12,fontWeight:600}}>Drivers</button>
 <div style={{background:"#f0fdf4",border:"1px solid #bbf7d0",color:"#16a34a",padding:"7px 18px",borderRadius:10,fontSize:16,fontWeight:700,fontVariantNumeric:"tabular-nums"}}>{fmt(dc.total)}<span style={{fontSize:10,opacity:0.6,marginLeft:4}}>today</span></div>
@@ -1682,6 +1702,7 @@ return(
 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
 <img src={LOGO_WHITE} alt="Davis Delivery" style={{height:28,objectFit:"contain"}}/>
 <div style={{display:"flex",gap:8,alignItems:"center"}}>
+<button onClick={()=>{setShowMsgPanel(true);setMsgChannel(null);markMsgsRead(null);}} style={{background:"#292524",border:"1px solid #44403c",color:"#d6d3d1",borderRadius:8,padding:"6px 10px",cursor:"pointer",fontSize:12,fontWeight:600,position:"relative"}}>{"💬"}{getTotalUnread()>0&&<span style={{position:"absolute",top:-4,right:-4,background:"#dc2626",color:"#fff",fontSize:9,fontWeight:700,padding:"1px 5px",borderRadius:8,minWidth:14,textAlign:"center"}}>{getTotalUnread()}</span>}</button>
 <button onClick={()=>setShowChat(true)} style={{background:"#d97706",border:"none",color:"#fff",borderRadius:8,padding:"6px 10px",cursor:"pointer",fontSize:12,fontWeight:600}}>AI</button>
 <button onClick={()=>setShowDM(true)} style={{background:"#292524",border:"1px solid #44403c",color:"#d6d3d1",borderRadius:8,padding:"6px 10px",cursor:"pointer",fontSize:12,fontWeight:600}}>Drivers</button>
 <div style={{background:BRAND.main,color:"#fff",padding:"6px 14px",borderRadius:8,fontSize:13,fontWeight:700,fontVariantNumeric:"tabular-nums"}}>{fmt(wkT)}<span style={{fontSize:10,opacity:0.7,marginLeft:3}}>wk</span></div>
@@ -2378,6 +2399,57 @@ return(<div>
 {view==="add"&&quoteMode&&<QuoteBuilder customerName={quoteMode.name} pickupOptions={quoteMode.pickups} onAdd={addDel} onBack={()=>setQuoteMode(null)} drivers={drivers} drvEntries={drvEntries}/>}
 </div>
 
+{/* ═══ 2-WAY MESSAGING PANEL ═══ */}
+{showMsgPanel&&<div style={{position:"fixed",inset:0,zIndex:200,display:"flex",flexDirection:"column"}}>
+<div onClick={()=>setShowMsgPanel(false)} style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.5)"}}/>
+<div style={{position:"relative",marginTop:"auto",background:"#fff",borderRadius:"20px 20px 0 0",maxHeight:"85vh",display:"flex",flexDirection:"column",zIndex:1,minHeight:400}}>
+{/* Header */}
+<div style={{padding:"14px 20px 10px",borderBottom:"1px solid #e7e5e4",flexShrink:0}}>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+<div style={{fontSize:16,fontWeight:700,color:BRAND.main}}>{"💬"} Messages</div>
+<button onClick={()=>setShowMsgPanel(false)} style={{background:"#f5f5f4",border:"none",borderRadius:8,padding:"6px 10px",cursor:"pointer",fontSize:14,color:"#78716c"}}>{"✕"}</button>
+</div>
+{/* Channel tabs */}
+<div style={{display:"flex",gap:4,overflowX:"auto"}}>
+<button onClick={()=>{setMsgChannel(null);markMsgsRead(null);}} style={{padding:"6px 14px",borderRadius:8,border:"none",cursor:"pointer",fontSize:12,fontWeight:600,background:msgChannel===null?BRAND.main:"#f5f5f4",color:msgChannel===null?"#fff":"#57534e",flexShrink:0,position:"relative"}}>{"📢"} All Drivers{getUnreadCount(null)>0&&<span style={{background:"#dc2626",color:"#fff",fontSize:8,padding:"1px 4px",borderRadius:6,marginLeft:4}}>{getUnreadCount(null)}</span>}</button>
+{drivers.map((d,di)=>{const unread=getUnreadCount(d.id);return(
+<button key={d.id} onClick={()=>{setMsgChannel(d.id);markMsgsRead(d.id);}} style={{padding:"6px 14px",borderRadius:8,border:"none",cursor:"pointer",fontSize:12,fontWeight:600,background:msgChannel===d.id?DCOL[di]:"#f5f5f4",color:msgChannel===d.id?"#fff":"#57534e",flexShrink:0,position:"relative"}}>{d.name.split(" ")[0]}{unread>0&&<span style={{background:"#dc2626",color:"#fff",fontSize:8,padding:"1px 4px",borderRadius:6,marginLeft:4}}>{unread}</span>}</button>
+);})}
+</div>
+</div>
+
+{/* Messages */}
+<div style={{flex:1,overflowY:"auto",padding:"12px 16px",display:"flex",flexDirection:"column",gap:6}}>
+{getMessages(msgChannel).length===0&&<div style={{textAlign:"center",padding:"40px 16px",color:"#a8a29e"}}>
+<div style={{fontSize:28,marginBottom:8}}>{"💬"}</div>
+<p style={{fontSize:13,margin:0}}>{msgChannel===null?"Group channel — all drivers see these messages":"Private chat with "+(drivers.find(d=>d.id===msgChannel)?.name||"driver")}</p>
+</div>}
+{getMessages(msgChannel).map(msg=>{const isMe=msg.from==="dispatch";return(
+<div key={msg.id} style={{display:"flex",justifyContent:isMe?"flex-end":"flex-start"}}>
+<div style={{maxWidth:"80%"}}>
+{!isMe&&<div style={{fontSize:10,fontWeight:600,color:"#78716c",marginBottom:2}}>{msg.fromName}</div>}
+<div style={{padding:"10px 14px",borderRadius:isMe?"14px 14px 4px 14px":"14px 14px 14px 4px",background:isMe?BRAND.main:"#f5f5f4",color:isMe?"#fff":"#1c1917",fontSize:13,lineHeight:1.5}}>
+{msg.text}
+</div>
+<div style={{fontSize:9,color:"#a8a29e",marginTop:2,textAlign:isMe?"right":"left"}}>{msg.time}</div>
+</div>
+</div>);})}
+</div>
+
+{/* Input */}
+<div style={{padding:"8px 16px 20px",borderTop:"1px solid #e7e5e4",display:"flex",gap:8,flexShrink:0}}>
+<input value={msgInput} onChange={e=>setMsgInput(e.target.value)}
+onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendMsg(msgChannel);}}}
+placeholder={msgChannel===null?"Message all drivers...":"Message "+(drivers.find(d=>d.id===msgChannel)?.name||"driver")+"..."}
+style={{flex:1,border:"1px solid #d6d3d1",borderRadius:12,padding:"12px 16px",fontSize:14,outline:"none",background:"#fafaf9",fontFamily:"inherit"}}/>
+<button onClick={()=>sendMsg(msgChannel)} disabled={!msgInput.trim()}
+style={{background:msgInput.trim()?BRAND.main:"#e7e5e4",color:msgInput.trim()?"#fff":"#a8a29e",border:"none",borderRadius:12,padding:"12px 16px",cursor:msgInput.trim()?"pointer":"default",fontSize:14,fontWeight:700,flexShrink:0}}>
+{"\u2191"}
+</button>
+</div>
+</div>
+</div>}
+
 {/* ═══ AI CHAT DRAWER ═══ */}
 {showChat&&<div style={{position:"fixed",inset:0,zIndex:200,display:"flex",flexDirection:"column"}}>
 <div onClick={()=>setShowChat(false)} style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.5)"}}/>
@@ -2449,6 +2521,11 @@ const[sigStop,setSigStop]=useState(null);
 const[shipPlanInputs,setShipPlanInputs]=useState({});
 const[allDrivers,setAllDrivers]=useState([{id:1,name:"Trevor Seyers",phone:"404-394-9891"},{id:2,name:"Brent Dixon",phone:""},{id:3,name:"Trevarr Howard",phone:""}]);
 const[driverNotifs,setDriverNotifs]=useState([]);
+const[showDriverMsg,setShowDriverMsg]=useState(false);
+const[driverMsgInput,setDriverMsgInput]=useState("");
+const[driverMessages,setDriverMessages]=useState([]); /* private messages */
+const[groupMessages,setGroupMessages]=useState([]); /* group channel */
+const[driverMsgTab,setDriverMsgTab]=useState("private"); /* private | group */
 
 const wd=getWeekDates(wo);const dk=`${wo}-${sd}`;const dl=log[dk]||[];
 const showToast=useCallback(m=>{setToast(m);setTimeout(()=>setToast(null),2000);},[]);
@@ -2503,6 +2580,16 @@ const addPhoto=(eid,dataUrl)=>setLog(p=>{const n={...p,[dk]:(p[dk]||[]).map(e=>e
 const addSignature=(eid,sig)=>setLog(p=>{const n={...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,signature:sig}:e)};saveDriverLog(n);return n;});
 const setShipPlanD=(eid,num)=>setLog(p=>{const n={...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,shipPlan:num}:e)};saveDriverLog(n);return n;});
 const setEtaD=(eid,mins,dest)=>setLog(p=>{const n={...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,eta:mins,etaDest:dest||null}:e)};saveDriverLog(n);return n;});
+
+const sendDriverMsg=()=>{
+if(!driverMsgInput.trim()||!driver)return;
+const now=new Date().toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});
+const msg={id:Date.now()+Math.random(),from:"driver-"+driverId,fromName:driver.name,text:driverMsgInput.trim(),time:now,read:false};
+if(driverMsgTab==="private")setDriverMessages(p=>[...p,msg]);
+else setGroupMessages(p=>[...p,msg]);
+setDriverMsgInput("");
+/* In production, save to Firestore for dispatch to see in real-time */
+};
 
 if(!driver){
 return(
@@ -2573,6 +2660,7 @@ return(
 <p style={{margin:"2px 0 0",fontSize:11,color:"#93c5fd",letterSpacing:"0.08em"}}>DRIVER MANIFEST</p>
 </div>
 <button onClick={()=>{setAuthenticated(false);setPinEntry("");}} style={{background:"#292524",border:"1px solid #44403c",color:"#a8a29e",borderRadius:8,padding:"6px 10px",cursor:"pointer",fontSize:11}}>Lock</button>
+<button onClick={()=>setShowDriverMsg(true)} style={{background:BRAND.main,border:"none",color:"#fff",borderRadius:8,padding:"6px 10px",cursor:"pointer",fontSize:11,fontWeight:600}}>{"💬"}</button>
 </div>
 </div>
 
@@ -2717,6 +2805,52 @@ onChange={e=>{if(e.target.files[0]){const r=new FileReader();r.onload=ev=>addPho
 );
 })}
 </div>
+{/* Driver Messaging Panel */}
+{showDriverMsg&&<div style={{position:"fixed",inset:0,zIndex:200,display:"flex",flexDirection:"column"}}>
+<div onClick={()=>setShowDriverMsg(false)} style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.5)"}}/>
+<div style={{position:"relative",marginTop:"auto",background:"#fff",borderRadius:"20px 20px 0 0",maxHeight:"85vh",display:"flex",flexDirection:"column",zIndex:1,minHeight:360}}>
+{/* Header */}
+<div style={{padding:"14px 20px 10px",borderBottom:"1px solid #e7e5e4",flexShrink:0}}>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+<div style={{fontSize:16,fontWeight:700,color:BRAND.main}}>{"💬"} Messages</div>
+<button onClick={()=>setShowDriverMsg(false)} style={{background:"#f5f5f4",border:"none",borderRadius:8,padding:"6px 10px",cursor:"pointer",fontSize:14,color:"#78716c"}}>{"✕"}</button>
+</div>
+<div style={{display:"flex",gap:4}}>
+<button onClick={()=>setDriverMsgTab("private")} style={{flex:1,padding:"6px",borderRadius:8,border:"none",cursor:"pointer",fontSize:12,fontWeight:600,background:driverMsgTab==="private"?BRAND.main:"#f5f5f4",color:driverMsgTab==="private"?"#fff":"#57534e"}}>Dispatch</button>
+<button onClick={()=>setDriverMsgTab("group")} style={{flex:1,padding:"6px",borderRadius:8,border:"none",cursor:"pointer",fontSize:12,fontWeight:600,background:driverMsgTab==="group"?"#f59e0b":"#f5f5f4",color:driverMsgTab==="group"?"#fff":"#57534e"}}>{"📢"} All Drivers</button>
+</div>
+</div>
+{/* Messages */}
+<div style={{flex:1,overflowY:"auto",padding:"12px 16px",display:"flex",flexDirection:"column",gap:6}}>
+{(driverMsgTab==="private"?driverMessages:groupMessages).length===0&&<div style={{textAlign:"center",padding:"40px 16px",color:"#a8a29e"}}>
+<div style={{fontSize:28,marginBottom:8}}>{"💬"}</div>
+<p style={{fontSize:13,margin:0}}>{driverMsgTab==="private"?"Private chat with dispatch":"Group channel — all drivers and dispatch"}</p>
+</div>}
+{(driverMsgTab==="private"?driverMessages:groupMessages).map(msg=>{const isMe=msg.from==="driver-"+driverId;return(
+<div key={msg.id} style={{display:"flex",justifyContent:isMe?"flex-end":"flex-start"}}>
+<div style={{maxWidth:"80%"}}>
+{!isMe&&<div style={{fontSize:10,fontWeight:600,color:"#78716c",marginBottom:2}}>{msg.fromName}</div>}
+<div style={{padding:"10px 14px",borderRadius:isMe?"14px 14px 4px 14px":"14px 14px 14px 4px",background:isMe?BRAND.main:"#f5f5f4",color:isMe?"#fff":"#1c1917",fontSize:13,lineHeight:1.5}}>
+{msg.text}
+</div>
+<div style={{fontSize:9,color:"#a8a29e",marginTop:2,textAlign:isMe?"right":"left"}}>{msg.time}</div>
+</div>
+</div>);})}
+</div>
+{/* Input */}
+<div style={{padding:"8px 16px 20px",borderTop:"1px solid #e7e5e4",display:"flex",gap:8,flexShrink:0}}>
+<input value={driverMsgInput} onChange={e=>setDriverMsgInput(e.target.value)}
+onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendDriverMsg();}}}
+placeholder={driverMsgTab==="private"?"Message dispatch...":"Message all drivers..."}
+style={{flex:1,border:"1px solid #d6d3d1",borderRadius:12,padding:"12px 16px",fontSize:14,outline:"none",background:"#fafaf9",fontFamily:"inherit"}}/>
+<button onClick={sendDriverMsg} disabled={!driverMsgInput.trim()}
+style={{background:driverMsgInput.trim()?BRAND.main:"#e7e5e4",color:driverMsgInput.trim()?"#fff":"#a8a29e",border:"none",borderRadius:12,padding:"12px 16px",cursor:driverMsgInput.trim()?"pointer":"default",fontSize:14,fontWeight:700,flexShrink:0}}>
+{"\u2191"}
+</button>
+</div>
+</div>
+</div>}
+
 <style>{`@keyframes slideDown{from{transform:translate(-50%,-20px);opacity:0}to{transform:translate(-50%,0);opacity:1}}@keyframes routeAlert{0%{transform:scale(1);box-shadow:0 0 0 0 rgba(220,38,38,0.4)}50%{transform:scale(1.02);box-shadow:0 0 0 8px rgba(220,38,38,0)}100%{transform:scale(1);box-shadow:0 0 0 0 rgba(220,38,38,0)}}button:active{transform:scale(0.97)}*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}`}</style>
 </div>
 );
