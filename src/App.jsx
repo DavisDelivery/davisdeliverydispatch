@@ -1332,7 +1332,7 @@ onStatusUpdate={updateStatus} onPhotoUpload={addPhoto} onSignature={addSignature
 }
 
 /* ═══════════════ DESKTOP LAYOUT ═══════════════ */
-if(isDesktop){
+if(isDesktop&&(view==="manifest"||view==="routes")){
 const dkNote=dispNotes[dk]||"";
 const allDriverEntries=drivers.map((drv,di)=>({drv,di,entries:drvEntries(drv.id)}));
 const uaEntries=dl.filter(e=>e.driverId===0);
@@ -1363,6 +1363,7 @@ return(
 </div>
 </div>
 <div style={{display:"flex",alignItems:"center",gap:10}}>
+{[{k:"daily",l:"Daily"},{k:"weekly",l:"Weekly"},{k:"history",l:"History"},{k:"add",l:"+ Add"}].map(v=><button key={v.k} onClick={()=>{setView(v.k);setSelCust(null);setQuoteMode(null);}} style={{background:v.k==="add"?"#16a34a":"#fff",border:v.k==="add"?"none":"1px solid #e7e5e4",color:v.k==="add"?"#fff":"#57534e",borderRadius:8,padding:"7px 14px",cursor:"pointer",fontSize:12,fontWeight:600}}>{v.l}</button>)}
 <button onClick={()=>setShowChat(true)} style={{background:BRAND.main,border:"none",color:"#fff",borderRadius:8,padding:"7px 16px",cursor:"pointer",fontSize:12,fontWeight:600}}>{"\uD83E\uDD16 AI"}</button>
 <button onClick={()=>setShowDM(true)} style={{background:"#fff",border:"1px solid #e7e5e4",color:"#57534e",borderRadius:8,padding:"7px 16px",cursor:"pointer",fontSize:12,fontWeight:600}}>Drivers</button>
 <div style={{background:"#f0fdf4",border:"1px solid #bbf7d0",color:"#16a34a",padding:"7px 18px",borderRadius:10,fontSize:16,fontWeight:700,fontVariantNumeric:"tabular-nums"}}>{fmt(dc.total)}<span style={{fontSize:10,opacity:0.6,marginLeft:4}}>today</span></div>
@@ -1580,16 +1581,101 @@ return(<g key={s.id}>
 </div>
 </div>}
 
-<style>{`@keyframes slideDown{from{transform:translate(-50%,-20px);opacity:0}to{transform:translate(-50%,0);opacity:1}}button:active{transform:scale(0.98)}*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:#f5f5f4}::-webkit-scrollbar-thumb{background:#d6d3d1;border-radius:3px}::-webkit-scrollbar-thumb:hover{background:#a8a29e}`}</style>
+{/* AI Chat - Desktop */}
+{showChat&&<div style={{position:"fixed",inset:0,zIndex:200,display:"flex",alignItems:"center",justifyContent:"center"}} onClick={()=>setShowChat(false)}>
+<div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:20,width:"100%",maxWidth:520,maxHeight:"80vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 64px rgba(0,0,0,0.2)"}}>
+<div style={{padding:"16px 20px 12px",borderBottom:"1px solid #e7e5e4",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
+<div style={{display:"flex",alignItems:"center",gap:10}}>
+<div style={{width:36,height:36,borderRadius:12,background:"linear-gradient(135deg, #d97706, #ea580c)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18}}>{"🤖"}</div>
+<div><div style={{fontSize:15,fontWeight:700}}>Dispatch AI</div><div style={{fontSize:10,color:"#78716c"}}>Knows your routes, rates & customers</div></div>
+</div>
+<button onClick={()=>setShowChat(false)} style={{background:"#f5f5f4",border:"none",borderRadius:8,padding:"6px 10px",cursor:"pointer",fontSize:14,color:"#78716c"}}>{"✕"}</button>
+</div>
+<div style={{flex:1,overflowY:"auto",padding:"16px 16px 8px",display:"flex",flexDirection:"column",gap:10,minHeight:200}}>
+{chatMessages.length===0&&<div style={{textAlign:"center",padding:"32px 16px",color:"#a8a29e"}}>
+<div style={{fontSize:32,marginBottom:8}}>{"🤖"}</div>
+<p style={{fontSize:14,fontWeight:600,margin:"0 0 8px",color:"#57534e"}}>What can I help with?</p>
+<div style={{display:"flex",flexDirection:"column",gap:6}}>
+{["Optimize Trevor's route","Summarize today's revenue","Quote 25 miles to Woodstock","What's Specialty's rate to DCO Tech?"].map((s,i)=>
+<button key={i} onClick={()=>setChatInput(s)} style={{background:"#f5f5f4",border:"1px solid #e7e5e4",borderRadius:10,padding:"10px 14px",cursor:"pointer",fontSize:12,fontWeight:500,color:"#57534e",textAlign:"left"}}>{s}</button>
+)}
+</div>
+</div>}
+{chatMessages.map((msg,i)=>(
+<div key={i} style={{display:"flex",justifyContent:msg.role==="user"?"flex-end":"flex-start"}}>
+<div style={{maxWidth:"85%",padding:"10px 14px",borderRadius:msg.role==="user"?"14px 14px 4px 14px":"14px 14px 14px 4px",background:msg.role==="user"?BRAND.main:"#f5f5f4",color:msg.role==="user"?"#fff":"#1c1917",fontSize:13,lineHeight:1.5,whiteSpace:"pre-wrap",wordBreak:"break-word"}}>
+{msg.content}
+</div>
+</div>
+))}
+{chatLoading&&<div style={{display:"flex",justifyContent:"flex-start"}}>
+<div style={{padding:"10px 14px",borderRadius:"14px 14px 14px 4px",background:"#f5f5f4",fontSize:13,color:"#a8a29e"}}>
+<span style={{animation:"pulse 1s infinite"}}>Thinking...</span>
+</div>
+</div>}
+</div>
+<div style={{padding:"8px 16px 16px",borderTop:"1px solid #e7e5e4",display:"flex",gap:8,flexShrink:0}}>
+<input value={chatInput} onChange={e=>setChatInput(e.target.value)}
+onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendChat();}}}
+placeholder="Ask about routes, quotes, revenue..."
+style={{flex:1,border:"1px solid #d6d3d1",borderRadius:12,padding:"12px 16px",fontSize:14,outline:"none",background:"#fafaf9",fontFamily:"inherit"}}/>
+<button onClick={sendChat} disabled={!chatInput.trim()||chatLoading}
+style={{background:chatInput.trim()&&!chatLoading?BRAND.main:"#e7e5e4",color:chatInput.trim()&&!chatLoading?"#fff":"#a8a29e",border:"none",borderRadius:12,padding:"12px 16px",cursor:chatInput.trim()&&!chatLoading?"pointer":"default",fontSize:14,fontWeight:700,flexShrink:0}}>
+{chatLoading?"...":"\u2191"}
+</button>
+</div>
+</div>
+</div>}
+
+{/* Notify Driver Modal - Desktop */}
+{notifyDriver&&(()=>{
+const drv=drivers.find(d=>d.id===notifyDriver);
+const di=drivers.findIndex(d=>d.id===notifyDriver);
+const de=drvEntries(notifyDriver);
+return(
+<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:100,display:"flex",alignItems:"center",justifyContent:"center",padding:20}} onClick={()=>setNotifyDriver(null)}>
+<div style={{background:"#fff",borderRadius:20,padding:24,width:"100%",maxWidth:420}} onClick={e=>e.stopPropagation()}>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+<div style={{display:"flex",alignItems:"center",gap:8}}>
+<div style={{width:28,height:28,borderRadius:8,background:DCOL[di],display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,color:"#fff",fontWeight:700}}>{drv?.name?.charAt(0)}</div>
+<h3 style={{margin:0,fontSize:16,fontWeight:700}}>{"Notify "+drv?.name}</h3>
+</div>
+<button onClick={()=>setNotifyDriver(null)} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:"#78716c"}}>{"\u2715"}</button>
+</div>
+<div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:16}}>
+<button onClick={()=>sendNotification(notifyDriver,"🔄 RETURN TO YARD\nHead back to base when current stop is complete.","return")} style={{display:"flex",alignItems:"center",gap:10,width:"100%",textAlign:"left",padding:"12px 14px",borderRadius:10,border:"2px solid #dc2626",background:"#fef2f2",cursor:"pointer"}}>
+<span style={{fontSize:20}}>{"🔄"}</span><div><div style={{fontSize:13,fontWeight:700,color:"#dc2626"}}>Return to Yard</div></div></button>
+<button onClick={()=>sendNotification(notifyDriver,"📞 CALL DISPATCH\nCall dispatch ASAP.","call")} style={{display:"flex",alignItems:"center",gap:10,width:"100%",textAlign:"left",padding:"12px 14px",borderRadius:10,border:"1px solid #e7e5e4",background:"#fafaf9",cursor:"pointer"}}>
+<span style={{fontSize:20}}>{"📞"}</span><div><div style={{fontSize:13,fontWeight:700}}>Call Dispatch</div></div></button>
+<button onClick={()=>sendNotification(notifyDriver,"⚠️ MANIFEST UPDATED\nYour route has been changed. Check your manifest.\nCurrent stops: "+de.length,"update")} style={{display:"flex",alignItems:"center",gap:10,width:"100%",textAlign:"left",padding:"12px 14px",borderRadius:10,border:"1px solid #e7e5e4",background:"#fafaf9",cursor:"pointer"}}>
+<span style={{fontSize:20}}>{"⚠️"}</span><div><div style={{fontSize:13,fontWeight:700}}>Manifest Updated</div></div></button>
+</div>
+<div style={{display:"flex",gap:6}}>
+<textarea value={notifyCustomMsg} onChange={e=>setNotifyCustomMsg(e.target.value)} placeholder="Custom message..." rows={2} style={{flex:1,border:"1px solid #d6d3d1",borderRadius:10,padding:"10px 14px",fontSize:13,outline:"none",resize:"vertical",fontFamily:"inherit"}}/>
+<button onClick={()=>{if(notifyCustomMsg.trim())sendNotification(notifyDriver,notifyCustomMsg.trim(),"custom");}} disabled={!notifyCustomMsg.trim()} style={{alignSelf:"flex-end",background:notifyCustomMsg.trim()?BRAND.main:"#e7e5e4",color:notifyCustomMsg.trim()?"#fff":"#a8a29e",border:"none",borderRadius:10,padding:"10px 16px",cursor:notifyCustomMsg.trim()?"pointer":"default",fontSize:13,fontWeight:600}}>Send</button>
+</div>
+</div>
+</div>);
+})()}
+
+<style>{`@keyframes slideDown{from{transform:translate(-50%,-20px);opacity:0}to{transform:translate(-50%,0);opacity:1}}@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}button:active{transform:scale(0.98)}*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:#f5f5f4}::-webkit-scrollbar-thumb{background:#d6d3d1;border-radius:3px}::-webkit-scrollbar-thumb:hover{background:#a8a29e}`}</style>
 </div>
 );
 }
 /* ═══════════════ END DESKTOP ═══════════════ */
 
 return(
-<div style={{fontFamily:"'DM Sans',system-ui,sans-serif",background:"#f5f5f4",color:"#1c1917",minHeight:"100vh",maxWidth:480,margin:"0 auto"}}>
+<div style={{fontFamily:"'DM Sans',system-ui,sans-serif",background:"#f5f5f4",color:"#1c1917",minHeight:"100vh",maxWidth:isDesktop?900:480,margin:"0 auto"}}>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet"/>
-{toast&&<div style={{position:"fixed",top:20,left:"50%",transform:"translateX(-50%)",background:"#16a34a",color:"#fff",padding:"10px 24px",borderRadius:12,fontWeight:600,fontSize:14,zIndex:999,boxShadow:"0 8px 32px rgba(22,163,74,0.3)",animation:"slideDown 0.3s ease"}}>✓ {toast}</div>}
+{toast&&<div style={{position:"fixed",top:20,left:"50%",transform:"translateX(-50%)",background:"#16a34a",color:"#fff",padding:"10px 24px",borderRadius:12,fontWeight:600,fontSize:14,zIndex:999,boxShadow:"0 8px 32px rgba(22,163,74,0.3)",animation:"slideDown 0.3s ease"}}>{"✓ "+toast}</div>}
+
+{/* Desktop: back to dashboard bar */}
+{isDesktop&&<div style={{background:"#fff",borderBottom:"1px solid #e7e5e4",padding:"8px 20px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+<button onClick={()=>setView("manifest")} style={{background:BRAND.main,border:"none",color:"#fff",borderRadius:8,padding:"7px 16px",cursor:"pointer",fontSize:12,fontWeight:600}}>{"← Dashboard"}</button>
+<div style={{display:"flex",gap:6}}>
+{[{k:"daily",l:"Daily"},{k:"weekly",l:"Weekly"},{k:"history",l:"History"},{k:"add",l:"+ Add"}].map(v=><button key={v.k} onClick={()=>{setView(v.k);setSelCust(null);setQuoteMode(null);}} style={{background:view===v.k?BRAND.main:"#f5f5f4",border:view===v.k?"none":"1px solid #e7e5e4",color:view===v.k?"#fff":"#57534e",borderRadius:8,padding:"7px 14px",cursor:"pointer",fontSize:12,fontWeight:600}}>{v.l}</button>)}
+</div>
+</div>}
 
 {/* HEADER */}
 <div style={{background:BRAND.dark,color:"#fff",padding:"16px 20px 12px"}}>
