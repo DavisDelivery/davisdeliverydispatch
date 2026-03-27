@@ -447,17 +447,21 @@ document.head.appendChild(s);
 }
 
 /* ── INTERACTIVE GOOGLE MAP COMPONENT ── */
-function GoogleMapView({stops,drivers,height,onStopClick,activeDriver,showSearch,searchLabel}){
+function GoogleMapView({stops,drivers,height,onStopClick,activeDriver,showSearch,searchLabel,onAssignStop}){
 const containerRef=useRef(null);
 const mapInstanceRef=useRef(null);
-const markersRef=useRef([]);
+const markersRef=useRef([]);       /* [{marker, infoWindow, labelOverlay, stopId}] */
 const polylinesRef=useRef([]);
+const labelsRef=useRef([]);
 const searchInputRef=useRef(null);
-const searchBoxRef=useRef(null);
-const [selectedStop,setSelectedStop]=useState(null);
+const openInfoRef=useRef(null);    /* currently open InfoWindow */
 const [mapReady,setMapReady]=useState(false);
+const stopsJsonRef=useRef("");     /* track last rendered stops to avoid needless redraws */
+const driversJsonRef=useRef("");
+const activeDriverRef=useRef(activeDriver);
+useEffect(()=>{activeDriverRef.current=activeDriver;},[activeDriver]);
 
-/* Initialize map */
+/* Initialize map ONCE */
 useEffect(()=>{
 loadGoogleMaps();
 const tryInit=()=>{
@@ -471,6 +475,7 @@ mapTypeControl:false,
 streetViewControl:false,
 fullscreenControl:true,
 zoomControl:true,
+gestureHandling:"greedy",
 styles:[
 {featureType:"poi",stylers:[{visibility:"off"}]},
 {featureType:"transit",stylers:[{visibility:"off"}]},
@@ -484,12 +489,15 @@ styles:[
 ]
 });
 mapInstanceRef.current=map;
-setMapReady(true);
+
+/* Close open info window when clicking map background */
+map.addListener("click",()=>{
+if(openInfoRef.current){openInfoRef.current.close();openInfoRef.current=null;}
+});
 
 /* Search box */
 if(showSearch&&searchInputRef.current){
 const sb=new window.google.maps.places.SearchBox(searchInputRef.current);
-searchBoxRef.current=sb;
 map.addListener("bounds_changed",()=>{sb.setBounds(map.getBounds());});
 sb.addListener("places_changed",()=>{
 const places=sb.getPlaces();
@@ -499,38 +507,76 @@ if(!place.geometry||!place.geometry.location)return;
 map.panTo(place.geometry.location);
 map.setZoom(14);
 new window.google.maps.Marker({
-position:place.geometry.location,
-map,
+position:place.geometry.location,map,
 icon:{path:window.google.maps.SymbolPath.CIRCLE,scale:8,fillColor:"#dc2626",fillOpacity:1,strokeColor:"#fff",strokeWeight:2},
 title:place.name||place.formatted_address,
 });
 });
 }
+setMapReady(true);
 };
 tryInit();
 return()=>{
-markersRef.current.forEach(m=>m.setMap(null));
+markersRef.current.forEach(({marker,infoWindow,labelDiv})=>{marker.setMap(null);if(labelDiv&&labelDiv.parentNode)labelDiv.parentNode.removeChild(labelDiv);});
 polylinesRef.current.forEach(p=>p.setMap(null));
 };
-},[]);
+},[]);/* eslint-disable-line react-hooks/exhaustive-deps */
 
-/* Update markers & routes when stops change */
+/* Helper — build a DOM-based label overlay above a marker for dueBy */
+const makeDueLabel=(map,pos,text,isAfter)=>{
+if(!window.google?.maps?.OverlayView)return null;
+class DueLabel extends window.google.maps.OverlayView{
+constructor(){super();this.pos=pos;this.text=text;this.isAfter=isAfter;this.div=null;}
+onAdd(){
+const d=document.createElement("div");
+d.style.cssText=`position:absolute;white-space:nowrap;font-family:'DM Sans',system-ui,sans-serif;
+font-size:10px;font-weight:700;color:#fff;padding:2px 6px;border-radius:4px;pointer-events:none;
+background:${isAfter?"#2563eb":"#dc2626"};box-shadow:0 1px 4px rgba(0,0,0,0.3);`;
+d.textContent=(isAfter?"After ":"")+text.replace(/^(After|By)\s*/i,"");
+this.div=d;
+this.getPanes().floatPane.appendChild(d);
+}
+draw(){
+if(!this.div)return;
+const proj=this.getProjection();
+const pt=proj.fromLatLngToDivPixel(new window.google.maps.LatLng(this.pos.lat,this.pos.lng));
+if(!pt)return;
+const w=this.div.offsetWidth||60;
+this.div.style.left=(pt.x-w/2)+"px";
+this.div.style.top=(pt.y-32)+"px";
+}
+onRemove(){if(this.div&&this.div.parentNode){this.div.parentNode.removeChild(this.div);this.div=null;}}
+}
+const overlay=new DueLabel();
+overlay.setMap(map);
+return overlay;
+};
+
+/* Update markers & routes — only when stops/drivers actually change */
 useEffect(()=>{
 if(!mapReady||!mapInstanceRef.current||!window.google?.maps)return;
-const map=mapInstanceRef.current;
+const stopsKey=JSON.stringify((stops||[]).map(s=>({id:s.id,driverId:s.driverId,status:s.status,dueBy:s.dueBy,coords:s.coords})));
+const driversKey=JSON.stringify((drivers||[]).map(d=>d.id));
+if(stopsKey===stopsJsonRef.current&&driversKey===driversJsonRef.current)return;
+stopsJsonRef.current=stopsKey;
+driversJsonRef.current=driversKey;
 
-/* Clear old markers & lines */
-markersRef.current.forEach(m=>m.setMap(null));
+const map=mapInstanceRef.current;
+/* Clear */
+markersRef.current.forEach(({marker,labelOverlay})=>{
+marker.setMap(null);
+if(labelOverlay)labelOverlay.setMap(null);
+});
 polylinesRef.current.forEach(p=>p.setMap(null));
 markersRef.current=[];
 polylinesRef.current=[];
+if(openInfoRef.current){openInfoRef.current.close();openInfoRef.current=null;}
 
 if(!stops||stops.length===0)return;
 
 const bounds=new window.google.maps.LatLngBounds();
-
-/* Group by driver for route lines */
 const drvStops={};
+
 stops.forEach(s=>{
 if(!s.coords)return;
 const pos={lat:s.coords.lat,lng:s.coords.lng};
@@ -542,105 +588,107 @@ const done=s.status==="departed";
 const onSite=s.status==="arrived";
 const isPU=s.stopType==="pickup";
 const isP=s.priority;
-const isSelected=activeDriver&&s.driverId===activeDriver;
+const hasActive=!!activeDriverRef.current;
+const isAssigned=s.driverId>0;
+const isActiveDriverStop=activeDriverRef.current&&s.driverId===activeDriverRef.current;
 
-/* Marker icon */
-const scale=done?6:onSite?10:isSelected?10:8;
+const scale=done?5:onSite?11:isActiveDriverStop?11:8;
 const fillColor=done?"#a8a29e":col;
-const strokeColor=onSite?"#f59e0b":isSelected?"#1c1917":"#fff";
-const strokeWeight=onSite?3:isSelected?3:2;
+const strokeColor=onSite?"#f59e0b":isActiveDriverStop?"#1c1917":isP?"#f59e0b":"#fff";
+const strokeWeight=onSite?3:isActiveDriverStop?3:2;
+const fillOpacity=done?0.4:hasActive&&!isActiveDriverStop&&isAssigned?0.5:1;
 
 const marker=new window.google.maps.Marker({
-position:pos,
-map,
+position:pos,map,
 icon:{
-path:isPU?'M -6,-6 L 0,-10 L 6,-6 L 6,6 L -6,6 Z':window.google.maps.SymbolPath.CIRCLE,
-scale,
-fillColor,
-fillOpacity:done?0.5:1,
-strokeColor,
-strokeWeight,
+path:isPU?'M -5,-5 L 0,-9 L 5,-5 L 5,5 L -5,5 Z':window.google.maps.SymbolPath.CIRCLE,
+scale,fillColor,fillOpacity,strokeColor,strokeWeight,
 },
-zIndex:done?1:onSite?10:isSelected?8:5,
+zIndex:done?1:onSite?10:isActiveDriverStop?9:isP?8:5,
 title:s.stop,
+cursor:onAssignStop?"pointer":"default",
 });
 
-/* Info window */
+/* dueBy label above marker */
+let labelOverlay=null;
+if(s.dueBy){
+const isAfter=s.dueBy.startsWith("After");
+labelOverlay=makeDueLabel(map,pos,s.dueBy,isAfter);
+}
+
+/* Build rich info window */
 const addr=s.addr||getAddr(s.stop);
+const drvName=drivers.find(d=>d.id===s.driverId)?.name?.split(" ")[0]||"";
 const badges=[];
 if(isPU)badges.push('<span style="background:#2563eb;color:#fff;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:700">PICKUP</span>');
 if(isP)badges.push('<span style="background:#f59e0b;color:#fff;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:700">PRIORITY</span>');
 if(done)badges.push('<span style="background:#16a34a;color:#fff;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:700">DONE</span>');
 if(onSite&&!done)badges.push('<span style="background:#f59e0b;color:#fff;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:700">ON SITE</span>');
-if(s.dueBy)badges.push(`<span style="background:${s.dueBy.startsWith("After")?"#2563eb":"#dc2626"};color:#fff;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:700">⏰ ${s.dueBy}</span>`);
-const drvName=drivers.find(d=>d.id===s.driverId)?.name?.split(" ")[0]||"";
-const infoContent=`<div style="font-family:DM Sans,system-ui,sans-serif;max-width:220px;padding:2px">
-<div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:4px">${badges.join(" ")}</div>
-<div style="font-size:14px;font-weight:700;color:#1c1917;margin-bottom:2px">${s.stop}</div>
-<div style="font-size:11px;color:${col};font-weight:600;margin-bottom:2px">${s.customer}</div>
+if(s.dueBy){const bg=s.dueBy.startsWith("After")?"#2563eb":"#dc2626";badges.push(`<span style="background:${bg};color:#fff;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:700">⏰ ${s.dueBy}</span>`);}
+if(s.shipPlan)badges.push(`<span style="background:#ea580c;color:#fff;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:700">SP# ${s.shipPlan}</span>`);
+
+const infoContent=`<div style="font-family:DM Sans,system-ui,sans-serif;max-width:240px;padding:2px">
+${badges.length?`<div style="display:flex;gap:3px;flex-wrap:wrap;margin-bottom:6px">${badges.join("")}</div>`:""}
+<div style="font-size:14px;font-weight:700;color:#1c1917;margin-bottom:1px">${s.stop}</div>
+<div style="font-size:11px;color:${col};font-weight:600;margin-bottom:4px">${s.customer}</div>
 ${drvName?`<div style="font-size:10px;color:#78716c;margin-bottom:2px">🚚 ${drvName}</div>`:""}
 ${addr?`<div style="font-size:10px;color:#78716c;margin-bottom:4px">${addr}</div>`:""}
-${s.instructions?`<div style="font-size:10px;color:#2563eb;background:#eff6ff;padding:4px 6px;border-radius:4px;margin-bottom:3px">📋 ${s.instructions}</div>`:""}
-${s.weight?`<div style="font-size:10px;color:#1e5b92;font-weight:700">${s.weight.toLocaleString()} lbs</div>`:""}
-${s.eta?`<div style="font-size:10px;color:#2563eb">ETA: ${s.eta} min${s.etaDest?" → "+s.etaDest:""}</div>`:""}
-${s.shipPlan?`<div style="font-size:10px;color:#ea580c;font-weight:700">SP# ${s.shipPlan}</div>`:""}
+${s.instructions?`<div style="font-size:10px;color:#1d4ed8;background:#eff6ff;padding:5px 8px;border-radius:5px;margin-bottom:4px;line-height:1.4">📋 ${s.instructions}</div>`:""}
+${s.weight?`<div style="font-size:10px;color:#1e5b92;font-weight:700;margin-bottom:2px">${s.weight.toLocaleString()} lbs</div>`:""}
+${s.eta?`<div style="font-size:10px;color:#2563eb;margin-bottom:2px">ETA: ${s.eta} min${s.etaDest?" → "+s.etaDest:""}</div>`:""}
 ${addr?`<a href="https://maps.google.com/maps/dir/?api=1&destination=${encodeURIComponent(addr)}" target="_blank" style="display:inline-block;margin-top:6px;background:#1e5b92;color:#fff;padding:5px 12px;border-radius:6px;font-size:11px;font-weight:600;text-decoration:none">🧭 Directions</a>`:""}
 </div>`;
 
-const infoWindow=new window.google.maps.InfoWindow({content:infoContent});
+const infoWindow=new window.google.maps.InfoWindow({content:infoContent,maxWidth:260});
+
 marker.addListener("click",()=>{
-setSelectedStop(s.id);
+const curActive=activeDriverRef.current;
+if(curActive&&onAssignStop){
+/* Assign mode — click assigns stop to active driver, no info window */
+onAssignStop(s.id,curActive);
+return;
+}
+/* Info mode — show info window */
+if(openInfoRef.current){openInfoRef.current.close();}
 infoWindow.open(map,marker);
+openInfoRef.current=infoWindow;
 if(onStopClick)onStopClick(s.id);
 });
 
-/* Pulse animation for on-site */
+/* On-site pulse ring — static, no animation to avoid flashing */
 if(onSite&&!done){
 const pulse=new window.google.maps.Marker({
 position:pos,map,
-icon:{path:window.google.maps.SymbolPath.CIRCLE,scale:18,fillColor:"#f59e0b",fillOpacity:0.15,strokeColor:"#f59e0b",strokeWeight:1,strokeOpacity:0.3},
+icon:{path:window.google.maps.SymbolPath.CIRCLE,scale:20,fillColor:"#f59e0b",fillOpacity:0.12,strokeColor:"#f59e0b",strokeWeight:1.5,strokeOpacity:0.4},
 zIndex:0,clickable:false,
 });
-markersRef.current.push(pulse);
+markersRef.current.push({marker:pulse,labelOverlay:null});
 }
 
-markersRef.current.push(marker);
+markersRef.current.push({marker,infoWindow,labelOverlay});
 
-/* Group for route lines */
 if(s.driverId&&s.driverId>0){
 if(!drvStops[s.driverId])drvStops[s.driverId]=[];
 drvStops[s.driverId].push(pos);
 }
 });
 
-/* Draw route polylines per driver */
+/* Polylines */
 Object.entries(drvStops).forEach(([did,positions])=>{
 if(positions.length<2)return;
 const di=drivers.findIndex(d=>d.id===Number(did));
 const col=DCOL[di]||"#78716c";
 const line=new window.google.maps.Polyline({
-path:positions,
-geodesic:true,
-strokeColor:col,
-strokeOpacity:0.7,
-strokeWeight:4,
-map,
-icons:[{icon:{path:'M 0,-1 L 2,0 L 0,1',scale:3,fillColor:col,fillOpacity:0.9,strokeWeight:0},offset:'50%',repeat:'80px'}],
+path:positions,geodesic:true,strokeColor:col,strokeOpacity:0.75,strokeWeight:4,map,
+icons:[{icon:{path:'M 0,-1 L 2,0 L 0,1',scale:3,fillColor:col,fillOpacity:1,strokeWeight:0},offset:'100%',repeat:'80px'}],
 });
 polylinesRef.current.push(line);
-/* Dashed overlay */
-const dash=new window.google.maps.Polyline({
-path:positions,geodesic:true,strokeColor:col,strokeOpacity:0,strokeWeight:0,map,
-icons:[{icon:{path:'M 0 0 L 1 0',scale:3,strokeColor:"#fff",strokeOpacity:0.5,strokeWeight:2},offset:'0',repeat:'16px'}],
-});
-polylinesRef.current.push(dash);
 });
 
-/* Fit map to bounds */
 if(stops.filter(s=>s.coords).length>0){
 map.fitBounds(bounds,{top:60,bottom:20,left:20,right:20});
 }
-},[stops,drivers,mapReady,activeDriver]);
+},[stops,drivers,mapReady]);/* activeDriver handled via ref — no flicker on driver select */
 
 return(
 <div style={{position:"relative",borderRadius:14,overflow:"hidden",border:"1px solid #d6d3d1",boxShadow:"0 2px 12px rgba(0,0,0,0.08)"}}>
@@ -651,10 +699,18 @@ style={{width:"100%",padding:"10px 14px 10px 36px",border:"none",borderRadius:10
 <span style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",fontSize:14,pointerEvents:"none",opacity:0.5}}>🔍</span>
 </div>
 )}
+{/* Assign-mode banner */}
+{activeDriver&&onAssignStop&&(()=>{
+const drv=drivers.find(d=>d.id===activeDriver);
+const di=drivers.findIndex(d=>d.id===activeDriver);
+return(<div style={{position:"absolute",bottom:12,left:12,right:12,zIndex:5,background:DCOL[di]||BRAND.main,color:"#fff",borderRadius:10,padding:"8px 14px",fontSize:12,fontWeight:700,display:"flex",justifyContent:"space-between",alignItems:"center",boxShadow:"0 2px 12px rgba(0,0,0,0.2)"}}>
+<span>🖱 Tap stops to add to {drv?.name?.split(" ")[0]}'s route</span>
+</div>);
+})()}
 <div ref={containerRef} style={{width:"100%",height:height||380,background:"#e8e4df"}}/>
 {!mapReady&&<div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",background:"#e8e4df"}}>
 <div style={{textAlign:"center"}}>
-<div style={{fontSize:28,marginBottom:8,animation:"pulse 1.5s infinite"}}>🗺️</div>
+<div style={{fontSize:28,marginBottom:8}}>🗺️</div>
 <div style={{fontSize:13,color:"#78716c",fontWeight:500}}>Loading map…</div>
 </div>
 </div>}
@@ -1195,7 +1251,8 @@ style={{display:"flex",alignItems:"center",gap:6,padding:"8px 14px",borderRadius
 
 {/* MAP */}
 <div style={{margin:"0 4px"}}>
-<GoogleMapView stops={stopsWithCoords} drivers={drivers} height={400} onStopClick={handleStopClick} activeDriver={activeDriver} showSearch={true} searchLabel="Search address…"/>
+<GoogleMapView stops={stopsWithCoords} drivers={drivers} height={400} onStopClick={handleStopClick} activeDriver={activeDriver} showSearch={true} searchLabel="Search address…"
+onAssignStop={activeDriver?(stopId,drvId)=>handleStopClick(stopId):null}/>
 </div>
 
 {/* Stats bar */}
@@ -1373,6 +1430,7 @@ const[multiSelect,setMultiSelect]=useState(false);const[multiChecked,setMultiChe
 const[driverViewId,setDriverViewId]=useState(null);
 const[customInstr,setCustomInstr]=useState(()=>lsGet(LS_CUSTOM_INSTR,{}));
 const[showAddCustomDel,setShowAddCustomDel]=useState(false);
+const[mapActiveDrv,setMapActiveDrv]=useState(null); /* driver selected for click-to-assign on Live Routes map */
 const[customDelName,setCustomDelName]=useState("");
 const[customDelAddr,setCustomDelAddr]=useState("");
 const[customDelRate,setCustomDelRate]=useState("");
@@ -1736,6 +1794,8 @@ const response=await fetch("/.netlify/functions/chat",{
 method:"POST",
 headers:{"Content-Type":"application/json"},
 body:JSON.stringify({
+model:"claude-haiku-4-5-20251001",
+max_tokens:1024,
 system:buildSystemPrompt(),
 messages:newMessages.map(m=>({role:m.role,content:m.content})),
 }),
@@ -2289,7 +2349,22 @@ return(<div key={entry.id} style={{background:done?"#f0fdf4":onSite?"#fffbeb":ha
 const stopsWithCoords2=dl.map(e=>{const addr=e.addr||getAddr(e.stop);const coords=getCoords(addr);return coords?{...e,coords}:null;}).filter(Boolean);
 return(
 <div style={{margin:"0 20px"}}>
-<GoogleMapView stops={stopsWithCoords2} drivers={drivers} height={380} showSearch={true} searchLabel="Search address on map…"/>
+{/* Driver selector for click-to-assign */}
+<div style={{display:"flex",gap:5,marginBottom:8,flexWrap:"wrap",alignItems:"center"}}>
+<span style={{fontSize:10,color:"#78716c",fontWeight:600,marginRight:2}}>Assign to:</span>
+{drivers.map((d,di)=>(
+<button key={d.id} onClick={()=>setMapActiveDrv(mapActiveDrv===d.id?null:d.id)}
+style={{display:"flex",alignItems:"center",gap:5,padding:"4px 10px",borderRadius:8,border:`2px solid ${mapActiveDrv===d.id?DCOL[di]:"#e7e5e4"}`,background:mapActiveDrv===d.id?DCOL[di]:"#fff",cursor:"pointer",transition:"all 0.15s"}}>
+<div style={{width:10,height:10,borderRadius:3,background:mapActiveDrv===d.id?"#fff":DCOL[di]}}/>
+<span style={{fontSize:11,fontWeight:700,color:mapActiveDrv===d.id?"#fff":"#57534e"}}>{d.name.split(" ")[0]}</span>
+</button>
+))}
+{mapActiveDrv&&<button onClick={()=>setMapActiveDrv(null)} style={{fontSize:10,color:"#78716c",background:"none",border:"none",cursor:"pointer",padding:"4px 6px"}}>✕ Clear</button>}
+{!mapActiveDrv&&<span style={{fontSize:10,color:"#a8a29e",fontStyle:"italic"}}>or click any stop to see details</span>}
+</div>
+<GoogleMapView stops={stopsWithCoords2} drivers={drivers} height={380} showSearch={true} searchLabel="Search address on map…"
+activeDriver={mapActiveDrv}
+onAssignStop={mapActiveDrv?(stopId,drvId)=>{reassign(stopId,drvId);showToast("Stop assigned");}:null}/>
 </div>);
 })()}
 
