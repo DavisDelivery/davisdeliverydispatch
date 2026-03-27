@@ -24,8 +24,9 @@ return hash;
 }
 
 function useIsDesktop(){
-const[isD,setIsD]=useState(window.innerWidth>=768);
-useEffect(()=>{const h=()=>setIsD(window.innerWidth>=768);window.addEventListener("resize",h);return()=>window.removeEventListener("resize",h);},[]);
+const getWidth=()=>{try{return Math.max(window.innerWidth,window.screen?.width||0,window.top?.innerWidth||0);}catch(e){return Math.max(window.innerWidth,window.screen?.width||0);}};
+const[isD,setIsD]=useState(getWidth()>=768);
+useEffect(()=>{const h=()=>setIsD(getWidth()>=768);window.addEventListener("resize",h);return()=>window.removeEventListener("resize",h);},[]);
 return isD;
 }
 
