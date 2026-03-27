@@ -1,19 +1,32 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-import {
-  saveManifestDay, subscribeManifests, getDayKey, getWeekKey,
-  saveDrivers, subscribeDrivers,
-  sendNotificationToDriver, subscribeNotifications, markNotificationRead,
-  saveEmserHours, subscribeEmserHours,
-  requestPushPermission, onPushMessage, saveDriverToken
-} from "./firebase.js";
+/* Firebase stubs for standalone preview */
+const noop=()=>{};const noopAsync=async()=>{};
+const saveManifestDay=noopAsync;const subscribeManifests=(wo,cb)=>{cb({});return noop;};
+const getDayKey=noop;const getWeekKey=noop;
+const saveDrivers=noopAsync;const subscribeDrivers=(cb)=>noop;
+const sendNotificationToDriver=noopAsync;const subscribeNotifications=(id,cb)=>{cb([]);return noop;};
+const markNotificationRead=noopAsync;
+const saveEmserHours=noopAsync;const subscribeEmserHours=(cb)=>{cb({});return noop;};
+const requestPushPermission=async()=>null;const onPushMessage=noop;const saveDriverToken=noopAsync;
 
 const DAYS = ["Monday","Tuesday","Wednesday","Thursday","Friday"];
+
+/* -- BRAND COLORS -- */
+const BRAND={main:"#1e5b92",dark:"#134b7f",light:"#357bb7",pale:"#e8f0f8",bg:"#f0f5fa"};
+const LOGO_URI="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAIIAAAAoCAYAAAAyhCJ1AAAxTElEQVR4nO28d5xUVRI/+q1z7r0dpieSEZAoCqIorGIcMIsYUHtWMaCL4q4LKsY19rQRxZxB17jL7k6vYRExoTAGdBVEUUZEchhg8nS+955z6v3RM4iK6+6+/X3e573Pq8+nP33nzr0nVNWpU/WtOk34fw0xEYgPmvH8VTmrZIADbVmW7QBgsNGu73sgJgiJ4qBjIqHAjuKgqdu3J312y9knbGYAiNZIJKIGIP5XPUWjNTKRqNITb391YosJn+pl08rAMMgW4aAjh5TTzDmXnfBttKZGJKqq9IIFCwIPfJyZ1epbQe37XjDgBMkOiVLKfPlm9ekPMZh21yczExHxVY+/1P3zbXRne0b5QgqyHMeWjk09RGbuyzefufDU2/4ytlWXTvZzrm9IUyBUZku/beWi28+cBWYC7WybAPBlD80f9VUbX9yeMeM8Tf09bWwhCI5ttYcss6qkyFq8T7fA3x+9+KhlpoO31v9WWP8nqZoAcFoFz884PfdjPwU2AkSF2QvJYCPATGjLCUgXEOyibpvXclj1G4sGlPMjf7p8fC0D+BHzfkKJxEpmrpGjrlW3t8jwMCgJCAGjDSwZgW7ekQRwWcPKboRojTzxxBO9W99/ZViz6Hk0kIZxCdoLopRz+dtrFsy9sYoaO4W+az9jqxdLAGrFDnPWZt1zioscLCb4eYkipTCoXDwJAI1pGtFglV+g/DQgAHglCOfalxIwi6tBYAaqq4mrq3Fc7NU739mEK3IcCiqtYFiDyAI0QEaWkbLG7PAxZktLdsbBN70+b3hFNv70lbTyv1cEZopVV1N811vV1UwEFESDf7nq/lsiy0oZldcwnmZAFnphaHReFT4+EYFJZEWgIpkLntGS98448uZ5f7xrRH76oUS5n1OGaE2NTFRV6bPum3d0WoSG6WyrT4JEwR4xu2lFbQ6fteCTT24aP2ZMctTU2TYR6bPvfWVWc0NqXM73tAAEOK9zweLg+3VtpwOY3Sn0XfuqjY/VliC05DA5q/Jaak9rDZAVlCWUWvSnP5zxaeFJkTN+XhvjKjJEEHnJTMmdg69KCJGI66P0fk9vUt2n5Nx2tkReSxgigmFQYcGQBoxPSjHaDQWSJhxN5vTEC+6ae7z4T2QQi8UKSw4gEHE8HjfY5VPQeOqUBSEalaiMWZWVMSsWi/0nfe1+AAAEjCDSUoCkAElASMNCapaWYmEpJkszWWBAEBuBPMNt16mcrzf7ZVMu/9x6a3ZNTSmqq6ljLj+gRKLQz+Zm9xLXWCACEZMUBpJAFthHTkS6PfZO/cRdhzb3Kn9REac2kLRtIkNSQPpMaHXFZElAbXyx2bWfaE2NBIjPfegfB2ZMaCT5OSGgHQOWQYtk9wjN2fmCVoSC0ksCJIyWjuSgAIBtcyQSVfrMu18Zv1WVTsllkr4tNUgYqSEE2RHLCkQs6UQsFiFLayFhGBa0NlopIl7bq7v11b9nEaI1EokqHY/HGfE4JIApM2tK23OZcstvdb/b2C79YCC4T/9+vh0pan/uitPSkkiZREIDQC2A2loAiAlwNf8rs/yL1LEVgAwYEmBCSCrfkUYZw6QBNoaDximWniawlzOWhJRk4OeSXmOwyxHPLWt8Qd4TP1WjWmAXyxWLxUQ8XqWvffaN/q+v9E/WXo6lEJIYYIAZIIsIngJ2pHCxIDy/rFe9rowtkkTjvHE3Jf6UFM4tft4zgmCx8jhJzsFT7n1lxJyrJn4Vi7GIx8kAQMPKbgQA63aY81wqEZKSCiwkS1uGdGrH5MPK33g9FhOIx40QABPAxAABDAYRJAHAt3sxAVjXYn6XVZItoQlEpNniiO3proG2uZbEamZRnvfNge2Mg3NUEs7lcqYsqOWwCn/aXVOqGv+lInQ4TQaJKs3M4pLbHx4glc0fbczP+XRdwxDP9bg1o/cMW8FMkaJv6tZt7Z7zTNv+k++hEZNnpqUUTQS5xQ5Y35RGgh+9NeuSz0HxDobHzb/q+2f1oMMp6BCOsgMBa0gkf/OEvXv8aYuXs1ixam1NluzIpg/YnrUuaBShY/Oey5bQJIkcnU/7TYGyU06OJ6pevYVqKmMxqzYeVwCwGGMFEDfLNvuTs1ZpkPy0MmCLCGAIkmQAZqm8LKds+9Df3P/KyKdnTPwiPbW3BICRPZ0Xt2/I/sGFsAmGBbT2RMT6prnpXADXLcZiAcAATLVxUkuXLg3/5i+bor5xIYgEG9K2FbBK7Mxfq8aNS+85+dngRiAvpYQ0gOrwOUkAmkkxANSOU2b1gsDwJ7L7s/GIAGEMKTsQsvqX+je9ddPpd3dqugQw47kFg5auS0/bIZwrytEyN3H9pIWVsZi1e0WIxQTq6iiRqNIWgDHTHj574OTHbwpBiZ7F/mv1btHR5VC57hHnrW6l8qF0NnNcz5Lgl5dMmnjrXU/PjZQErPKsJ7ooQm9f6/5KmWEtqfzpo6benxzWq2h6PH7Jpk7P/D9WBEEdykAAA0QCGddv+l3VoVt3eWwrgG8swtwJd8y78pu2wH05n4yAFgJKZH2HN7bL65g5QVTdoZBMtXHo9esXBU+fnb7A8z0IsNBMsKFNRVjnmnJ2WMCQAOu8iFjfNrVdCODyZb32YsRi4qFpp6751fWvLk5xyTHazxCMlkwekpZ1Jq9ecAvtNc4DQNEaiEQVzG1vbj46J4v3IOVpEElNRGGTNgO7W898COCg/kVmIwCtUVAAYjALAASt4XUK+LHVoXIh/HJoDRCRASAEISKtbYVnaiSikBrAvReMXwtgxnl3Pl0jLLl+CZjGotr8SBGYUFktEY8rAnDMdc8ctbmh/d7t7f4BGV+AJX2czKkK47m6IePaTUn7tFLbGzi01P1tOm+Omf2nv9zy8ZPX/AFAw48FKAAccPF9l3y1sfGdU657/KzE3VXL/xvLwIVRFpSBGWwMmMmOxWKiDsOtYVi5c3XXLl6MV2845f5Drnphny1++UUsWUNYkrXPKciRv334H/sA8bpYLCYWY7GojY9TVybmn5yhkv5QaQ02gkUQIeGv/1UfumvhBvG062qWYKncPFoVn/Xqq6/edNpp41LRWI2DaI1WpXgqn6HjsmlkhcWBlO9RPlg88MzXc0cBeCNaUyMTiQQI4O0ZvtBjyYIYBNIiEBQR2f7xn2ecvgKxmGhAtw7e6A4nWHTui9jVv5l4QHHyycXJFEhEmA0LYpn38vxNG8865Y7XAocPodeur5qw/ftVVyNfvKHq48L1hYjHwTsduGi04LygNq7GX/vUPvtOfey1La3Zlx1bfHn8PsVDAyb9bsgii1kEDZG0JYGMp1o9Z7+vWgLvBO3iF22jP5x09T0Xj5lxX2hM9L7Q4OkPBfacHAvuOTkWNNGYs+ypq2YHbZq6YXvybydcO6dPPB5n/IdOJFkSIAljCkoAGAgiisfjpgHdTDweN/F43NTGx6lo9+GMWEwMDbXco3es9ts3rxe5xnroXFprq1hsbMeYnUqDxUYC2NriTsv5mgkMzdCWJVEe8N965rJT/xihXD1ZDhEJQ1Bu1irp/shyPg+IiUS8ykskqvR+PUrnH9E7e/gBkW03om1zPtewwbQ3N/H6DU2TCEBiYatAokpfP/ulXklfHqt9jwAWmhm2JOoW5uc0A5UY+z1fpARoFzYxwzAXnJups+0+e4zOhslbKqTDABsCkTCK2l2re12yaM7zn+Gb0dfPe+e4+Pw/XPLEwoOYo98vvg7+W52rMpGo0ufc/mKvdVvbrtnWkjlKWtZbRw6ouOSx6ybVrwDQ+4w7bMOmTTPCbBiupwWEEJI85GEXbWxomv/dX27ed/2bT1UMPvHinPcz7uAnT91YO/Ki+2/Y3tD8R0F0vOnQ8X+XdCYJBIshLAvQGkRAPu/mC/9d/INnO7YeepZ53aBJs9anPezltjZqbmuCSrWgtQJDAWBrywqJR+JqxnPv77egLnW4cdMgQBgIjpCHvmXWX5dooCLINUkveIXKs7QdRwoL8JR/GCH++PhrHhzS09Ej+xSteXf+2+v9bW7Rre05hG0Cp9LttCPIE+545PkuN0yf3AIAS+ox0ZXFEeHlFBFLQ5YMqPaW8fvSK28AWFw9VneEnJDCBhkJgMEdMVmnzzwKo7AMwIAK6/5kq3dyuyfIElozsRRGcS6njEtWWUrbxzQacczmdTmMvmHBF+Pj85597MjmOQPGXZiPxWLCisfjZsyMGaEeVv9ztja0niKkqD1l772OjF8+PvkFAJzwUCB2cIv/dJ0gScgns64fkEGUlAXcooBoDllYT6y2uZ6tD/7to48d/WLS7Vt1V6i8OExKczLj+q1FDmUB01hUUtxYFg61HHPwngvnvv7Z+QdMvnXysvjNz3dGJb+kBAQgvW0DUiIJJxCA6TBo0t/u70YPdpIjSQ89775WygmQkGBoqFwSyWYvBAD+ihYiAP/8ZtNvs36FINaKyCIpAyJk2pf/9VqzZO9sTGwrCTzT2pC8QjlY071Yv9av1Pvn5rU79tj/wnvezKb8tlyperwUpe19e3V36je4xVKwgYCQzDrPwbIFXzScAuA5ZhYHXf+PydoAJIk0S20HQlYZZRLTTz+zGZUxi4hUZWxRp/oXpA9ZMAys4WfaGQCW9Rqlo9EaWXP9xMXH3lJz9SaU3JvyA4B2GQQtBYiMb1j57PlgD5BJKzCy1RQ9dOabZsrvH3k9Gp9+0mrrpoceP2BrkzmiPcdNkyfuW3XhuHH5jwCgMmZhcbVGVULdGr/c9DrzDg6FAiCICqUlQjaQc7Phbc25g0g4AQBQWYNiqTYEBDUmMzlSihkWwllPlHi+yxnXlDTJDNZtbTJpI8Ok4BDwPCcSv6QDO4lJQnku/FQbDAO2HQAsl4BCmLrbdxhQ2hCDADaFOFBIOI5kANhYC+++p2oqHnhz9dlJdzNbkqBYKumEAz2LMy8QfQYgYQB8FXsmcdi2zS3ln3zTdMR3eZ5lSc73rrBvqp19fY1hxlyALIEPB0Zv+zSjwwdBe5pg4CqD7Rl/CgHPnnbNY/s3NYdGeyLP0hbCsOSQzvGe/eiPHwKIdh/Ou3JE+y6MyYPdDLSbQT6bRSBbX8CT49VIIK4Ri4m341X3/Xrmy3VrW3B9m6eOcEXQAiwwC5CALuz9BsbPmUyyTSeN2a9ty/o3L7vjwUOsslBRRo4IPRmvqvJevneXkLE2rkBxIFoDALBsm1JZt5mMGdCaYTR7XmhId7tZFtubepbYl/ftWdr8wcrmT0b0jETnPzh9KQAYFEIWIQDDwJp164N3vbQk0tpmumxqTe2byqoZT86ebV9yySU/QNx+QRV2ClJwIYrQP29LCGC8/9HHoar7a/saDQjDxB1huWPJbYXH4ualJTN/ndNOidGe8WFZUmir2N9ef9KoHk8vezahr3loTp+Pvmo789l/fDM+Z8SxgYCN4rC5bdIhPZ56e+mOKWff8mDJYLSk52/bJpfNmeN3Lw39sUXhIFcxE9gyvsupPB0ya/bsrs9/2HxSW8oTyt2uhCBicmRRKPf5nx6+aemfr4mJndHU4sUAgPZtG9GebYLv5QDlA04IQSF/ONN43GDqbPtvfzj9DYvwxsTrHhr13Q7vpIwnjnMN7a+tkojLAsbNsvE9YbycMEb5vhMeUPuNusW6eurk1cD3iZafhnQJMABLAmWRADU2JlkKCVsyBHvZbkXWqkWPX/M+AAw5664taxvT40w0tqJXDta2EJRet431slaDKDBgwIA8gDyAJgDfjrpo5uQXv8weCOCf/24EYbgA7XDHymZjoGn3mjAsGrPrEuRV//nBoz3j9IJyNRNLYwAJRWVB+3OgkPwZcObt03wqFsVOHpGgeq9XqfVY7eyL3zj3xn/sM+Kcu3774sL609Ic6mbbYXQPZt/89aHBizfsMF2fWty4OE9FA7E1v/zPT8fnjZo6GwAwfkS3l9a/t+nuPOwyYs0SMDntyPlfZK7NuuIorRlSCKGNYScAlBcF5hARozImUYsf8EH7Pow2YGaQEIUIQv+EVYQ5l/gAoDhmJWZevgzAMotw6+9ueajPii2Nh9Sn1aTmvDhNeWCymIQlLa19bs+YqOCOMOTnY/poRy8AweRcz2PNgGKG6ymjmCUAQmXMIiG+cTWPQSLubZsfzyIR97Bsjg8kNDpQxh+Q5s99T42trIxZ27b1lj/5/+7IdIyGAYYBiCDAEpUxC4CFyljhg5ioS8S9pUtnh9c2Zu7M+pqJuBBzCkEB8prGH1T+KQCcePn9pzmONahnMPPk0fsUDdmcuOnovj2KNw+dNPev737dvmxtGy5u08FuEZHdtk9p7oL1f4+d+PoX2fFvr8otb82agZl0Vte3ZC4RAC+bs9CgstK6cfrk5uKg9ZKwbDCgQZDa97Cmwb2qPccHsnJh2JABSYezrSeOKC/sBourd8OnjrDZGBjDBfPK3ytCNBqVAPj4395xxGFT7phEKABke1bGgurImPVI/PIttX+8PrG+5uaJe5SIu+2AQ2DSzCA2TFnfdLN+nBH7KXXsVgzje17OlrIYWgEMaANmQ0FmtiwiPzzlvsUtSXNj9LrHj2rOadnanpKel7MFc6C0rNTqUlbGzS0tTZFgwJXAjlZjr3Hz7mm1tXHVCUFHo8Pp55SyM4nBHYlkogK44pBIojausEtSxxZA1bUP/urs+1sebHSdEdCuAUiASdmOZVVETM2VF17YFo3WSLI3Np9yQHH/B66dtn3w5bOO7PvrO2cvrMsclcsDnqe5KMjUK4KXjxwYufLxO67ZeNiFt01Zk3JmpzIZbcPAQIqkJ46OXn3PoL/de+3aUUNn28tqa2nIHkXPtq7NTUkbIQQxhADasiw6WW4YWlq2VRHkefGrLm5BtEYWMkO7nz2zAXXAB9QZbEWHUyJRh01LloSOfHDRM2k/MHjk+XcffMqI4jvi11y6C54TlYoTulvYqq3P4DqAmDrSdIKAfzv7SGzYcYLCsv0wfAaTBEPnNrR4Rw44655vB55914amdrcs7Yruy+vdd8sjNkoj4Q22jHzrK3+15+stvlKl0hJFec8tsSwZ0HnV1VPU79jLH7syIK0F8++/ZFWH30j4uewlf3+bwEL5LlBcNHX0Bfcd6DMo7Njh9kw64vpmxLvfZA7OGgfQnpEEwcxGGSEiyCWPGNpl5teVMSuRiGqA3j/npseH7nXOzKeWbtQTsopgVN4HSbskRHpAsX/1srm3PvQ1A4hGZdcukWWrmzIegSwjSBCT8kTY+Xa7ey6AeOTbegaAebOmfzIkesfXGeHsC+MbAEISdtp9ZoigpTF4z8iclSjY3t27zRKEAqJaEB59v3c0rCRCQo1/dN+HW92iwb7v+eu0c9kfP2qt2v+cu/7Us2vw9aHdI9+ESxxVt+7w/b7anLvf84gJEB3pEwQdbP+3FUEIgaBtC18zExGM0ggEAiXaVYHmnBwghDWggPK5nPOkLvbQigA1FIfE9lAg3C5IbEll8i8tePyatZ1tLlq0yHryw+29Gnc0ntqcd6sP++2D0gkGErUP/q7m55yF70EHBgOCjcHWlDxe5HB84b4CcxBGe4DxIZA3JIxgQ1obQZEgiT1L+YInbv79ZgBYv6h/8NQ/zrz53a/brskoy2Y/bwjGl3YgUOb4G/brLc9//dFbPgCiMhYbxvE4+DXM+GLPM2/9IGeco0n7GmDh+wotGXPB+kXP3j1g3IXuqKlTLSLyf3XhrOdafete1/WNAITpVGSGJmnJiKW+fPXuyz6mey6jROKH1qAzCjLG71gAu9a3dHzXxtWoC26/dF2LfZH2cp4lyNF+XrdB9kxr++ptae/qFRu2pwjS1yQqsh6BWAHEZAwpYdlWSYhq/n1FgGHfd5PGmA6rZEAkIkQAsW9IcyEpRiSS6ZxsT1I3IaibI7F/JCDbu5YGsiUhmRlz8X1cbNI3vPvH2GvHjBunDLCZgUcdgUfPvnXOyO+2pKcdeP5t466dMHRa1cqVjF0cSALAbAp7AwPcwVQ2ShtPmZ1aQkyCCYUFxKw1mKUjI45vBpX6Fy95IfYKAESvfuSQox/b+kRT3tpf+QpS+JqEYGGFA92C2X+ePMQ644E7b9yKypiF2riKx4HKyphVWwvTp0v42fbtONpTPkiwIOPrlLL7n/3C9hMBvAKMAgCMPbD8L1ve3RF3wWGw4QKLCAywLQXKi+TTRMQd7f4geqrsUAYhRMe8C5sjs0Gnr8gAHcpEFnw/T5bD2teyUAlgtK9MhkgQrOLCw4oJzCAmNqSMDNhd7fzWwweVz/y34V0hhGlqa2s1molNQQB5T8FoQ8xCMCABFmACRJCsYBhkBZA3MtCcM91Xb3f7f7nVHbwjpfbq1q08t895d73df9K9nw06++5Ph547a9ngc2ct+eDrtquhvDqSVvdH39u0H+Jxs2sdAwNQGtBMMCBwgaFgsDTEtgFsBmzDsDTIUuRIlkErELBk97C3ZPQeZuySF255GgD2P6v697XfJWu3Z6z9lZdXQoANSyIRsLpaqflPRYcd88CdN22t7FCCzjHU1hacuat+NXhemNwGDUsaw8yskVfgHUl1kSBg2ZyFBtEaee/0i+ojtnkTMkgGQnOhUoQVpBXgXNuEEQPnAkDt7pzETpIShgvbgWHAmO9LKShaIz5+/sbHDu5tHdk7oj8KBG2ppC0VhDCGC2VVBSjJB7HWzPA1E9sBu3tY1x86uOy0x+PTdrs1EJgRq66murrhtDz1gbWmMkZETAFboEUZJgvQykAIq0gIlqwK3rsxRtuCdLcwNkLn1ylJpb4wB7oUcnzfg6c4kIdpDJeWFDet08fmtIBkAcMGYA2I0CHZ5vaT9utT8o+WfL5kd3kIm3xhk4YQWhAVtjnq8CiYAIsAKQCSnHSE2lgUkJ/16Raoee/Ra95arxmXXhqLfNqcvXNLRkx3fR8huIAUFkMDUlKXcPa91Ze+P5HG3aai0ahMJOI/wjiIEa2Rp110Wmq/c27/c15hhvZ9BpE0nIPycfzZV94x7M/33Vg3qvwYexlgencJPZfyvTPyWlmCRCHgsQNUFvBfufWqql9wEgGbFTmkIOALAoiFgq1VgTeJlYxoVL725B8+cSxx+JFT7zl7U4ualMqpI1wtS5VhYSBAJCCI4FgKjvBbK4rcl07YJ3Tr/TdP34xoVFrMTNXV1QQAHXE8gwjx7501DQBy4D254lDY3t6SkVTwWQ1ToBjCZ4Jmo4mD4bAcUKLTrFUKlr1qZL/SVyYduce31zz35RlbUqhOa7srA0UNO1o89r12wVaEoFgwiNmw0mlywnYmEg52rSgJhJbGrzOLC2GhAeLGABhSoSe1+9kwPA9wOhjVceEDKI846NW1lId2rWiKX33uDk8ZrOxU8FiMAsmkFoy5/Ur0k7bUZIwmAFBKs2WB7pwydg2Nq1YduMbuhZOoMgDo8MFlt6zc3P5MNusxG0mBoGYtHNGWTW0DgGVzLlEA+PdH9Xvjifkr9k05kuDkQEqyFQ5RH8vZvAqgjvZ+QrW1hf6HDwgmwg16icoaZpMjOIQQvEwBDYsbJADEYsKLx83Cx6/+iwT+ct39L/b6dHXTfq25/F6pVLYcUqAkHEoWB2n1MaP3WnbTxZN21KHwHuJx/YOET7SmRnorM8XaQ89kOtlLGXuQp/SgnKf6ZVx9+q8Gl9+5ZGXD5a2u6ELQsCwLAIGNgRASe5byW32K9XsNKd13c5uepmCjNID5vbtF/hEhz1vZyLGcawYcv1/ZeYtXJR9Ne1QmoNgYJrBhBaKKIBr36Vfx0XdN3oiBJWLKwkd+X9sx2P+qkAWjptqjRgHL5szx/+13OvqLxWJi15rMjjEQYjHa5e+faeI/SLH/2PJ1vtd5/1+1E4sJxKsZII5Go7Jh2DCqjRcWzr/sc9RUuzLSi2vHolBmuHDJwj0++Wx13/oshjWmVMQ1sl8y6zu2DJQls/mMEwjIjKcaSoN28+FDIh/Ord34dNK3+tvCsK/hsVY5YVmyZ0R8F9ENi+vq3UtKHFo9ZGCfL/65mS+rCJsvKooCX1vQPTxY+25NUe8xfXHB8q2qOqvtPqS9DpSQ2UBQqcMNIwZ3Xfrllvzx/cKZjw7Z257wwFVX5n+mBJ0qK2OyczL/FtN/wsSO9wqgDHYLfP3rRgRi2Cmsny24icUE4nUE/KD9nw+Tf0oFBdxVSf7FnHemCna2H5WVlcOow8r8pE/rpffWH9iWlT0s075h3ZbsOJbBHo3NbW5JUSiUTmccKZ1yX6lB20hWbN+QP/nE0YNu3+EG94SbQyqVzjYnM5mKEqdHULol7yxPx8iJ0LYs94rUN1V0i1Sktef7q5678XwfwLGX3Xt4Y8Z/29WO7VgsMiJogUTBP+gou857rZblt7dNP6rXsGWr1KS6TRgJ0MeIxQRXV/MBVVfv0+wGwv17lpr3Z1/7JREp1AKH/uY3xa3Z3oNbUsa2BETPoK5flrh702HnXdfPzedDSxMPfdvJ+FETruxqRQK9P43HV+x/+mVDSouLZO3zd60iAIdMunpkWBa1vPun+KYjz4+NXNOYDvhGUs+QTq945b6vT/nNNcX1WTF4W5acEf175hY+duUKFTc4KDp9mGMX5RNzq9adMz1WsnZ7bu/jh4U+j3eUwSEeN4KAQ39zz2Etaa93/z6BT1+/9+pNAGjMWdftvTWjI6yMDDnkrpl3//LJsWeDK79dtc/6xpy115691JI//mEFEekjzr1qgB0OlL8Xj38OAKMmTNsbFvmfv/rI2oPOumw/k9dbP3v1seZEokrz1zXO/revPMo1hlf97daFRKRm3FcT+nDZF0Ob2nOOdEKiW4nd9vHz8VXWa59t/odrJA0p16/tSPHJLfk8IlJgc5uC4RDY1QBbgJToWRx+et7Hm+7LGqev1l7BYxcBlCRTLZGgt8wOODy6f/iiuk3NF21JBg4pobyf8uRBfc68/QsAHzamnC0BC7y+yR0zpEvoxnYjjvdcZjevBLNixyGU2JFVGxq8A+sa6m+XRh05ol/FOwVGVjOqF8sdGetN4Vhd6puy/oCJNzWcNO2u6OuPXv9lU2PpYe2w3gg62CSFtIJB/SSA2za3csyWoQMEcKAZPN3BmkfclBO6SOX4RgsoznEo2tjCNzFz8cmX373HV5vSy3tGzHHGxLb0nZD7iEXQsyVlWfJXBJzQ4DmHbUnTG0EL277e3FIx8NTrXv7u5bsm5UXRCZvb+C7+4q2Kgbcs/pslZNfq6uFj4oiJysUQtbVxNXLSLZdvacveadjUr1mfsa6/69HRs266rLnX+Gtfzyu7W1BS0rGwTQCjWxp3DNqSsj8vLg0l61tz9uCJN3zGixYdPfrJhaMbt6Pm3NjjPW45uH/7MU98sKJE8tUSeHh7OviR7+f+AOCx6HUP9htYvfJN5Zu9jTE89Izr6xYsWDD67/+sH9SQlcs9Y+2wjdR517wtgAtFlh3yDemikGMP6SanFouMOm7/7scVW7mlrH0tdN6HdrWlsqasyLGSedM3k3OR1wSPBXKKYUmqd/PesDIH77z7zO3PDOgdmclGc9hGcnif8MrisAyUROzxBt7vbcl15WF5BPxUZZnaUd8r7G0fUEFb+5Sgvl+JaCovCezFlhxQFLQOD4VDkbyfDXWaL8c+WkGIcGlIXvebyuFDlKZM3caWJwhAY1oLm7Q/fsyA8w8Z1v20A/fu+yQAuL5wmRylwQS/ggDACQQdw8KFIOzXv/uTmmXo0IvvOGZDoz+JWTQvnXv7O2N/j7Bigf57dLl1zIg+p47au890BuBrEkL7uvXtu3v3Kg/9NuXh7Cdnzwuv/Ps99wsh1wy8Y9nCvKZxvXv2uJCoSqOujmo7TFFz0js276r84UO7XnDCyH7HzbxherMUBCYR6NW1+E8HD+l96r4DKi4wAIwVJCEtfurhiwYevO8elRkTOHL0k6/v+eXf70poRvafX+2o+s1rdSeyZcuDThzzLARBw3YNWQwAKza0z8p5XHzekSP6HnVgvwElUj9w4okn+p7ngVnwoD7drxnep/zUYT3LbzAArG5Bb7mUdpEtIYIB/mdI6PwRB/T+9L0vN2wU5IzmAk4kPSa0Z9xyIZCKONIOSrONgWxe+6I4KFVbqyohxmeorLR6VXRZ+93mLdjanO3SmDalAiZfVN414wQCWZAX1CJAG7PyUGO0tnI2DBjGAE7AKmYS0lVOzhiHNLPdxVd2xxZJBMk2MbW1tWVuvLyqcfjZt8xNp6ybJQE9ykqpyZPWwmUb5wYkMLjCOhNAoxQQDGMEiLERLgAo7fskYDxtiIha+oy/el5zm7zLN9RVkv+0NoxycgPaUG7Ljvabm9sybr8wPQ7gNlsGjBaQ3U+86YOtLbprkUNvTh21zb9EGwztXTTt8x3yve5FgYfef/KKrxGNSiQSOhaLiXgtaOywHtM+/K5l9ntf1C8sklhy7lWzzn7x3qsb+51yU7qpJXtuPuOeVmz7CwBMcaSWRiucO+XBv5ATKHUklh80YGDLMm0QcvCMp8wV25pSSTL6pWcuOi3FzKLfSTcwlDYSgOepQ0oDNO/Oq6o6i3qfIZqF3898hjxtsL4+Oau4KMDbqf0KAH+zVtfceiABKD//xtsdO3hYxjfyq7XN/UlzD218Q8wIWCpLINnQrsbblm0LS0CYXFcBagw5IpfKqOEegnZYeIU0qO8JwwraGGiWlqcQ8bM6QprACGF7TkNQsHBghaijIJmhPdORTArAN0BxgFFeYtV3TISBApgkhFNx7GWz9v16XfLSAPh9xQBbotTxFZ80Zv+zmlva023JdD0AaMNGaQruM/7qnhDS+Wb+3Zu01qQNRChgMwAavEfx/V9s1ouFyfPRw0ufXg8g7bNi5vCAnhU39OlR/H6mqSVNALIqD6WMawuxKpfVF3UrE9fT6EL6956pZ30+8fYXTY/Ssg9Wg6myoZpqAcTjABH4683bju5V7DxbMaDvw8vWpeevbcgdJInm9xp/bXlJUeTp0cP6vJhvTaplzHT61fdq7btUXhxa35zD1JKgvP2JmZe2AsDBA7s+umBFwzTj2jh4QPG0TR2+j6cVgYTUACTrBcmsPP+kaQ8/357Jl/j55ElXTdzv6gWrWiEl0V57dLmsd7fiNekGblwOQFwWe6D/xTc+MJY1la7cmnk86Vmhv75bt7A1pw9XnhK2ZHnMyB5VL910RM/Txw4ZfvxB/fYf2tMeW14cmF4SDs5xLOetUDD0FDOvZRJjqbZWbW9tH6LYIlI5bXJtkH4alGqASDXASm1DINcEK9MAO9sASu+AatlkVNMGw80bjGnZoFXzBh3Jbmrr6m99YdrRRWs70EV2fWUFhW71fX3b6nXNn4YcWX/o0C6/B4DSoMkIMGre+uSv73727dstLU3VAFAR0FlD1vBW2N/KoPOmLYAAGxMSRndC1Ivm3PJRKeU3ljhY+PKDN6wBgHK0woGbWbVuU/VbH6x467v6xr9bAoBhLnU8Wv/KrRcXU/rZttb0ozOvm1kKAIsWfaQcuLmA1IEfRDmxjhyJsQZvaHSfXbpyw3OObvm4T9eiJZqZwkGrpT2VvejdJXVvrVi3df6cOXNClijyS4LCfDvtqN/3KPKnu7nMH86/4tbhAPC3e2d8W+bo2hJkVr/1+HWfFLZNyWFL6bJQAfc5ef8uN4Qt/mT5d1s/Xru97e3mZK4XAARliKV2zZffrHvi7SWr3vpqTdMDBMDqVhL0NzYluTRofdg16G8tdURfVzmDAlJ39bXqacGUff3d9vvPvW19eyDgsOf57Z7nN5cVR1yl/UbWfku3sohxpVrfkHSPHnnqFdM3NeTO8xQ0s28so2mvnsHri2T+i2ymPRu0hcqmk3krFKRQwHabPee8te3+1Vr7hsDSGKEtS4hBXa1zltQ8vmDcLuk4QaQuvHHW0U2eFezqFOdfuPOijes62H1Y17K3W4eE925ozltFVpDKA7nWjwCceMCQmUkE56S0J8NSuF/9HTjiV31nmzz9dfarunPTUdfc/cihyvLyD8zvyFi0tqaPP2DkwTtybsAYQV2LlLfSABP32fODJngjHjswJjZWV08594Yn91nnFGomr7nm/OzvYo/vN3BQZMfCJ78HhBAvgGHL/nrn9X94/M/3fPjZhl4fPHPDt0Skcf+VdOJBex7XmHPCmXRSWK5v6uvr88cM7r2uorj/3kNeXiHXJmY+OiU2523tNbYCgGLQ+EP6nhFyc3bHMQbylcHYEX0Pscu85m/nAQ/Er2qxCMdWXhAbqByY92ffuaHqdSAWq1l98L7dh7a2Z+zycDeC355e987PVBALFGDaDZ/OC9/4ypddVn6XHqAY/TxX7+kqb09f8QBPq77aV3sYUMSQhK81fE2QgSJorQDjg9lAsEFAcL1ti7xSqtW2LQXm1oAl80xojASt4PakPi/jEwQbSMtGr2JTt0f3it8ao9p79SptG1RWkjpw0O+SVVU/gWGp45jl//DAbUz8Ihjzn9EuWMFP2v53cAQComIX/OGHeAJAqKwsYCC1teqH7wG7tN9xyupnOumEmOvqhlOiYSUBi4Ha7txRrLnbQRIASYBvmO569NGK5aubemxvS/VtT+k9tBH9c57a01N+X6V0b6W5lzYc1syeY1sWG+Mp5WdsS1I4GJCe77f42tRHwkE4tqVTqXRjUVE4W15aEgg51Fhkq7Uj9h7cMHLvXm+fM2FC665JqB8hdxTrRPwAxKsLZyw70UGuruYJ51xa9vrcJ9o6cyk/h/xNmDA1HAq1qmHDhv0gzxCPxxkAYrFYx7tM0WiVSCS+51UHorjzIDABfGY06iQSCS8Wi4nOce3CSo7FYqKuro6GDRvGP5jXf4eo/lC5doNOdvIktguffulMASEWo2hdHQFRNDSspFoAqK37RUURABSzuPPhh7t4rpTINGbPOutY3nvvfsoS/XJCEIQQ0FrDFHJWIACa/9fn6WOC6Faz31FnPi38nFn+/vypKNTUfr/CAD722HOLlI39w8Hi7dtb6hMBiy9ZsnDe0o6pdAoW+H5l/XQ1/0BwlRZQq4aNOeGWUMCpW1Y776XO5w+oPGW0MO7WZR+8tQ2dVYCA+ZHFoFgsRi+/t/zw8vKI1EqX27ZzAEPcFwnoPr62TvK1WX7+qePev/Opl68MO5Y+dJ+hc554Ymbrbsf2C/RLaWhGPG4SiYROJKp0bW1cFVKyiU6YksBMsVhMRDuOwKMyZjEqLQ0IIjI3Xn55Y/zaadvj8Xhyn30OTxH1y2kGfM1wfQ1lQAYxoRlCMQQjKhH9/hONRuV/faQ+GpVA3Ow79tSzleeL4f163HNMdGopEbQUAsxMgoiZWfbcq0/QU+6Rm1t23B4uLlo36bTjVglBmDp1qkQhsYnZs2fbAEzHN0+YMCH80EMPBQQRFsViFuJxM3ny5CAAEGrVcdFLByvQMaFI5F0AfMo5lwwjIgg2R1ZUdOnBzLKjZtQcc0y0FIibGTPuC02dOtsGgBVrNo7yfT27uT13TSZvytvS6W3JbHrGqvUNVyRT6azr5sc98sKC6ZGiomIpxBI9ckB6p9z+Q/qPThn9F0Q7S8s6ziruPLv3Pf1vDcDOVguVKVfeeFufN99f/lr38pJ5vla5VHvbcEvQPCscPkMpVSIt6WnlrwgJsR6WY2fy+Yu6lxXPTyazW13mvjkv/eSgvl3yTU3urHwuY/uyqK7YsZVRHjzmXmyQjxSFRmeyueZee3R9sGlH6w1szFKWVitJ65S8l3tz5XuvPHjw8b8+XXnexPKS0nvyvn+EFijRvprgufm5ktAWDAROCYScV9ta0udlc6m/rfr03RdGH3/O0Ew6eZ207GwwYG9obm49Yo8e3f66pbG5yvfN4EujlUf9/e3PYtqyKtio+75a9Oqy/zZB93/7xyt+gQr7IXX8eMYPf0hjV3P7P6dYIbXO73z8dX+t1LbmtlarLZXtlsrmvJSH49vaszKdzmVSqVzOdf2h7Tn32MamlrHa03M3btrRtzWbH5zNe5VvPzHDXbOmZYarzDatLJdBF7Ql249obUuOLispKm/N5M5oT+cajYC9bv22Bx1bbkhncsd7vhqQbEun+3cp23jhhRd261Ye3jPnq+4btjfFd7SmhjQ2tByfzbnrcq53ciqdP2SvAb1v2LK99X5piR09yksZAJLptikwuu7r2penaeX/KhQOFftQR/bvWXGvr/3sP97/fO/lta9Oy6WyTiqZPR0AsHjxfyXT/9OK8P8YxevqCABclTulb59uymgTlOz1CQWdvlJapV1Lg6+WR4LvAt6XgkQ35emikGNllJsfCtZFLGhycTjQurZujUcCa43SI/bo3fXFgOR5AcfOFkeCuqwo8HZFJPRqcQAvs+uXCOZGKYXHUJvIqHIirnANgkops6OxZSB8v624KOAIYR0agH2r8vOZkOPUa+333tLUfiob81XQstMV4ZJVU6dOtcOW7N+nZ8ULhx878SxJtOHA4SPPcjPZZgoGD+1RUbzIZrH/uNOnzHQCjjty2JD7ARBqa//jnxr4/zIRAEyYOjW892Enf3TUaefcuGhRzIrFYg5zjZRSoKamRgoixGKx4KJFi6xYLOYQEY6feE6vcaede8eQMccvnTp1qg0UdrVjolNLASAGCELHsXwUkFF0RF9CCIw5LlohBCEWiwkhvt8Ch405rqLTIZ4xY0YIADr9iVMnTy6LxWIWATjohBNKgIJnv2jRIgsAJkTP67frxKKXzhjc0TKddt6Ve3WM4f+n3RABQPTSWGRE5Snv/uqYU0bvev9nSADAkaf85pQDjpq4asyxpx8G7Dw80kE7nVb60fdu+9/lenfPix9970I/cI53eZd/3O7u+viv6P8CHXtmhIAB8zoAAAAASUVORK5CYII=";
+const LOGO_WHITE="data:image/png;base64,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";
 
 /* ── SIMPLE HASH ROUTER ── */
 function useHashRoute(){
 const[hash,setHash]=useState(window.location.hash);
 useEffect(()=>{const h=()=>setHash(window.location.hash);window.addEventListener("hashchange",h);return()=>window.removeEventListener("hashchange",h);},[]);
 return hash;
+}
+
+function useIsDesktop(){
+const[isD,setIsD]=useState(window.innerWidth>=768);
+useEffect(()=>{const h=()=>setIsD(window.innerWidth>=768);window.addEventListener("resize",h);return()=>window.removeEventListener("resize",h);},[]);
+return isD;
 }
 
 /* Driver slug map — used for URL routing */
@@ -26,8 +39,10 @@ const ADDR={
   // EMSER PICKUPS
   "Emser Norcross":"5470-G Oakbrook Parkway, Norcross, GA 30093",
   "Emser Roswell":"250 Hembree Park Drive, Roswell, GA 30076",
+  "Transfer - Norcross":"5470-G Oakbrook Parkway, Norcross, GA 30093",
+  "Transfer - Roswell":"250 Hembree Park Drive, Roswell, GA 30076",
   // EMSER DELIVERIES
-  "Advance Flooring - Mableton":"6731 Discovery Blvd #200, Mableton, GA 30126",
+  "Advanced Flooring Design - Mableton":"6731 Discovery Blvd #200, Mableton, GA 30126",
   "Atlanta Flooring - Suwanee":"3665 Swiftwater Park Drive, Bldg 2, Suwanee, GA 30024",
   "Atlanta West - Lithia Springs":"1850 Westford Drive, Lithia Springs, GA 30122",
   "BEC - Alpharetta":"1000 Union Center Drive, Suite C, Alpharetta, GA 30004",
@@ -142,7 +157,7 @@ const DEFAULT_INSTRUCTIONS={
   "DCO Tech Dr - Lawrenceville":"Do not deliver before 10ish",
   "DCO Eatonton":"ALWAYS 942 Greensboro Rd (NEVER 105 Harmony). Parking lot delivery — Forklift, no dock",
   "Madison Flooring Group":"Parking lot delivery — Forklift, no dock",
-  "Advance Flooring - Mableton":"Product pick up at either or both Emser locations",
+  "Advanced Flooring Design - Mableton":"Product pick up at either or both Emser locations",
   "ProSource - Norcross":"Parking lot delivery — Forklift, no dock",
   "Prestigious - Alpharetta":"Product pick up at either or both Emser locations",
   "Peachwood Floor Covering":"Product pick up at either or both Emser locations",
@@ -176,7 +191,7 @@ const getDefaultInstr=(s)=>DEFAULT_INSTRUCTIONS[s]||"";
 /* ── CUSTOMERS ── */
 const CUSTOMERS={
 "Emser Tile":{rate_type:"hourly",rate:102.50,min_hours:4,pickup:"Norcross &/or Roswell",note:"$102.50/hr, 4hr min",
-deliveries:["Advance Flooring - Mableton","American Flooring Services","Atlanta Flooring - Suwanee","Atlanta West - Lithia Springs","BEC - Alpharetta","Britts - Lawrenceville","Construction Resources - Decatur","D3 - Woodstock","Dalton Carpet Outlet - Smyrna","DCO Athens","DCO Eatonton","DCO Lakes Pkwy","DCO Smyrna","DCO Tech Dr - Lawrenceville","Drop Ship Liftgate","Elite Flooring - Norcross","Flooring Design Group - Doraville","Floorworx - Norcross","Gel & Associates - Atlanta","Hillman - Sugar Hill","Idlewood - Norcross","JSJ/ProSource - Marietta","Madison Flooring Group","NE Corner - Flowery Branch","Peachwood Floor Covering","Precision Flooring - Norcross","Premier - Suwanee","Prestigious - Alpharetta","ProSource - Marietta","ProSource - Norcross","SE Commercial - Woodstock","Sherwin Williams - Norcross","Sherwin Williams - Smyrna","Stocco - Alpharetta","Transfer","Valufloor - Doraville","Vanguard - Norcross"]},
+deliveries:["Advanced Flooring Design - Mableton","American Flooring Services","Atlanta Flooring - Suwanee","Atlanta West - Lithia Springs","BEC - Alpharetta","Britts - Lawrenceville","Construction Resources - Decatur","D3 - Woodstock","Dalton Carpet Outlet - Smyrna","DCO Athens","DCO Eatonton","DCO Lakes Pkwy","DCO Smyrna","DCO Tech Dr - Lawrenceville","Drop Ship Liftgate","Elite Flooring - Norcross","Flooring Design Group - Doraville","Floorworx - Norcross","Gel & Associates - Atlanta","Hillman - Sugar Hill","Idlewood - Norcross","JSJ/ProSource - Marietta","Madison Flooring Group","NE Corner - Flowery Branch","Peachwood Floor Covering","Precision Flooring - Norcross","Premier - Suwanee","Prestigious - Alpharetta","ProSource - Marietta","ProSource - Norcross","SE Commercial - Woodstock","Sherwin Williams - Norcross","Sherwin Williams - Smyrna","Stocco - Alpharetta","Transfer - Norcross","Transfer - Roswell","Valufloor - Doraville","Vanguard - Norcross"]},
 "Florida Tile":{rate_type:"flat",pickup:"Norcross",fuel_surcharge:0.15,note:"Flat rate + 15% fuel (separate)",
 deliveries:[{s:"3 Little Dogs - Cumming",r:200},{s:"Atlanta West - Lithia Springs",r:200},{s:"BEC - Alpharetta",r:175},{s:"Britts - Lawrenceville",r:125},{s:"Construction Resources - Decatur",r:175},{s:"DCO Lakes Pkwy - Lawrenceville",r:125},{s:"DCO Tech Dr - Lawrenceville",r:125},{s:"Floor Works - Dallas",r:250},{s:"Hillman - Sugar Hill",r:150},{s:"JSJ/ProSource - Marietta",r:150},{s:"Moda",r:150},{s:"NE Corner - Flowery Branch",r:150},{s:"Precision Flooring - Norcross",r:125},{s:"Premier - Suwanee",r:125},{s:"ProSource - Norcross",r:125},{s:"Remodel Republic",r:150},{s:"SE Commercial - Woodstock",r:175},{s:"Tile House",r:175},{s:"Vanguard - Norcross",r:125}]},
 "Specialty":{rate_type:"flat",pickup:"Norcross",fuel_included:true,note:"Flat rate (15% fuel included)",priority:true,priorityNote:"Be on dock first thing",
@@ -223,7 +238,7 @@ function getBaseTier(mi){if(mi<=10)return 100;if(mi<=20)return 150;if(mi<=30)ret
 
 const CC={"Emser Tile":{bg:"#1e40af",accent:"#2563eb"},"Florida Tile":{bg:"#166534",accent:"#16a34a"},"Specialty":{bg:"#6b21a8",accent:"#9333ea"},"IMETCO":{bg:"#9a3412",accent:"#ea580c"},"MM Systems":{bg:"#075985",accent:"#0284c7"},"Perfect Edge":{bg:"#9f1239",accent:"#e11d48"},"Woodbury Stamping":{bg:"#3f3f46",accent:"#71717a"},"Quote Delivery":{bg:"#78350f",accent:"#d97706"},"One-Off Delivery":{bg:"#374151",accent:"#6b7280"}};
 const DCOL=["#2563eb","#16a34a","#ea580c","#9333ea"];
-const NB={background:"#292524",border:"1px solid #44403c",color:"#d6d3d1",borderRadius:8,padding:"6px 12px",cursor:"pointer",fontSize:14};
+const NB={background:BRAND.dark,border:"1px solid "+BRAND.main,color:"#93c5fd",borderRadius:8,padding:"6px 12px",cursor:"pointer",fontSize:14};
 const BB={background:"none",border:"none",color:"#2563eb",fontSize:13,cursor:"pointer",padding:"16px 4px 8px",fontWeight:600};
 
 function getWeekDates(off=0){const now=new Date();const d=now.getDay();const mon=new Date(now);mon.setDate(now.getDate()-(d===0?6:d-1)+off*7);return DAYS.map((name,i)=>{const dt=new Date(mon);dt.setDate(mon.getDate()+i);return{name,date:dt.toLocaleDateString("en-US",{month:"short",day:"numeric"})}});}
@@ -246,6 +261,76 @@ style={{background:name.trim()?"#1c1917":"#e7e5e4",color:name.trim()?"#fff":"#a8
 );
 }
 
+/* ── ADDRESS AUTOCOMPLETE INPUT ── */
+/* Uses Google Places API when available, falls back to plain input gracefully */
+let _gmpState="idle"; /* idle | loading | ready | failed */
+function loadGoogleMaps(){
+if(_gmpState==="ready"||window.google?.maps?.places){_gmpState="ready";return;}
+if(_gmpState==="loading"||_gmpState==="failed")return;
+_gmpState="loading";
+try{
+const s=document.createElement("script");
+s.src="https://maps.googleapis.com/maps/api/js?key=AIzaSyB29mVeZXedDhLVT3eMVgl07EsOneWCUu4&libraries=places";
+s.async=true;
+s.onload=()=>{_gmpState="ready";};
+s.onerror=()=>{_gmpState="failed";};
+document.head.appendChild(s);
+}catch(e){_gmpState="failed";}
+}
+
+function AddressInput({value,onChange,placeholder,style:customStyle}){
+const inputRef=useRef(null);
+const acRef=useRef(null);
+const[suggestions,setSuggestions]=useState([]);
+const[focused,setFocused]=useState(false);
+const timerRef=useRef(null);
+
+useEffect(()=>{loadGoogleMaps();},[]);
+
+const doSearch=useCallback((q)=>{
+if(!q||q.length<3||_gmpState!=="ready")return;
+try{
+if(!window.google?.maps?.places)return;
+if(!acRef.current)acRef.current=new window.google.maps.places.AutocompleteService();
+acRef.current.getPlacePredictions({
+input:q,
+componentRestrictions:{country:"us"},
+locationBias:{center:{lat:33.88,lng:-84.28},radius:80000},
+types:["address"]
+},(results,status)=>{
+if(status==="OK"&&results)setSuggestions(results.slice(0,5));
+else setSuggestions([]);
+});
+}catch(e){setSuggestions([]);}
+},[]);
+
+const handleChange=(val)=>{
+onChange(val);
+clearTimeout(timerRef.current);
+timerRef.current=setTimeout(()=>doSearch(val),350);
+};
+
+const pick=(pred)=>{
+onChange(pred.description);
+setSuggestions([]);
+};
+
+const base={border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 12px",fontSize:13,outline:"none",width:"100%"};
+const merged=customStyle?{...base,...customStyle}:base;
+
+return(
+<div style={{position:"relative"}}>
+<input ref={inputRef} value={value} onChange={e=>handleChange(e.target.value)} placeholder={placeholder||"Address"} onFocus={()=>setFocused(true)} onBlur={()=>setTimeout(()=>{setFocused(false);setSuggestions([]);},250)} style={merged} autoComplete="off"/>
+{focused&&suggestions.length>0&&<div style={{position:"absolute",top:"100%",left:0,right:0,zIndex:60,background:"#fff",border:"1px solid #d6d3d1",borderTop:"none",borderRadius:"0 0 10px 10px",boxShadow:"0 8px 24px rgba(0,0,0,0.15)",maxHeight:220,overflowY:"auto"}}>
+{suggestions.map((p,i)=><div key={p.place_id||i} onMouseDown={e=>{e.preventDefault();pick(p);}} style={{padding:"10px 12px",cursor:"pointer",borderBottom:i<suggestions.length-1?"1px solid #f5f5f4":"none",fontSize:12,color:"#1c1917"}}>
+<div style={{fontWeight:600}}>{p.structured_formatting?p.structured_formatting.main_text:p.description}</div>
+{p.structured_formatting&&p.structured_formatting.secondary_text&&<div style={{fontSize:10,color:"#a8a29e",marginTop:1}}>{p.structured_formatting.secondary_text}</div>}
+</div>)}
+</div>}
+</div>
+);
+}
+
 /* ── DRIVER VIEW ── */
 function DriverView({driver,entries,dayLabel,onStatusUpdate,onPhotoUpload,onSignature,onEta,onShipPlan}){
 const [sigStop,setSigStop]=useState(null);
@@ -256,9 +341,9 @@ const isImetcoReturn=(e)=>e.customer==="IMETCO"&&(e.stop.includes("to IMETCO")||
 const needsShipPlan=(e)=>e.customer==="IMETCO";
 return(
 <div style={{fontFamily:"'DM Sans',system-ui,sans-serif",background:"#f5f5f4",color:"#1c1917",minHeight:"100vh",maxWidth:480,margin:"0 auto"}}>
-<div style={{background:"#1c1917",color:"#fff",padding:"16px 20px"}}>
-<h1 style={{margin:0,fontSize:20,fontWeight:700}}>DAVIS DELIVERY</h1>
-<p style={{margin:"2px 0 0",fontSize:11,color:"#a8a29e",letterSpacing:"0.08em"}}>DRIVER MANIFEST</p>
+<div style={{background:BRAND.dark,color:"#fff",padding:"16px 20px"}}>
+<img src={LOGO_WHITE} alt="Davis Delivery" style={{height:26,objectFit:"contain",marginBottom:2,display:"block"}}/>
+<p style={{margin:"2px 0 0",fontSize:11,color:"#93c5fd",letterSpacing:"0.08em"}}>DRIVER MANIFEST</p>
 </div>
 <div style={{padding:"16px 16px 0"}}>
 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
@@ -276,6 +361,25 @@ return(
 </div>
 </div>
 <div style={{padding:"0 16px 100px"}}>
+{/* Leaving warehouse ETA - shows when no stops started yet */}
+{entries.length>0&&!entries.some(e=>e.status==="arrived"||e.status==="departed")&&(
+<div style={{background:"#fff",border:"2px solid "+BRAND.main,borderRadius:14,padding:"14px 16px",marginBottom:10}}>
+<div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+<span style={{fontSize:18}}>{"🏠"}</span>
+<div>
+<div style={{fontSize:14,fontWeight:700,color:BRAND.main}}>Leaving Warehouse</div>
+<div style={{fontSize:11,color:"#78716c"}}>ETA to first stop: {entries[0].stop}</div>
+</div>
+</div>
+<div style={{display:"flex",gap:6,alignItems:"center"}}>
+<input placeholder="mins" type="number" defaultValue={entries[0].eta||""} style={{width:70,border:"1px solid #d6d3d1",borderRadius:8,padding:"8px",fontSize:14,fontWeight:700,outline:"none",textAlign:"center"}}
+onBlur={e=>{if(e.target.value)onEta(entries[0].id,e.target.value,entries[0].stop);}}/>
+<span style={{fontSize:12,color:"#78716c"}}>min to</span>
+<span style={{fontSize:12,fontWeight:700,color:BRAND.main,flex:1}}>{entries[0].stop}</span>
+</div>
+{entries[0].eta&&entries[0].etaDest&&<div style={{marginTop:6,fontSize:11,color:BRAND.main,fontWeight:600}}>{"🚚"} ETA: {entries[0].eta} min → {entries[0].etaDest}</div>}
+</div>
+)}
 {entries.map((entry,i)=>{
 const c=CC[entry.customer]||CC["One-Off Delivery"];
 const addr=entry.addr||getAddr(entry.stop);
@@ -295,6 +399,7 @@ return(
 {departed&&<span style={{fontSize:9,background:"#16a34a",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700}}>DONE</span>}
 {arrived&&!departed&&<span style={{fontSize:9,background:"#f59e0b",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700}}>ON SITE</span>}
 {wantsShipPlan&&<span style={{fontSize:9,background:"#ea580c",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700}}>SHIP PLAN REQ</span>}
+{entry.dueBy&&<span style={{fontSize:9,background:entry.dueBy.startsWith("After")?"#2563eb":"#dc2626",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700,display:"inline-flex",alignItems:"center",gap:2}}>{"\u23F0"} {entry.dueBy}</span>}
 </div>
 <div style={{fontSize:16,fontWeight:700,color:"#1c1917",marginBottom:2}}>{entry.stop}</div>
 <div style={{fontSize:12,color:c.accent,fontWeight:600}}>{entry.customer}</div>
@@ -319,25 +424,35 @@ style={{width:"100%",border:isReturn&&!shipVal.trim()?"2px solid #dc2626":"1px s
 {entry.shipPlan&&<div style={{marginTop:6,background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:8,padding:"6px 12px"}}><span style={{fontSize:10,color:"#16a34a",fontWeight:600}}>Ship Plan #:</span> <span style={{fontSize:14,fontWeight:700}}>{entry.shipPlan}</span></div>}
 {entry.note&&<div style={{fontSize:11,color:"#78716c",marginTop:2}}>{entry.note}</div>}
 {addr&&<a href={`https://maps.google.com/maps/dir/?api=1&destination=${encodeURIComponent(addr)}`} target="_blank" rel="noopener"
-style={{display:"inline-flex",alignItems:"center",gap:6,background:"#1c1917",color:"#fff",border:"none",borderRadius:10,padding:"10px 16px",cursor:"pointer",fontSize:13,fontWeight:600,marginTop:8,textDecoration:"none",width:"100%",justifyContent:"center"}}>
+style={{display:"inline-flex",alignItems:"center",gap:6,background:BRAND.main,color:"#fff",border:"none",borderRadius:10,padding:"10px 16px",cursor:"pointer",fontSize:13,fontWeight:600,marginTop:8,textDecoration:"none",width:"100%",justifyContent:"center"}}>
 🧭 Get Directions
 </a>}
 {entry.arrivedAt&&<div style={{fontSize:10,color:"#16a34a",marginTop:6}}>Arrived: {entry.arrivedAt}</div>}
 {entry.departedAt&&<div style={{fontSize:10,color:"#16a34a"}}>Departed: {entry.departedAt}</div>}
-{entry.eta&&<div style={{fontSize:10,color:"#2563eb"}}>ETA to next: {entry.eta} min</div>}
+{entry.eta&&<div style={{fontSize:10,color:"#2563eb"}}>ETA: {entry.eta} min{entry.etaDest?" → "+entry.etaDest:""}</div>}
 <div style={{display:"flex",gap:6,marginTop:10,flexWrap:"wrap"}}>
 {!arrived&&<button onClick={()=>onStatusUpdate(entry.id,"arrived")} style={{flex:1,background:"#f59e0b",color:"#fff",border:"none",borderRadius:10,padding:"10px",cursor:"pointer",fontSize:13,fontWeight:600}}>Arrived</button>}
 {arrived&&!departed&&<button onClick={()=>{if(!canDepart){return;}onStatusUpdate(entry.id,"departed");}} style={{flex:1,background:canDepart?"#16a34a":"#a8a29e",color:"#fff",border:"none",borderRadius:10,padding:"10px",cursor:canDepart?"pointer":"not-allowed",fontSize:13,fontWeight:600}}>{canDepart?"Departed":"Enter Ship Plan # First"}</button>}
 {arrived&&(
-<div style={{display:"flex",gap:6,width:"100%",marginTop:4}}>
-<input placeholder="ETA mins" type="number" defaultValue={entry.eta||""} style={{flex:1,border:"1px solid #d6d3d1",borderRadius:8,padding:"8px",fontSize:13,outline:"none"}}
-onBlur={e=>{if(e.target.value)onEta(entry.id,e.target.value);}}/>
-<label style={{display:"flex",alignItems:"center",gap:4,background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:8,padding:"8px 12px",cursor:"pointer",fontSize:12,fontWeight:600,color:"#2563eb"}}>
-📷 Photo
+<div style={{width:"100%",marginTop:4}}>
+<div style={{display:"flex",gap:6,marginBottom:4}}>
+<select defaultValue={entry.etaDest||""} onChange={e=>{const dest=e.target.value;const curMins=entry.eta||"";if(dest&&curMins)onEta(entry.id,curMins,dest);else if(dest){/* store dest, wait for mins */const el=e.target;el._dest=dest;}}} ref={el=>{if(el)el._dest=entry.etaDest||"";}}
+style={{flex:1,border:"1px solid #d6d3d1",borderRadius:8,padding:"8px",fontSize:12,outline:"none",background:"#fff",color:entry.etaDest?"#1c1917":"#a8a29e"}}>
+<option value="">ETA to where?</option>
+{entries.filter((_,ei)=>ei>i&&_.status!=="departed").map(ne=><option key={ne.id} value={ne.stop}>{ne.stop}</option>)}
+<option value="Davis Warehouse">{"🏠 Davis Warehouse"}</option>
+</select>
+<input placeholder="mins" type="number" defaultValue={entry.eta||""} style={{width:70,border:"1px solid #d6d3d1",borderRadius:8,padding:"8px",fontSize:13,fontWeight:700,outline:"none",textAlign:"center"}}
+onBlur={e=>{if(e.target.value){const select=e.target.parentElement.querySelector("select");const dest=select?select.value:"";onEta(entry.id,e.target.value,dest||entry.etaDest);}}}/>
+</div>
+<div style={{display:"flex",gap:6}}>
+<label style={{display:"flex",alignItems:"center",gap:4,background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:8,padding:"8px 12px",cursor:"pointer",fontSize:12,fontWeight:600,color:"#2563eb",flex:1,justifyContent:"center"}}>
+{"📷"} Photo
 <input type="file" accept="image/*" capture="environment" style={{display:"none"}}
 onChange={e=>{if(e.target.files[0]){const r=new FileReader();r.onload=ev=>onPhotoUpload(entry.id,ev.target.result);r.readAsDataURL(e.target.files[0]);}}}/>
 </label>
-<button onClick={()=>setSigStop(entry.id)} style={{background:"#f3e8f9",border:"1px solid #d8b4fe",borderRadius:8,padding:"8px 12px",cursor:"pointer",fontSize:12,fontWeight:600,color:"#7c3aed"}}>✍ Sign</button>
+<button onClick={()=>setSigStop(entry.id)} style={{background:"#f3e8f9",border:"1px solid #d8b4fe",borderRadius:8,padding:"8px 12px",cursor:"pointer",fontSize:12,fontWeight:600,color:"#7c3aed",flex:1}}>{"✍"} Sign</button>
+</div>
 </div>
 )}
 </div>
@@ -373,7 +488,7 @@ return(
 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}><span style={{fontSize:13,fontWeight:700}}>Distance</span><button onClick={()=>setShowApiInput(!showApiInput)} style={{background:"#f5f5f4",border:"none",borderRadius:6,padding:"4px 8px",fontSize:10,color:"#78716c",cursor:"pointer"}}>{apiKey?"API Key Set":"Set API Key"}</button></div>
 {showApiInput&&<div style={{marginBottom:10}}><input value={apiKey} onChange={e=>setApiKey(e.target.value)} placeholder="Google Maps API key" style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px",fontSize:12,outline:"none",marginBottom:6}}/><button onClick={()=>saveKey(apiKey)} style={{background:"#1c1917",color:"#fff",border:"none",borderRadius:8,padding:"6px 14px",fontSize:12,fontWeight:600,cursor:"pointer"}}>Save</button></div>}
 {pickupOptions&&pickupOptions.length>0&&<div style={{marginBottom:8}}><label style={{fontSize:12,fontWeight:600,color:"#57534e",display:"block",marginBottom:4}}>Pickup From</label><div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:4}}>{pickupOptions.map(po=><button key={po.label} onClick={()=>{setSelectedPickup(po.label);setOriginAddr(po.addr);}} style={{padding:"6px 12px",borderRadius:8,border:"none",cursor:"pointer",fontSize:12,fontWeight:600,background:selectedPickup===po.label?"#2563eb":"#e7e5e4",color:selectedPickup===po.label?"#fff":"#57534e"}}>{po.label}</button>)}<button onClick={()=>{setSelectedPickup("custom");setOriginAddr("");}} style={{padding:"6px 12px",borderRadius:8,border:"none",cursor:"pointer",fontSize:12,fontWeight:600,background:selectedPickup==="custom"?"#2563eb":"#e7e5e4",color:selectedPickup==="custom"?"#fff":"#57534e"}}>Manual</button></div>{selectedPickup!=="custom"&&<div style={{fontSize:11,color:"#78716c"}}>{originAddr}</div>}</div>}
-<div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:10}}>{(selectedPickup==="custom"||!pickupOptions?.length)&&<input value={originAddr} onChange={e=>setOriginAddr(e.target.value)} placeholder="Pickup address" style={{border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 12px",fontSize:13,outline:"none"}}/>}<input value={destAddr} onChange={e=>setDestAddr(e.target.value)} placeholder="Delivery address" style={{border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 12px",fontSize:13,outline:"none"}}/><button onClick={calcDistance} disabled={calcLoading} style={{background:"#1c1917",color:"#fff",border:"none",borderRadius:8,padding:"10px",fontSize:13,fontWeight:600,cursor:"pointer",opacity:calcLoading?0.6:1}}>{calcLoading?"Calculating…":"Calculate Distance"}</button></div>
+<div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:10}}>{(selectedPickup==="custom"||!pickupOptions?.length)&&<AddressInput value={originAddr} onChange={setOriginAddr} placeholder="Pickup address"/>}<AddressInput value={destAddr} onChange={setDestAddr} placeholder="Delivery address"/><button onClick={calcDistance} disabled={calcLoading} style={{background:"#1c1917",color:"#fff",border:"none",borderRadius:8,padding:"10px",fontSize:13,fontWeight:600,cursor:"pointer",opacity:calcLoading?0.6:1}}>{calcLoading?"Calculating…":"Calculate Distance"}</button></div>
 {calcError&&<p style={{fontSize:12,color:"#dc2626",margin:"0 0 8px"}}>{calcError}</p>}
 <div style={{display:"flex",alignItems:"center",gap:8}}><label style={{fontSize:13,fontWeight:600,color:"#57534e"}}>Miles:</label><input value={miles} onChange={e=>setMiles(e.target.value)} placeholder="0" type="number" step="0.1" style={{width:80,border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 12px",fontSize:15,fontWeight:700,outline:"none",textAlign:"center"}}/>{mi>0&&<span style={{fontSize:13,fontVariantNumeric:"tabular-nums",color:"#57534e"}}>Base: {fmt(baseTier)}</span>}</div>
 </div>
@@ -393,22 +508,23 @@ return(
 }
 
 /* ── MANIFEST STOP ── */
-function ManifestStop({entry,eIdx,total,drivers,onMove,onReassign,onRemove,onUpdateInstructions,onShipPlan,onDragStart,onDragOver,onDrop,isDragOver,isDragging}){
-const[expanded,setExpanded]=useState(false);const[instrText,setInstrText]=useState(entry.instructions||"");
-const c=CC[entry.customer]||CC["One-Off Delivery"];const addr=entry.addr||getAddr(entry.stop);const isP=entry.priority;const isPU=entry.stopType==="pickup";const hasI=entry.instructions?.trim();const isImetco=entry.customer==="IMETCO";
+function ManifestStop({entry,eIdx,total,drivers,onMove,onReassign,onRemove,onUpdateInstructions,onShipPlan,onDueBy,onWeight,onLoadNum,maxLoad,onDragStart,onDragOver,onDrop,isDragOver,isDragging}){
+const[expanded,setExpanded]=useState(false);const[instrText,setInstrText]=useState(entry.instructions||"");const[dueByInput,setDueByInput]=useState(entry.dueBy||"");const[dueType,setDueType]=useState(entry.dueBy?(entry.dueBy.startsWith("After")?"after":"by"):"by");
+const c=CC[entry.customer]||CC["One-Off Delivery"];const addr=entry.addr||getAddr(entry.stop);const isP=entry.priority;const isPU=entry.stopType==="pickup";const hasI=entry.instructions?.trim();const isImetco=entry.customer==="IMETCO";const hasDue=!!entry.dueBy;
 return(
 <div data-drv={entry.driverId} data-idx={eIdx}>
 <div onDragOver={e=>{e.preventDefault();onDragOver();}} onDrop={onDrop}
-style={{display:"flex",alignItems:"center",gap:6,padding:"8px",marginBottom:expanded||isImetco?0:2,background:isDragOver?"#dcfce7":isDragging?"#fef9c3":isPU?"#eff6ff":isP?"#fef3c7":"#fafaf9",border:isDragOver?"2px dashed #16a34a":`1px solid ${isPU?"#bfdbfe":isP?"#fde68a":"#e7e5e4"}`,borderRadius:expanded||isImetco?"10px 10px 0 0":10,borderLeft:`4px solid ${isPU?"#2563eb":isP?"#f59e0b":c.accent}`,opacity:isDragging?0.5:1,transition:"background 0.15s,opacity 0.15s"}}>
+style={{display:"flex",alignItems:"center",gap:6,padding:"8px",marginBottom:expanded||isImetco?0:2,background:isDragOver?"#dcfce7":isDragging?"#fef9c3":hasDue?"#fef2f2":isPU?"#eff6ff":isP?"#fef3c7":"#fafaf9",border:isDragOver?"2px dashed #16a34a":`1px solid ${hasDue?"#fca5a5":isPU?"#bfdbfe":isP?"#fde68a":"#e7e5e4"}`,borderRadius:expanded||isImetco?"10px 10px 0 0":10,borderLeft:`4px solid ${isPU?"#2563eb":isP?"#f59e0b":c.accent}`,opacity:isDragging?0.5:1,transition:"background 0.15s,opacity 0.15s"}}>
 <div draggable onDragStart={onDragStart}
 onTouchStart={e=>{e.stopPropagation();onDragStart();}}
 style={{color:isDragging?"#16a34a":"#a8a29e",fontSize:20,cursor:"grab",padding:"4px 4px",touchAction:"none",lineHeight:1,userSelect:"none",flexShrink:0}}>⠿</div>
-<div style={{flex:1,minWidth:0}} onClick={e=>{e.stopPropagation();setExpanded(!expanded);setInstrText(entry.instructions||"");}}>
+<div style={{flex:1,minWidth:0}} onClick={e=>{e.stopPropagation();setExpanded(!expanded);setInstrText(entry.instructions||"");setDueByInput(entry.dueBy||"");}}>
 <div style={{display:"flex",alignItems:"center",gap:4,flexWrap:"wrap"}}>
 <span style={{fontSize:11,fontVariantNumeric:"tabular-nums",color:"#a8a29e"}}>{eIdx+1}.</span>
 {isPU&&<span style={{fontSize:9,background:"#2563eb",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700}}>PICKUP</span>}
 {isP&&<span style={{fontSize:9,background:"#f59e0b",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700}}>PRIORITY</span>}
 {entry.status==="departed"&&<span style={{fontSize:9,background:"#16a34a",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700}}>DONE</span>}
+{hasDue&&<span style={{fontSize:9,background:entry.dueBy.startsWith("After")?"#2563eb":"#dc2626",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700,display:"inline-flex",alignItems:"center",gap:2}}>{"\u23F0"} {entry.dueBy}</span>}
 <span style={{fontSize:12,fontWeight:700,color:"#1c1917"}}>{entry.stop}</span>
 </div>
 <div style={{fontSize:10,color:c.accent,fontWeight:600}}>{entry.customer}</div>
@@ -417,6 +533,7 @@ style={{color:isDragging?"#16a34a":"#a8a29e",fontSize:20,cursor:"grab",padding:"
 {hasI&&!expanded&&<div style={{fontSize:10,color:"#2563eb",marginTop:2}}>📋 {entry.instructions}</div>}
 {!hasI&&!expanded&&<div style={{fontSize:9,color:"#d6d3d1",marginTop:2}}>tap to add instructions</div>}
 {entry.shipPlan&&!expanded&&<div style={{fontSize:10,color:"#ea580c",fontWeight:700,marginTop:1}}>SP# {entry.shipPlan}</div>}
+{entry.weight>0&&!expanded&&<div style={{fontSize:10,color:BRAND.main,fontWeight:700,marginTop:1}}>{entry.weight.toLocaleString()} lbs {(entry.loadNum||1)>1?"(Load "+(entry.loadNum||1)+")":""}</div>}
 </div>
 <span style={{fontSize:11,fontWeight:700,fontVariantNumeric:"tabular-nums",color:"#44403c",whiteSpace:"nowrap"}}>{entry.isHourly?"HR":fmt(entry.baseRate)}</span>
 <div style={{display:"flex",flexDirection:"column",gap:2}}>
@@ -433,10 +550,41 @@ style={{flex:1,maxWidth:120,border:entry.shipPlan?"1px solid #bbf7d0":"1px solid
 <label style={{fontSize:11,fontWeight:600,color:"#57534e",display:"block",marginBottom:4}}>Special instructions / notes</label>
 <textarea value={instrText} onChange={e=>setInstrText(e.target.value)} placeholder="Phone #, gate code, dock info…" rows={2} onClick={e=>e.stopPropagation()}
 style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px",fontSize:13,outline:"none",resize:"vertical",fontFamily:"inherit"}}/>
-<div style={{display:"flex",gap:6,marginTop:6,justifyContent:"flex-end"}}>
-{hasI&&<button onClick={e=>{e.stopPropagation();setInstrText("");onUpdateInstructions("");setExpanded(false);}} style={{background:"#fef2f2",border:"none",borderRadius:6,padding:"5px 10px",cursor:"pointer",fontSize:11,color:"#dc2626",fontWeight:600}}>Clear</button>}
+<div style={{marginTop:8,background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:10,padding:"8px 10px"}}>
+<div style={{display:"flex",gap:4,marginBottom:8}}>
+<button onClick={e=>{e.stopPropagation();setDueType("by");}} style={{flex:1,padding:"6px",borderRadius:6,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,background:dueType==="by"?"#dc2626":"#e7e5e4",color:dueType==="by"?"#fff":"#57534e"}}>{"\u23F0"} Due By</button>
+<button onClick={e=>{e.stopPropagation();setDueType("after");}} style={{flex:1,padding:"6px",borderRadius:6,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,background:dueType==="after"?"#2563eb":"#e7e5e4",color:dueType==="after"?"#fff":"#57534e"}}>Deliver After</button>
+</div>
+<div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+{["8 AM","9 AM","10 AM","11 AM","12 PM","1 PM","2 PM"].map(t=>{const selected=dueByInput===(dueType==="by"?"By "+t:"After "+t);return(
+<button key={t} onClick={e=>{e.stopPropagation();const val=dueType==="by"?"By "+t:"After "+t;setDueByInput(selected?"":val);}}
+style={{padding:"6px 10px",borderRadius:6,border:"none",cursor:"pointer",fontSize:12,fontWeight:700,background:selected?(dueType==="by"?"#dc2626":"#2563eb"):"#fff",color:selected?"#fff":"#1c1917",minWidth:44,textAlign:"center"}}>{t}</button>);})}
+</div>
+{dueByInput&&<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:6}}>
+<span style={{fontSize:12,fontWeight:700,color:dueType==="by"?"#dc2626":"#2563eb"}}>{dueByInput}</span>
+<button onClick={e=>{e.stopPropagation();setDueByInput("");}} style={{background:"#fff",border:"1px solid #d6d3d1",borderRadius:5,padding:"2px 8px",cursor:"pointer",fontSize:10,color:"#78716c"}}>Clear</button>
+</div>}
+</div>
+{/* Weight & Load */}
+<div style={{marginTop:8,background:"#f0f5fa",border:"1px solid "+BRAND.light+"44",borderRadius:10,padding:"8px 10px"}}>
+<div style={{display:"flex",gap:8,alignItems:"center"}}>
+<div style={{flex:1}}>
+<label style={{fontSize:10,fontWeight:600,color:"#57534e",display:"block",marginBottom:3}}>Weight (lbs)</label>
+<input type="number" value={entry.weight||""} onChange={e=>{e.stopPropagation();if(onWeight)onWeight(e.target.value);}} onClick={e=>e.stopPropagation()} placeholder="0"
+style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"6px 10px",fontSize:14,fontWeight:700,outline:"none",textAlign:"center"}}/>
+</div>
+<div style={{flex:1}}>
+<label style={{fontSize:10,fontWeight:600,color:"#57534e",display:"block",marginBottom:3}}>Load #</label>
+<div style={{display:"flex",gap:3}}>
+{[1,2,3].filter(n=>n<=(Math.max(maxLoad||1,entry.loadNum||1)+1)&&n<=3).map(n=><button key={n} onClick={e=>{e.stopPropagation();if(onLoadNum)onLoadNum(n);}} style={{flex:1,padding:"6px",borderRadius:6,border:"none",cursor:"pointer",fontSize:12,fontWeight:700,background:(entry.loadNum||1)===n?BRAND.main:"#e7e5e4",color:(entry.loadNum||1)===n?"#fff":"#57534e"}}>{n}</button>)}
+</div>
+</div>
+</div>
+</div>
+<div style={{display:"flex",gap:6,marginTop:8,justifyContent:"flex-end"}}>
+{hasI&&<button onClick={e=>{e.stopPropagation();setInstrText("");onUpdateInstructions("");setExpanded(false);}} style={{background:"#fef2f2",border:"none",borderRadius:6,padding:"5px 10px",cursor:"pointer",fontSize:11,color:"#dc2626",fontWeight:600}}>Clear All</button>}
 <button onClick={e=>{e.stopPropagation();setExpanded(false);}} style={{background:"#e7e5e4",border:"none",borderRadius:6,padding:"5px 10px",cursor:"pointer",fontSize:11,fontWeight:600}}>Cancel</button>
-<button onClick={e=>{e.stopPropagation();onUpdateInstructions(instrText.trim());setExpanded(false);}} style={{background:"#1c1917",color:"#fff",border:"none",borderRadius:6,padding:"5px 14px",cursor:"pointer",fontSize:11,fontWeight:600}}>Save</button>
+<button onClick={e=>{e.stopPropagation();onUpdateInstructions(instrText.trim());if(onDueBy)onDueBy(dueByInput||null);setExpanded(false);}} style={{background:BRAND.main,color:"#fff",border:"none",borderRadius:6,padding:"5px 14px",cursor:"pointer",fontSize:11,fontWeight:600}}>Save</button>
 </div>
 </div>}
 </div>
@@ -703,6 +851,11 @@ style={{cursor:activeDriver?"pointer":"default"}}>
 {isPickup&&<rect x={xy.x-4} y={xy.y-4} width={8} height={8} fill="#fff" transform={`rotate(45 ${xy.x} ${xy.y})`} opacity={0.9}/>}
 {/* Order number */}
 {order&&<text x={xy.x} y={xy.y+4} textAnchor="middle" fontSize={9} fontWeight={700} fill="#fff" style={{pointerEvents:"none"}}>{order}</text>}
+{/* Due time flag */}
+{s.dueBy&&<g style={{pointerEvents:"none"}}>
+<rect x={xy.x+dotSize} y={xy.y-16} width={40} height={16} rx={4} fill="#dc2626"/>
+<text x={xy.x+dotSize+20} y={xy.y-5} textAnchor="middle" fontSize={8} fontWeight={700} fill="#fff">{"\u23F0 "+s.dueBy}</text>
+</g>}
 </g>
 );})}
 </svg>
@@ -800,31 +953,61 @@ style={{display:"block",width:"calc(100% - 8px)",margin:"12px 4px",background:"#
 function DeliveryListItem({stop,rate,note,addr,curInstr,checked,multiSelect,accent,onCheck,onAdd,onSaveInstr}){
 const[expanded,setExpanded]=useState(false);
 const[instrText,setInstrText]=useState(curInstr||"");
+const[dueVal,setDueVal]=useState("");
+const[dueType,setDueType]=useState("by");
+const[weightVal,setWeightVal]=useState("");
 const hasInstr=curInstr?.trim();
+const HOURS=["8 AM","9 AM","10 AM","11 AM","12 PM","1 PM","2 PM"];
+const dueLabel=dueVal?(dueType==="by"?"By "+dueVal:"After "+dueVal):"";
+const addWithExtras=()=>{onAdd(dueLabel||null,parseFloat(weightVal)||0);setDueVal("");setWeightVal("");};
 return(
 <div style={{marginBottom:6}}>
-<div style={{display:"flex",width:"100%",textAlign:"left",background:checked?"#eff6ff":"#fff",border:checked?"2px solid #2563eb":"1px solid #e7e5e4",borderRadius:expanded?"12px 12px 0 0":12,padding:"12px 16px",borderLeft:`4px solid ${accent}`,alignItems:"center",gap:10}}>
+<div style={{display:"flex",width:"100%",textAlign:"left",background:checked?"#eff6ff":dueLabel?"#fef2f2":"#fff",border:checked?"2px solid #2563eb":dueLabel?"1px solid #fca5a5":"1px solid #e7e5e4",borderRadius:expanded?"12px 12px 0 0":12,padding:"12px 16px",borderLeft:`4px solid ${accent}`,alignItems:"center",gap:10}}>
 {multiSelect&&<div onClick={onCheck} style={{width:22,height:22,borderRadius:6,border:`2px solid ${checked?"#2563eb":"#d6d3d1"}`,background:checked?"#2563eb":"#fff",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:14,fontWeight:700,flexShrink:0,cursor:"pointer"}}>{checked?"✓":""}</div>}
-<div style={{flex:1,minWidth:0,cursor:"pointer"}} onClick={()=>{if(multiSelect){onCheck();}else{onAdd();}}}>
+<div style={{flex:1,minWidth:0,cursor:"pointer"}} onClick={()=>{if(multiSelect){onCheck();}else{addWithExtras();}}}>
 <div style={{fontSize:14,fontWeight:600}}>{stop}</div>
 {addr&&<div style={{fontSize:10,color:"#a8a29e"}}>{addr}</div>}
 {note&&<div style={{fontSize:11,color:"#d97706",marginTop:2}}>{note}</div>}
-{hasInstr&&!expanded&&<div style={{fontSize:10,color:"#2563eb",marginTop:2}}>📋 {curInstr}</div>}
-{!hasInstr&&!expanded&&<div style={{fontSize:9,color:"#d6d3d1",marginTop:2}}>tap 📋 to add instructions</div>}
+{dueLabel&&<div style={{fontSize:10,color:dueType==="by"?"#dc2626":"#2563eb",fontWeight:700,marginTop:2}}>{"\u23F0"} {dueLabel}</div>}
+{weightVal&&<div style={{fontSize:10,color:BRAND.main,fontWeight:700,marginTop:2}}>{parseFloat(weightVal).toLocaleString()} lbs</div>}
+{hasInstr&&!expanded&&<div style={{fontSize:10,color:"#2563eb",marginTop:2}}>{"📋"} {curInstr}</div>}
+{!hasInstr&&!expanded&&!dueLabel&&!weightVal&&<div style={{fontSize:9,color:"#d6d3d1",marginTop:2}}>tap to add</div>}
 </div>
 <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4,flexShrink:0}}>
 <span style={{fontVariantNumeric:"tabular-nums",fontSize:17,fontWeight:700,color:accent}}>{rate?fmt(rate):"Hourly"}</span>
-<button onClick={e=>{e.stopPropagation();setInstrText(curInstr||"");setExpanded(!expanded);}} style={{background:hasInstr?"#eff6ff":"#f5f5f4",border:hasInstr?"1px solid #bfdbfe":"1px solid #e7e5e4",borderRadius:6,padding:"3px 8px",cursor:"pointer",fontSize:10,fontWeight:600,color:hasInstr?"#2563eb":"#a8a29e"}}>📋</button>
+<div style={{display:"flex",gap:3}}>
+<button onClick={e=>{e.stopPropagation();setInstrText(curInstr||"");setExpanded(!expanded);}} style={{background:hasInstr||dueLabel||weightVal?"#eff6ff":"#f5f5f4",border:hasInstr||dueLabel||weightVal?"1px solid #bfdbfe":"1px solid #e7e5e4",borderRadius:6,padding:"3px 6px",cursor:"pointer",fontSize:9,fontWeight:600,color:hasInstr||dueLabel||weightVal?"#2563eb":"#a8a29e"}}>{"⚙"}</button>
+</div>
 </div>
 </div>
 {expanded&&<div style={{padding:"8px 12px 10px",background:"#fff",border:"1px solid #e7e5e4",borderTop:"none",borderRadius:"0 0 12px 12px",borderLeft:`4px solid ${accent}`}}>
 <label style={{fontSize:11,fontWeight:600,color:"#57534e",display:"block",marginBottom:4}}>Instructions for {stop}</label>
-<textarea value={instrText} onChange={e=>setInstrText(e.target.value)} placeholder="Phone #, gate code, dock info, delivery notes…" rows={2}
+<textarea value={instrText} onChange={e=>setInstrText(e.target.value)} placeholder="Phone #, gate code, dock info…" rows={2}
 style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px",fontSize:13,outline:"none",resize:"vertical",fontFamily:"inherit"}}/>
-<div style={{display:"flex",gap:6,marginTop:6,justifyContent:"flex-end"}}>
-{hasInstr&&<button onClick={()=>{setInstrText("");onSaveInstr("");setExpanded(false);}} style={{background:"#fef2f2",border:"none",borderRadius:6,padding:"5px 10px",cursor:"pointer",fontSize:11,color:"#dc2626",fontWeight:600}}>Clear</button>}
+{/* Time constraint */}
+<div style={{marginTop:8,background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:10,padding:"8px 10px"}}>
+<div style={{display:"flex",gap:4,marginBottom:6}}>
+<button onClick={e=>{e.stopPropagation();setDueType("by");}} style={{flex:1,padding:"5px",borderRadius:6,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,background:dueType==="by"?"#dc2626":"#e7e5e4",color:dueType==="by"?"#fff":"#57534e"}}>{"\u23F0"} Due By</button>
+<button onClick={e=>{e.stopPropagation();setDueType("after");}} style={{flex:1,padding:"5px",borderRadius:6,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,background:dueType==="after"?"#2563eb":"#e7e5e4",color:dueType==="after"?"#fff":"#57534e"}}>Deliver After</button>
+</div>
+<div style={{display:"flex",gap:3,flexWrap:"wrap"}}>
+{HOURS.map(t=>{const sel=dueVal===t;return(<button key={t} onClick={e=>{e.stopPropagation();setDueVal(sel?"":t);}} style={{padding:"5px 8px",borderRadius:6,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,background:sel?(dueType==="by"?"#dc2626":"#2563eb"):"#fff",color:sel?"#fff":"#1c1917"}}>{t}</button>);})}
+{dueVal&&<button onClick={e=>{e.stopPropagation();setDueVal("");}} style={{padding:"5px 8px",borderRadius:6,border:"1px solid #d6d3d1",cursor:"pointer",fontSize:10,background:"#fff",color:"#78716c"}}>Clear</button>}
+</div>
+</div>
+{/* Weight */}
+<div style={{marginTop:8,background:"#f0f5fa",border:"1px solid "+BRAND.light+"44",borderRadius:10,padding:"8px 10px"}}>
+<div style={{display:"flex",alignItems:"center",gap:8}}>
+<label style={{fontSize:11,fontWeight:600,color:BRAND.main,flexShrink:0}}>Weight:</label>
+<input type="number" value={weightVal} onChange={e=>setWeightVal(e.target.value)} onClick={e=>e.stopPropagation()} placeholder="lbs"
+style={{flex:1,border:"1px solid #d6d3d1",borderRadius:8,padding:"6px 10px",fontSize:14,fontWeight:700,outline:"none",textAlign:"center",maxWidth:120}}/>
+<span style={{fontSize:11,color:"#78716c"}}>lbs</span>
+{weightVal&&<button onClick={e=>{e.stopPropagation();setWeightVal("");}} style={{background:"#fff",border:"1px solid #d6d3d1",borderRadius:5,padding:"2px 6px",cursor:"pointer",fontSize:10,color:"#78716c"}}>Clear</button>}
+</div>
+</div>
+<div style={{display:"flex",gap:6,marginTop:8,justifyContent:"flex-end"}}>
 <button onClick={()=>setExpanded(false)} style={{background:"#e7e5e4",border:"none",borderRadius:6,padding:"5px 10px",cursor:"pointer",fontSize:11,fontWeight:600}}>Cancel</button>
-<button onClick={()=>{onSaveInstr(instrText.trim());setExpanded(false);}} style={{background:"#1c1917",color:"#fff",border:"none",borderRadius:6,padding:"5px 14px",cursor:"pointer",fontSize:11,fontWeight:600}}>Save</button>
+<button onClick={()=>{onSaveInstr(instrText.trim());setExpanded(false);}} style={{background:BRAND.main,color:"#fff",border:"none",borderRadius:6,padding:"5px 14px",cursor:"pointer",fontSize:11,fontWeight:600}}>Save</button>
 </div>
 </div>}
 </div>
@@ -833,6 +1016,7 @@ style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px
 
 /* ══════════════ DISPATCH APP (owner view) ══════════════ */
 function DispatchApp(){
+const isDesktop=useIsDesktop();
 const[wo,setWo]=useState(0);
 const[sd,setSd]=useState(()=>{const d=new Date().getDay();return d>=1&&d<=5?d-1:0;});
 const[log,setLog]=useState({});
@@ -867,6 +1051,20 @@ const[showChat,setShowChat]=useState(false);
 const[chatMessages,setChatMessages]=useState([]);
 const[chatInput,setChatInput]=useState("");
 const[chatLoading,setChatLoading]=useState(false);
+const[histSearch,setHistSearch]=useState("");
+const[histCustFilter,setHistCustFilter]=useState("");
+const[histDrvFilter,setHistDrvFilter]=useState("");
+const[histWeekRange,setHistWeekRange]=useState(4);
+const[histMode,setHistMode]=useState("deliveries"); /* deliveries | photos | emser */
+const[lightboxPhoto,setLightboxPhoto]=useState(null);
+const[emserShifts,setEmserShifts]=useState({}); /* {dayKey: [{id,driverId,start,end},...]} */
+const[dispNotes,setDispNotes]=useState({});
+const[editingNote,setEditingNote]=useState(false);
+const[noteText,setNoteText]=useState("");
+const[showCustPickup,setShowCustPickup]=useState(false);
+const[custPUFrom,setCustPUFrom]=useState("");
+const[custPUAddr,setCustPUAddr]=useState("");
+const[custPUNote,setCustPUNote]=useState("");
 
 const wd=getWeekDates(wo);const dk=`${wo}-${sd}`;const dl=log[dk]||[];
 const showToast=useCallback(m=>{setToast(m);setTimeout(()=>setToast(null),2000);},[]);
@@ -924,24 +1122,55 @@ useEffect(()=>{
 const addDel=(cust,stop,rate,drvId,ex={})=>{
 const cd=CUSTOMERS[cust];
 const instrForStop=customInstr[stop]!==undefined?customInstr[stop]:getDefaultInstr(stop);
-const entry={id:Date.now()+Math.random(),customer:cust,stop,baseRate:rate,fuelPct:ex.fuelPct||0,isHourly:ex.isHourly||false,note:ex.note||null,driverId:drvId,addr:ex.addr||getAddr(stop),stopType:ex.stopType||"delivery",priority:ex.priority||(cd?.priority)||false,instructions:ex.instructions!==undefined?ex.instructions:instrForStop,status:null,arrivedAt:null,departedAt:null,eta:null,photos:[],signature:null};
+const entry={id:Date.now()+Math.random(),customer:cust,stop,baseRate:rate,fuelPct:ex.fuelPct||0,isHourly:ex.isHourly||false,note:ex.note||null,driverId:drvId,addr:ex.addr||getAddr(stop),stopType:ex.stopType||"delivery",priority:ex.priority||(cd?.priority)||false,instructions:ex.instructions!==undefined?ex.instructions:instrForStop,status:null,arrivedAt:null,departedAt:null,eta:null,photos:[],signature:null,dueBy:ex.dueBy||null,weight:ex.weight||0,loadNum:ex.loadNum||1};
 setLog(p=>({...p,[dk]:[...(p[dk]||[]),entry]}));showToast(`${stop} added`);if(quoteMode)setQuoteMode(null);
 };
 const addMulti=(cust,stops,drvId)=>{
 const cd=CUSTOMERS[cust];
 const newEntries=stops.map(s=>{const isStr=typeof s==="string";const stop=isStr?s:s.s;const rate=isStr?0:s.r;const instrForStop=customInstr[stop]!==undefined?customInstr[stop]:getDefaultInstr(stop);
-return{id:Date.now()+Math.random(),customer:cust,stop,baseRate:rate,fuelPct:(cd.fuel_surcharge&&!cd.fuel_included)?cd.fuel_surcharge:0,isHourly:cd.rate_type==="hourly",note:isStr?null:s.n||null,driverId:drvId,addr:getAddr(stop),stopType:"delivery",priority:cd.priority||false,instructions:instrForStop,status:null,arrivedAt:null,departedAt:null,eta:null,photos:[],signature:null};
+return{id:Date.now()+Math.random(),customer:cust,stop,baseRate:rate,fuelPct:(cd.fuel_surcharge&&!cd.fuel_included)?cd.fuel_surcharge:0,isHourly:cd.rate_type==="hourly",note:isStr?null:s.n||null,driverId:drvId,addr:getAddr(stop),stopType:"delivery",priority:cd.priority||false,instructions:instrForStop,status:null,arrivedAt:null,departedAt:null,eta:null,photos:[],signature:null,dueBy:null,weight:0,loadNum:1};
 });
 setLog(p=>({...p,[dk]:[...(p[dk]||[]),...newEntries]}));showToast(`${stops.length} stops added`);setMultiSelect(false);setMultiChecked([]);
 };
 const rmDel=id=>setLog(p=>({...p,[dk]:(p[dk]||[]).filter(e=>e.id!==id)}));
-const reassign=(eid,did)=>setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,driverId:did}:e)}));
+const reassign=(eid,did)=>{
+const entry=dl.find(e=>e.id===eid);
+const oldDid=entry?.driverId;
+setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,driverId:did}:e)}));
+if(entry&&did>0&&did!==oldDid){
+const newDrv=drivers.find(d=>d.id===did);
+const oldDrv=oldDid?drivers.find(d=>d.id===oldDid):null;
+sendNotificationToDriver(did,"🔄 ROUTE CHANGED\nNew stop added to your route:\n"+entry.stop+(entry.customer?" ("+entry.customer+")":"")+(entry.addr?"\n📍 "+entry.addr:""),"route_change").catch(()=>{});
+if(oldDrv&&oldDid>0)sendNotificationToDriver(oldDid,"🔄 ROUTE CHANGED\nStop removed from your route:\n"+entry.stop+(entry.customer?" ("+entry.customer+")":""),"route_change").catch(()=>{});
+}
+};
 const updateInstructions=(eid,text)=>setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,instructions:text}:e)}));
 const updateStatus=(eid,status)=>{const now=new Date().toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,status,arrivedAt:status==="arrived"?now:e.arrivedAt,departedAt:status==="departed"?now:e.departedAt}:e)}));};
 const addPhoto=(eid,dataUrl)=>setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,photos:[...(e.photos||[]),dataUrl]}:e)}));
 const addSignature=(eid,dataUrl)=>setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,signature:dataUrl}:e)}));
 const setShipPlan=(eid,num)=>setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,shipPlan:num}:e)}));
-const setEta=(eid,mins)=>setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,eta:mins}:e)}));
+const setEta=(eid,mins,dest)=>setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,eta:mins,etaDest:dest||null}:e)}));
+const setDueBy=(eid,time)=>setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,dueBy:time||null}:e)}));
+const setWeight=(eid,w)=>setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,weight:parseFloat(w)||0}:e)}));
+const setLoadNum=(eid,n)=>setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,loadNum:n}:e)}));
+
+/* ── TRUCK WEIGHT LIMITS ── */
+const TRUCK_LIMITS={default:10000,heavy:14000};
+const getLoadWeight=(drvId,loadN)=>dl.filter(e=>e.driverId===drvId&&(e.loadNum||1)===loadN).reduce((s,e)=>s+(e.weight||0),0);
+const getDriverLoads=(drvId)=>{const loads=new Set();dl.filter(e=>e.driverId===drvId).forEach(e=>loads.add(e.loadNum||1));return[...loads].sort((a,b)=>a-b);};
+const getMaxLoad=(drvId)=>{const loads=getDriverLoads(drvId);return loads.length>0?Math.max(...loads):1;};
+const weightPct=(w)=>Math.min((w/TRUCK_LIMITS.default)*100,100);
+const weightColor=(w)=>w>TRUCK_LIMITS.default?"#dc2626":w>TRUCK_LIMITS.default*0.85?"#d97706":"#16a34a";
+
+/* ── EMSER SHIFT HELPERS ── */
+const parseTime=(str)=>{if(!str)return null;const m=str.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);if(!m)return null;let h=parseInt(m[1]);const min=parseInt(m[2]);const ap=m[3];if(ap){if(ap.toUpperCase()==="PM"&&h!==12)h+=12;if(ap.toUpperCase()==="AM"&&h===12)h=0;}return h*60+min;};
+const formatMins=(totalMins)=>{const h=Math.floor(totalMins/60);const m=totalMins%60;return m>0?`${h}h ${m}m`:`${h}h`;};
+const calcShiftMins=(shift)=>{const s=parseTime(shift.start);const e=parseTime(shift.end);if(s===null||e===null||e<=s)return 0;return e-s;};
+const getEmserDayShifts=()=>emserShifts[dk]||[];
+const addEmserShift=(driverId)=>{const shifts=getEmserDayShifts();setEmserShifts(p=>({...p,[dk]:[...shifts,{id:Date.now()+Math.random(),driverId,start:"",end:""}]}));};
+const updateEmserShift=(shiftId,field,val)=>{setEmserShifts(p=>({...p,[dk]:(p[dk]||[]).map(s=>s.id===shiftId?{...s,[field]:val}:s)}));};
+const removeEmserShift=(shiftId)=>{setEmserShifts(p=>({...p,[dk]:(p[dk]||[]).filter(s=>s.id!==shiftId)}));};
+const calcAndApplyEmserHours=useCallback(()=>{const shifts=emserShifts[dk]||[];const totalMins=shifts.reduce((sum,s)=>sum+calcShiftMins(s),0);const hours=Math.round(totalMins/15)*15/60;if(hours>0){setEmH(p=>({...p,[`${dk}-emser`]:hours}));return hours;}return emH[`${dk}-emser`]||4;},[emserShifts,dk,emH]);
 
 const moveInDriver=(drvId,fromIdx,dir)=>{const toIdx=fromIdx+dir;setLog(p=>{const all=[...(p[dk]||[])];const de=all.filter(e=>e.driverId===drvId);const rest=all.filter(e=>e.driverId!==drvId);if(toIdx<0||toIdx>=de.length)return p;[de[fromIdx],de[toIdx]]=[de[toIdx],de[fromIdx]];return{...p,[dk]:[...rest,...de]};});};
 const insertPickup=(drvId,afterIdx)=>{if(!pickupStop)return;const forLabel=pickupForDel?` → ${pickupForDel}`:"";const entry={id:Date.now()+Math.random(),customer:pickupCustomer||"Pickup",stop:`${pickupCustomer||"Pickup"}${forLabel}`,baseRate:0,fuelPct:0,isHourly:false,note:pickupNote||(pickupForDel?`Picking up for ${pickupForDel}`:null),driverId:drvId,addr:pickupAddr||"",stopType:"pickup",priority:false,pickupFrom:pickupStop,pickupFor:pickupForDel,instructions:"",status:null,arrivedAt:null,departedAt:null,eta:null,photos:[],signature:null};setLog(p=>{const all=[...(p[dk]||[])];const de=all.filter(e=>e.driverId===drvId);const rest=all.filter(e=>e.driverId!==drvId);de.splice(afterIdx+1,0,entry);return{...p,[dk]:[...rest,...de]};});setInsertPickupFor(null);setPickupCustomer("");setPickupStop("");setPickupAddr("");setPickupForDel("");setPickupNote("");showToast(`Pickup added`);};
@@ -949,12 +1178,35 @@ const insertPickup=(drvId,afterIdx)=>{if(!pickupStop)return;const forLabel=picku
 const computeDay=key=>{const entries=log[key]||[];let base=0;if(entries.some(e=>e.isHourly))base+=102.50*(emH[`${key}-emser`]||4);const fBC={};entries.forEach(e=>{if(e.isHourly)return;base+=e.baseRate;if(e.fuelPct>0){if(!fBC[e.customer])fBC[e.customer]={pct:e.fuelPct,base:0};fBC[e.customer].base+=e.baseRate;}});let fuel=0;Object.values(fBC).forEach(c=>{fuel+=c.base*c.pct;});return{base,fuel,total:base+fuel,fBC};};
 const dc=computeDay(dk);const wkD=DAYS.map((_,i)=>{const k=`${wo}-${i}`;return{entries:log[k]||[],calc:computeDay(k)};});const wkT=wkD.reduce((s,d)=>s+d.calc.total,0);
 const wkF={};wkD.forEach(d=>{Object.entries(d.calc.fBC).forEach(([c,cf])=>{if(!wkF[c])wkF[c]={pct:cf.pct,base:0};wkF[c].base+=cf.base;});});
+const prevWkD=DAYS.map((_,i)=>{const k=`${wo-1}-${i}`;return{entries:log[k]||[],calc:computeDay(k)};});
+const prevWkT=prevWkD.reduce((s,d)=>s+d.calc.total,0);
+const wowDelta=wkT-prevWkT;
+const wowPct=prevWkT>0?((wowDelta/prevWkT)*100):0;
+const getHistoryEntries=()=>{const all=[];for(let w=wo;w>=wo-histWeekRange;w--){const wdates=getWeekDates(w);for(let d=0;d<5;d++){const k=`${w}-${d}`;(log[k]||[]).forEach(e=>all.push({...e,weekOff:w,dayIdx:d,dayName:DAYS[d],dayDate:wdates[d].date}));}}return all;};
+const histAll=getHistoryEntries();
+const histFiltered=histAll.filter(e=>{const q=histSearch.toLowerCase();return(!q||e.stop.toLowerCase().includes(q)||e.customer.toLowerCase().includes(q)||(e.addr||"").toLowerCase().includes(q))&&(!histCustFilter||e.customer===histCustFilter)&&(!histDrvFilter||e.driverId===Number(histDrvFilter));});
 
 const addDrvr=()=>{if(!newDN.trim()||!newDP.trim()||drivers.length>=4)return;setDrivers(p=>[...p,{id:Date.now(),name:newDN.trim(),phone:newDP.trim()}]);setNewDN("");setNewDP("");};
 const saveDrv=id=>{if(!editNm.trim())return;setDrivers(p=>p.map(d=>d.id===id?{...d,name:editNm.trim(),phone:editPh.trim()}:d));setEditDrv(null);};
 const rmDrv=id=>{if(drivers.length<=1)return;setDrivers(p=>p.filter(d=>d.id!==id));};
 const drvEntries=did=>dl.filter(e=>e.driverId===did);
-const handleDrop=(drvId,toIdx)=>{if(!dragSrc||dragSrc.drvId!==drvId||dragSrc.idx===toIdx){setDragSrc(null);setDragOver(null);return;}setLog(p=>{const all=[...(p[dk]||[])];const de=all.filter(e=>e.driverId===drvId);const rest=all.filter(e=>e.driverId!==drvId);const[moved]=de.splice(dragSrc.idx,1);de.splice(toIdx,0,moved);return{...p,[dk]:[...rest,...de]};});setDragSrc(null);setDragOver(null);};
+const handleDrop=(drvId,toIdx)=>{
+if(!dragSrc){setDragSrc(null);setDragOver(null);return;}
+if(dragSrc.drvId===drvId&&dragSrc.idx===toIdx){setDragSrc(null);setDragOver(null);return;}
+if(dragSrc.drvId===drvId){
+/* Same driver — reorder */
+setLog(p=>{const all=[...(p[dk]||[])];const de=all.filter(e=>e.driverId===drvId);const rest=all.filter(e=>e.driverId!==drvId);const[moved]=de.splice(dragSrc.idx,1);de.splice(toIdx,0,moved);return{...p,[dk]:[...rest,...de]};});
+}else{
+/* Cross-driver — reassign */
+const srcEntries=dl.filter(e=>e.driverId===dragSrc.drvId);
+const entry=srcEntries[dragSrc.idx];
+if(entry){
+reassign(entry.id,drvId);
+showToast("Moved to "+((drivers.find(d=>d.id===drvId))?.name||"driver"));
+}
+}
+setDragSrc(null);setDragOver(null);
+};
 const reorderDriver=(drvId,orderedIds)=>{setLog(p=>{const all=[...(p[dk]||[])];const drvEntries2=all.filter(e=>e.driverId===drvId);const rest=all.filter(e=>e.driverId!==drvId);const ordered=orderedIds.map(id=>drvEntries2.find(e=>e.id===id)).filter(Boolean);const unordered=drvEntries2.filter(e=>!orderedIds.includes(e.id));return{...p,[dk]:[...rest,...ordered,...unordered]};});showToast("Routes applied");};
 const getCustColor=cust=>CC[cust]||CC["One-Off Delivery"];
 
@@ -1078,19 +1330,274 @@ onStatusUpdate={updateStatus} onPhotoUpload={addPhoto} onSignature={addSignature
 );
 }
 
+/* ═══════════════ DESKTOP LAYOUT ═══════════════ */
+if(isDesktop){
+const dkNote=dispNotes[dk]||"";
+const allDriverEntries=drivers.map((drv,di)=>({drv,di,entries:drvEntries(drv.id)}));
+const uaEntries=dl.filter(e=>e.driverId===0);
+const custRevenue={};dl.forEach(e=>{if(!e.isHourly){if(!custRevenue[e.customer])custRevenue[e.customer]=0;custRevenue[e.customer]+=e.baseRate;}});
+if(dl.some(e=>e.isHourly)){custRevenue["Emser Tile"]=(custRevenue["Emser Tile"]||0)+102.50*(emH[`${dk}-emser`]||4);}
+const custRevArr=Object.entries(custRevenue).sort((a,b)=>b[1]-a[1]);
+const maxCustRev=Math.max(...custRevArr.map(c=>c[1]),1);
+const statusCounts={pending:0,arrived:0,departed:0};
+dl.forEach(e=>{if(e.status==="departed")statusCounts.departed++;else if(e.status==="arrived")statusCounts.arrived++;else statusCounts.pending++;});
+
+return(
+<div style={{fontFamily:"'DM Sans',system-ui,sans-serif",background:"#f8f7f5",color:"#1c1917",minHeight:"100vh",display:"flex",flexDirection:"column"}}>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+{toast&&<div style={{position:"fixed",top:20,left:"50%",transform:"translateX(-50%)",background:"#16a34a",color:"#fff",padding:"10px 24px",borderRadius:12,fontWeight:600,fontSize:14,zIndex:1000,boxShadow:"0 8px 32px rgba(22,163,74,0.3)",animation:"slideDown 0.3s ease"}}>{"\u2713 "+toast}</div>}
+
+{/* \u2500\u2500 TOP BAR \u2500\u2500 */}
+<div style={{background:"#f7f7f6",borderBottom:"1px solid #e7e5e4",padding:"8px 28px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+<div style={{display:"flex",alignItems:"center",gap:24}}>
+<img src={LOGO_URI} alt="Davis Delivery Service" style={{height:38,objectFit:"contain"}}/>
+<div style={{display:"flex",gap:3,background:"#fff",borderRadius:10,padding:3,border:"1px solid #e7e5e4"}}>
+<button onClick={()=>setWo(w=>w-1)} style={{background:"transparent",border:"none",color:"#78716c",borderRadius:7,padding:"4px 10px",cursor:"pointer",fontSize:12}}>{"\u25C0"}</button>
+{wd.map((d,i)=>{const cnt=(log[`${wo}-${i}`]||[]).length;return(<button key={i} onClick={()=>setSd(i)} style={{border:"none",borderRadius:7,padding:"6px 14px",cursor:"pointer",background:sd===i?BRAND.main:"transparent",color:sd===i?"#fff":"#78716c",fontSize:12,fontWeight:sd===i?700:500,position:"relative"}}>
+{d.name.slice(0,3)} <span style={{fontSize:10,opacity:0.7}}>{d.date}</span>
+{cnt>0&&<span style={{position:"absolute",top:2,right:4,width:5,height:5,borderRadius:3,background:sd===i?"#fff":"#16a34a"}}/>}
+</button>);})}
+<button onClick={()=>setWo(w=>w+1)} style={{background:"transparent",border:"none",color:"#78716c",borderRadius:7,padding:"4px 10px",cursor:"pointer",fontSize:12}}>{"\u25B6"}</button>
+{wo!==0&&<button onClick={()=>{setWo(0);setSd(()=>{const d=new Date().getDay();return d>=1&&d<=5?d-1:0;});}} style={{background:"#16a34a",border:"none",borderRadius:7,padding:"4px 14px",cursor:"pointer",fontSize:11,fontWeight:600,color:"#fff",marginLeft:2}}>Today</button>}
+</div>
+</div>
+<div style={{display:"flex",alignItems:"center",gap:10}}>
+<button onClick={()=>setShowChat(true)} style={{background:BRAND.main,border:"none",color:"#fff",borderRadius:8,padding:"7px 16px",cursor:"pointer",fontSize:12,fontWeight:600}}>{"\uD83E\uDD16 AI"}</button>
+<button onClick={()=>setShowDM(true)} style={{background:"#fff",border:"1px solid #e7e5e4",color:"#57534e",borderRadius:8,padding:"7px 16px",cursor:"pointer",fontSize:12,fontWeight:600}}>Drivers</button>
+<div style={{background:"#f0fdf4",border:"1px solid #bbf7d0",color:"#16a34a",padding:"7px 18px",borderRadius:10,fontSize:16,fontWeight:700,fontVariantNumeric:"tabular-nums"}}>{fmt(dc.total)}<span style={{fontSize:10,opacity:0.6,marginLeft:4}}>today</span></div>
+<div style={{background:"#fff",border:"1px solid #e7e5e4",color:"#57534e",padding:"7px 18px",borderRadius:10,fontSize:16,fontWeight:700,fontVariantNumeric:"tabular-nums"}}>{fmt(wkT)}<span style={{fontSize:10,opacity:0.6,marginLeft:4}}>week</span></div>
+</div>
+</div>
+
+{/* \u2500\u2500 MAIN 3-COLUMN \u2500\u2500 */}
+<div style={{flex:1,display:"grid",gridTemplateColumns:"minmax(240px,1fr) minmax(300px,2fr) minmax(240px,1fr)",gap:0,overflow:"hidden"}}>
+
+{/* LEFT \u2500 Kanban Manifests */}
+<div style={{background:"#fff",borderRight:"1px solid #e7e5e4",overflowY:"auto",padding:"16px"}}>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+<h2 style={{margin:0,fontSize:15,fontWeight:700}}>Manifests</h2>
+<button onClick={()=>{setView("add");setSelCust(null);setQuoteMode(null);}} style={{background:"#16a34a",border:"none",borderRadius:6,padding:"5px 14px",cursor:"pointer",fontSize:11,fontWeight:600,color:"#fff"}}>+ Add</button>
+</div>
+
+{dkNote&&<div style={{background:"#faf5ff",border:"1px solid #d8b4fe",borderRadius:10,padding:"8px 12px",marginBottom:12}}>
+<div style={{fontSize:9,fontWeight:700,color:"#7c3aed",textTransform:"uppercase"}}>Notes</div>
+<div style={{fontSize:12,color:"#57534e",whiteSpace:"pre-wrap",marginTop:2}}>{dkNote}</div>
+</div>}
+
+{allDriverEntries.map(({drv,di,entries:de})=>(
+<div key={drv.id} style={{marginBottom:12}}>
+<div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 12px",background:"#f5f5f4",borderRadius:"10px 10px 0 0",borderLeft:`3px solid ${DCOL[di]}`}}>
+<div style={{display:"flex",alignItems:"center",gap:8}}>
+<div style={{width:24,height:24,borderRadius:8,background:DCOL[di],display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,color:"#fff",fontWeight:700}}>{drv.name.charAt(0)}</div>
+<span style={{fontSize:13,fontWeight:700}}>{drv.name}</span>
+<span style={{fontSize:11,color:"#a8a29e"}}>({de.length})</span>
+</div>
+<div style={{display:"flex",gap:3}}>
+<button onClick={()=>{setNotifyDriver(drv.id);setNotifyCustomMsg("");}} style={{background:"#fef3c7",border:"none",borderRadius:5,padding:"3px 8px",cursor:"pointer",fontSize:10,color:"#92400e",fontWeight:600}}>Notify</button>
+<button onClick={()=>{setPreAssignDriver(drv.id);setView("add");setSelCust(null);setQuoteMode(null);}} style={{background:"#dcfce7",border:"none",borderRadius:5,padding:"3px 8px",cursor:"pointer",fontSize:10,color:"#16a34a",fontWeight:600}}>+</button>
+</div>
+</div>
+<div style={{background:"#fafaf9",border:"1px solid #e7e5e4",borderTop:"none",borderRadius:"0 0 10px 10px",padding:de.length?"6px 6px 2px":"8px 10px",minHeight:40}}>
+{de.length===0&&<div style={{fontSize:11,color:"#a8a29e",textAlign:"center",padding:4}}>No stops</div>}
+{de.map((entry,eIdx)=>{const c=CC[entry.customer]||CC["One-Off Delivery"];const isPU=entry.stopType==="pickup";const done=entry.status==="departed";const onSite=entry.status==="arrived";const hasDue=!!entry.dueBy;
+return(<div key={entry.id} style={{background:done?"#f0fdf4":onSite?"#fffbeb":hasDue?"#fef2f2":"#fff",border:`1px solid ${done?"#bbf7d0":onSite?"#fde68a":hasDue?"#fca5a5":"#e7e5e4"}`,borderRadius:8,padding:"8px 10px",marginBottom:4,borderLeft:`3px solid ${isPU?"#2563eb":c.accent}`,opacity:done?0.6:1}}>
+<div style={{display:"flex",alignItems:"center",gap:4,marginBottom:2}}>
+<span style={{fontSize:10,color:"#a8a29e",fontVariantNumeric:"tabular-nums"}}>{eIdx+1}.</span>
+{isPU&&<span style={{fontSize:8,background:"#2563eb",color:"#fff",padding:"1px 4px",borderRadius:2,fontWeight:700}}>PU</span>}
+{done&&<span style={{fontSize:8,background:"#16a34a",color:"#fff",padding:"1px 4px",borderRadius:2,fontWeight:700}}>DONE</span>}
+{onSite&&!done&&<span style={{fontSize:8,background:"#f59e0b",color:"#fff",padding:"1px 4px",borderRadius:2,fontWeight:700}}>ON SITE</span>}
+{hasDue&&<span style={{fontSize:8,background:entry.dueBy.startsWith("After")?"#2563eb":"#dc2626",color:"#fff",padding:"1px 4px",borderRadius:2,fontWeight:700,display:"inline-flex",alignItems:"center",gap:1}}>{"\u23F0"}{entry.dueBy}</span>}
+<span style={{fontSize:11,fontWeight:600,color:"#1c1917",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{entry.stop}</span>
+</div>
+<div style={{fontSize:10,color:c.accent}}>{entry.customer}</div>
+{entry.shipPlan&&<div style={{fontSize:9,color:"#ea580c",marginTop:1}}>SP# {entry.shipPlan}</div>}
+</div>);})}
+</div>
+</div>
+))}
+
+{uaEntries.length>0&&<div style={{marginBottom:12}}>
+<div style={{padding:"8px 12px",background:"#f5f5f4",borderRadius:"10px 10px 0 0",borderLeft:"3px solid #a8a29e"}}>
+<span style={{fontSize:13,fontWeight:700,color:"#78716c"}}>Unassigned ({uaEntries.length})</span>
+</div>
+<div style={{background:"#fafaf9",border:"1px solid #e7e5e4",borderTop:"none",borderRadius:"0 0 10px 10px",padding:"6px 6px 2px"}}>
+{uaEntries.map(entry=>{const c=CC[entry.customer]||CC["One-Off Delivery"];return(
+<div key={entry.id} style={{background:"#fff",border:"1px solid #e7e5e4",borderRadius:8,padding:"8px 10px",marginBottom:4,borderLeft:`3px solid ${c.accent}`}}>
+<div style={{fontSize:11,fontWeight:600}}>{entry.stop}</div>
+<div style={{fontSize:10,color:c.accent}}>{entry.customer}</div>
+<select value={entry.driverId} onChange={e=>reassign(entry.id,Number(e.target.value))} style={{marginTop:4,background:"#f5f5f4",border:"1px solid #e7e5e4",borderRadius:5,padding:"3px 6px",fontSize:10,color:"#57534e",cursor:"pointer"}}>
+<option value={0}>Assign...</option>{drivers.map(dd=><option key={dd.id} value={dd.id}>{dd.name}</option>)}
+</select>
+</div>);})}
+</div>
+</div>}
+</div>
+
+{/* CENTER \u2500 Map + Revenue */}
+<div style={{background:"#f8f7f5",overflowY:"auto",display:"flex",flexDirection:"column"}}>
+
+<div style={{padding:"16px 20px 0"}}>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+<h2 style={{margin:0,fontSize:15,fontWeight:700}}>Live Routes</h2>
+<div style={{display:"flex",gap:10}}>
+{drivers.map((d,di)=><div key={d.id} style={{display:"flex",alignItems:"center",gap:4}}>
+<div style={{width:8,height:8,borderRadius:4,background:DCOL[di]}}/>
+<span style={{fontSize:10,color:"#78716c"}}>{d.name.split(" ")[0]}</span>
+</div>)}
+</div>
+</div>
+</div>
+{(()=>{
+const stopsWithCoords2=dl.map(e=>{const addr=e.addr||getAddr(e.stop);const coords=getCoords(addr);return coords?{...e,coords}:null;}).filter(Boolean);
+if(stopsWithCoords2.length===0)return(<div style={{margin:"0 20px",background:"#fff",borderRadius:14,padding:"60px 20px",textAlign:"center",border:"1px solid #e7e5e4"}}><div style={{fontSize:36,marginBottom:8}}>{"\uD83D\uDDFA\uFE0F"}</div><div style={{fontSize:14,color:"#a8a29e"}}>Add stops to see routes on the map</div></div>);
+const allC=stopsWithCoords2.map(s=>s.coords);
+const mnLat=Math.min(...allC.map(c=>c.lat))-0.015;const mxLat=Math.max(...allC.map(c=>c.lat))+0.015;
+const mnLng=Math.min(...allC.map(c=>c.lng))-0.015;const mxLng=Math.max(...allC.map(c=>c.lng))+0.015;
+const mW=700;const mH=380;
+const toXY2=coords=>({x:((coords.lng-mnLng)/(mxLng-mnLng))*mW,y:((mxLat-coords.lat)/(mxLat-mnLat))*mH});
+const drvRoutes={};drivers.forEach(d=>{drvRoutes[d.id]=stopsWithCoords2.filter(s=>s.driverId===d.id);});
+return(
+<div style={{margin:"0 20px",background:"#fff",borderRadius:14,overflow:"hidden",border:"1px solid #e7e5e4",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}>
+<svg width="100%" height={mH} viewBox={`0 0 ${mW} ${mH}`} style={{display:"block"}}>
+<rect width={mW} height={mH} fill="#fafaf9"/>
+{Array.from({length:30}).map((_,i)=><line key={"h"+i} x1={0} y1={i*14} x2={mW} y2={i*14} stroke="#f5f5f4" strokeWidth={0.5}/>)}
+{Array.from({length:50}).map((_,i)=><line key={"v"+i} x1={i*14} y1={0} x2={i*14} y2={mH} stroke="#f5f5f4" strokeWidth={0.5}/>)}
+{drivers.map((drv,di)=>{const pts=drvRoutes[drv.id].map(s=>toXY2(s.coords));if(pts.length<2)return null;return(<polyline key={drv.id} points={pts.map(p=>p.x+","+p.y).join(" ")} fill="none" stroke={DCOL[di]} strokeWidth={2.5} strokeLinejoin="round" strokeLinecap="round" opacity={0.5} strokeDasharray="8 4"/>);})}
+{stopsWithCoords2.map(s=>{const xy=toXY2(s.coords);const di=drivers.findIndex(d=>d.id===s.driverId);const col=di>=0?DCOL[di]:(CC[s.customer]||CC["One-Off Delivery"]).accent;const done=s.status==="departed";const onSite=s.status==="arrived";const isPU=s.stopType==="pickup";const sz=done?5:onSite?9:7;
+return(<g key={s.id}>
+{onSite&&!done&&<circle cx={xy.x} cy={xy.y} r={14} fill="none" stroke="#f59e0b" strokeWidth={1.5} opacity={0.4}><animate attributeName="r" from="8" to="16" dur="1.5s" repeatCount="indefinite"/><animate attributeName="opacity" from="0.6" to="0" dur="1.5s" repeatCount="indefinite"/></circle>}
+<circle cx={xy.x} cy={xy.y} r={sz} fill={done?"#d6d3d1":col} stroke="#fff" strokeWidth={2}/>
+{isPU&&<rect x={xy.x-3} y={xy.y-3} width={6} height={6} fill="#fff" transform={`rotate(45 ${xy.x} ${xy.y})`} opacity={0.8}/>}
+<title>{s.stop+" ("+s.customer+")"}</title>
+{s.dueBy&&<g><rect x={xy.x+sz+2} y={xy.y-14} width={42} height={14} rx={3} fill="#dc2626"/><text x={xy.x+sz+23} y={xy.y-4} textAnchor="middle" fontSize={8} fontWeight={700} fill="#fff">{"\u23F0 "+s.dueBy}</text></g>}
+</g>);})}
+</svg>
+</div>);
+})()}
+
+{/* Revenue Dashboard */}
+<div style={{padding:"16px 20px"}}>
+<h2 style={{margin:"0 0 12px",fontSize:15,fontWeight:700}}>Today's Revenue</h2>
+<div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:16}}>
+<div style={{background:"#fff",borderRadius:12,padding:"14px 16px",textAlign:"center",border:"1px solid #e7e5e4"}}>
+<div style={{fontSize:10,color:"#a8a29e",textTransform:"uppercase",marginBottom:4}}>Deliveries</div>
+<div style={{fontSize:24,fontWeight:800,fontVariantNumeric:"tabular-nums"}}>{dl.length}</div>
+</div>
+<div style={{background:"#f0fdf4",borderRadius:12,padding:"14px 16px",textAlign:"center",border:"1px solid #bbf7d0"}}>
+<div style={{fontSize:10,color:"#16a34a",textTransform:"uppercase",marginBottom:4}}>Completed</div>
+<div style={{fontSize:24,fontWeight:800,color:"#16a34a",fontVariantNumeric:"tabular-nums"}}>{statusCounts.departed}</div>
+</div>
+<div style={{background:"#fffbeb",borderRadius:12,padding:"14px 16px",textAlign:"center",border:"1px solid #fde68a"}}>
+<div style={{fontSize:10,color:"#d97706",textTransform:"uppercase",marginBottom:4}}>In Progress</div>
+<div style={{fontSize:24,fontWeight:800,color:"#d97706",fontVariantNumeric:"tabular-nums"}}>{statusCounts.arrived}</div>
+</div>
+</div>
+
+{custRevArr.length>0&&<div style={{background:"#fff",borderRadius:14,padding:16,border:"1px solid #e7e5e4"}}>
+<div style={{fontSize:11,fontWeight:700,color:"#a8a29e",textTransform:"uppercase",marginBottom:12}}>Revenue by Customer</div>
+{custRevArr.map(([cust,rev])=>{const c=CC[cust]||CC["One-Off Delivery"];return(
+<div key={cust} style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
+<div style={{width:100,fontSize:11,fontWeight:600,color:c.accent,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flexShrink:0}}>{cust}</div>
+<div style={{flex:1,height:22,background:"#f5f5f4",borderRadius:6,overflow:"hidden"}}>
+<div style={{height:"100%",width:(rev/maxCustRev*100)+"%",background:c.accent,borderRadius:6,opacity:0.8,transition:"width 0.5s"}}/>
+</div>
+<div style={{width:70,textAlign:"right",fontSize:12,fontWeight:700,fontVariantNumeric:"tabular-nums",flexShrink:0}}>{fmt(rev)}</div>
+</div>);})}
+</div>}
+
+<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginTop:12}}>
+<div style={{background:"#f0fdf4",borderRadius:14,padding:"14px 16px",border:"1px solid #bbf7d0"}}>
+<div style={{fontSize:10,color:"#16a34a",textTransform:"uppercase",marginBottom:6}}>This Week</div>
+<div style={{fontSize:22,fontWeight:800,color:"#16a34a",fontVariantNumeric:"tabular-nums"}}>{fmt(wkT)}</div>
+</div>
+<div style={{background:"#fff",borderRadius:14,padding:"14px 16px",border:"1px solid #e7e5e4"}}>
+<div style={{fontSize:10,color:"#78716c",textTransform:"uppercase",marginBottom:6}}>vs Last Week</div>
+<div style={{fontSize:22,fontWeight:800,color:wowDelta>=0?"#16a34a":"#dc2626",fontVariantNumeric:"tabular-nums"}}>{wowDelta>=0?"+":""}{prevWkT>0?fmt(wowDelta):"\u2014"}</div>
+{prevWkT>0&&<div style={{fontSize:11,color:wowDelta>=0?"#16a34a":"#dc2626",marginTop:2}}>{wowPct>=0?"+":""}{wowPct.toFixed(1)}%</div>}
+</div>
+</div>
+</div>
+</div>
+
+{/* RIGHT \u2500 Daily Log */}
+<div style={{background:"#fff",borderLeft:"1px solid #e7e5e4",overflowY:"auto",padding:16}}>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+<h2 style={{margin:0,fontSize:15,fontWeight:700}}>Daily Log</h2>
+<div style={{display:"flex",alignItems:"center",gap:8}}>
+<button onClick={printDailyLog} style={{background:"#f5f5f4",border:"1px solid #e7e5e4",borderRadius:6,padding:"4px 10px",cursor:"pointer",fontSize:10,fontWeight:600,color:"#78716c"}}>Print</button>
+<span style={{fontVariantNumeric:"tabular-nums",fontSize:16,fontWeight:700,color:"#16a34a"}}>{fmt(dc.total)}</span>
+</div>
+</div>
+
+{dl.some(e=>e.isHourly)&&<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:10,padding:"10px 14px",marginBottom:12}}>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+<span style={{fontSize:12,color:"#2563eb",fontWeight:600}}>Emser Hours</span>
+<span style={{fontSize:14,fontWeight:700,fontVariantNumeric:"tabular-nums"}}>{fmt(102.50*(emH[`${dk}-emser`]||4))}</span>
+</div>
+<div style={{display:"flex",gap:3,marginTop:6}}>
+{[4,5,6,7,8,9,10].map(h=><button key={h} onClick={()=>setEmH(p=>({...p,[`${dk}-emser`]:h}))} style={{width:28,height:26,borderRadius:6,border:"none",cursor:"pointer",fontSize:12,fontWeight:600,background:(emH[`${dk}-emser`]||4)===h?"#2563eb":"#e7e5e4",color:(emH[`${dk}-emser`]||4)===h?"#fff":"#78716c"}}>{h}</button>)}
+</div>
+</div>}
+
+{dl.length===0?<div style={{textAlign:"center",padding:"40px 20px",color:"#a8a29e"}}><div style={{fontSize:28,marginBottom:8}}>{"\uD83D\uDE9A"}</div><div style={{fontSize:13}}>No deliveries yet</div></div>
+:dl.map(entry=>{const c=getCustColor(entry.customer);const drv=drivers.find(d=>d.id===entry.driverId);const di=drivers.findIndex(d=>d.id===entry.driverId);return(
+<div key={entry.id} style={{background:"#fafaf9",borderRadius:10,padding:"10px 14px",marginBottom:6,borderLeft:`3px solid ${entry.priority?"#f59e0b":entry.stopType==="pickup"?"#2563eb":c.accent}`,border:"1px solid #e7e5e4"}}>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+<div style={{flex:1,minWidth:0}}>
+<div style={{display:"flex",alignItems:"center",gap:6,marginBottom:2,flexWrap:"wrap"}}>
+<span style={{fontSize:10,fontWeight:600,color:c.accent,textTransform:"uppercase"}}>{entry.customer}</span>
+{entry.stopType==="pickup"&&<span style={{fontSize:8,background:"#2563eb",color:"#fff",padding:"1px 4px",borderRadius:2,fontWeight:700}}>PU</span>}
+{entry.dueBy&&<span style={{fontSize:8,background:entry.dueBy.startsWith("After")?"#2563eb":"#dc2626",color:"#fff",padding:"1px 4px",borderRadius:2,fontWeight:700,display:"inline-flex",alignItems:"center",gap:1}}>{"\u23F0"}{entry.dueBy}</span>}
+{drv&&<span style={{fontSize:9,background:DCOL[di]||"#78716c",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:600}}>{drv.name.split(" ")[0]}</span>}
+</div>
+<div style={{fontSize:13,fontWeight:600}}>{entry.stop}</div>
+{entry.addr&&<div style={{fontSize:10,color:"#a8a29e",marginTop:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{entry.addr}</div>}
+</div>
+<div style={{fontSize:14,fontWeight:700,fontVariantNumeric:"tabular-nums",flexShrink:0,marginLeft:8}}>{entry.isHourly?"HR":fmt(entry.baseRate)}</div>
+</div>
+</div>);})}
+
+{Object.keys(dc.fBC).length>0&&<div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:10,padding:"10px 14px",marginTop:8}}>
+<div style={{fontSize:10,fontWeight:700,color:"#d97706",textTransform:"uppercase",marginBottom:6}}>Fuel Surcharges</div>
+{Object.entries(dc.fBC).map(([cu,cf])=><div key={cu} style={{display:"flex",justifyContent:"space-between",padding:"3px 0"}}>
+<span style={{fontSize:12,color:"#92400e"}}>{cu} <span style={{fontSize:10,color:"#a8a29e"}}>{Math.round(cf.pct*100)}%</span></span>
+<span style={{fontSize:12,fontWeight:700,color:"#d97706",fontVariantNumeric:"tabular-nums"}}>{fmt(cf.base*cf.pct)}</span>
+</div>)}
+</div>}
+
+<div style={{display:"flex",justifyContent:"space-between",padding:"12px 0 0",borderTop:"2px solid #e7e5e4",marginTop:12}}>
+<span style={{fontSize:14,fontWeight:700,color:"#78716c"}}>Day Total</span>
+<span style={{fontSize:18,fontWeight:800,color:"#16a34a",fontVariantNumeric:"tabular-nums"}}>{fmt(dc.total)}</span>
+</div>
+</div>
+</div>
+
+{showDM&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:100,display:"flex",alignItems:"center",justifyContent:"center",padding:20}} onClick={()=>{setShowDM(false);setEditDrv(null);}}>
+<div style={{background:"#fff",borderRadius:20,padding:24,width:"100%",maxWidth:420}} onClick={e=>e.stopPropagation()}>
+<div style={{display:"flex",justifyContent:"space-between",marginBottom:16}}><h3 style={{margin:0,fontSize:18,fontWeight:700}}>Manage Drivers</h3><button onClick={()=>{setShowDM(false);setEditDrv(null);}} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:"#78716c"}}>{"\u2715"}</button></div>
+{drivers.map((d,i)=><div key={d.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 0",borderBottom:"1px solid #f5f5f4"}}><div style={{width:12,height:12,borderRadius:4,background:DCOL[i]||"#78716c"}}/><div style={{flex:1}}><div style={{fontSize:15,fontWeight:600}}>{d.name}</div>{d.phone&&<div style={{fontSize:11,color:"#78716c"}}>{d.phone}</div>}</div></div>)}
+</div>
+</div>}
+
+<style>{`@keyframes slideDown{from{transform:translate(-50%,-20px);opacity:0}to{transform:translate(-50%,0);opacity:1}}button:active{transform:scale(0.98)}*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:#f5f5f4}::-webkit-scrollbar-thumb{background:#d6d3d1;border-radius:3px}::-webkit-scrollbar-thumb:hover{background:#a8a29e}`}</style>
+</div>
+);
+}
+/* ═══════════════ END DESKTOP ═══════════════ */
+
 return(
 <div style={{fontFamily:"'DM Sans',system-ui,sans-serif",background:"#f5f5f4",color:"#1c1917",minHeight:"100vh",maxWidth:480,margin:"0 auto"}}>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet"/>
 {toast&&<div style={{position:"fixed",top:20,left:"50%",transform:"translateX(-50%)",background:"#16a34a",color:"#fff",padding:"10px 24px",borderRadius:12,fontWeight:600,fontSize:14,zIndex:999,boxShadow:"0 8px 32px rgba(22,163,74,0.3)",animation:"slideDown 0.3s ease"}}>✓ {toast}</div>}
 
 {/* HEADER */}
-<div style={{background:"#1c1917",color:"#fff",padding:"16px 20px 12px"}}>
+<div style={{background:BRAND.dark,color:"#fff",padding:"16px 20px 12px"}}>
 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
-<div><h1 style={{margin:0,fontSize:20,fontWeight:700}}>DAVIS DELIVERY</h1><p style={{margin:0,fontSize:11,color:"#a8a29e",letterSpacing:"0.08em"}}>DISPATCH & DELIVERY</p></div>
+<img src={LOGO_WHITE} alt="Davis Delivery" style={{height:28,objectFit:"contain"}}/>
 <div style={{display:"flex",gap:8,alignItems:"center"}}>
 <button onClick={()=>setShowChat(true)} style={{background:"#d97706",border:"none",color:"#fff",borderRadius:8,padding:"6px 10px",cursor:"pointer",fontSize:12,fontWeight:600}}>AI</button>
 <button onClick={()=>setShowDM(true)} style={{background:"#292524",border:"1px solid #44403c",color:"#d6d3d1",borderRadius:8,padding:"6px 10px",cursor:"pointer",fontSize:12,fontWeight:600}}>Drivers</button>
-<div style={{background:"#16a34a",color:"#fff",padding:"6px 14px",borderRadius:8,fontSize:13,fontWeight:700,fontVariantNumeric:"tabular-nums"}}>{fmt(wkT)}<span style={{fontSize:10,opacity:0.7,marginLeft:3}}>wk</span></div>
+<div style={{background:BRAND.main,color:"#fff",padding:"6px 14px",borderRadius:8,fontSize:13,fontWeight:700,fontVariantNumeric:"tabular-nums"}}>{fmt(wkT)}<span style={{fontSize:10,opacity:0.7,marginLeft:3}}>wk</span></div>
 </div>
 </div>
 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
@@ -1104,15 +1611,15 @@ return(
 </div>
 {showDatePicker&&<div style={{background:"#292524",borderRadius:10,padding:"10px 14px",marginBottom:10,display:"flex",alignItems:"center",gap:8}}><span style={{fontSize:12,color:"#a8a29e"}}>Jump to:</span><input type="date" onChange={e=>{if(e.target.value)jumpToDate(e.target.value);}} style={{flex:1,background:"#1c1917",border:"1px solid #44403c",borderRadius:8,padding:"8px 12px",color:"#f5f5f4",fontSize:14,outline:"none",colorScheme:"dark"}}/><button onClick={()=>setShowDatePicker(false)} style={{background:"#44403c",border:"none",borderRadius:6,padding:"6px 10px",cursor:"pointer",fontSize:11,color:"#d6d3d1"}}>✕</button></div>}
 <div style={{display:"flex",gap:4}}>
-{wd.map((d,i)=>{const cnt=(log[`${wo}-${i}`]||[]).length;return(<button key={i} onClick={()=>{setSd(i);setView("manifest");}} style={{flex:1,border:"none",borderRadius:10,padding:"8px 2px 6px",cursor:"pointer",background:sd===i?"#f5f5f4":"#292524",color:sd===i?"#1c1917":"#78716c"}}><div style={{fontSize:10,fontWeight:600}}>{d.name.slice(0,3).toUpperCase()}</div><div style={{fontSize:11,fontVariantNumeric:"tabular-nums",marginTop:2}}>{d.date}</div>{cnt>0&&<div style={{width:6,height:6,borderRadius:3,background:sd===i?"#1c1917":"#16a34a",margin:"4px auto 0"}}/>}</button>);})}
+{wd.map((d,i)=>{const cnt=(log[`${wo}-${i}`]||[]).length;return(<button key={i} onClick={()=>{setSd(i);setView("manifest");}} style={{flex:1,border:"none",borderRadius:10,padding:"8px 2px 6px",cursor:"pointer",background:sd===i?"#fff":BRAND.dark+"dd",color:sd===i?BRAND.main:"#93c5fd"}}><div style={{fontSize:10,fontWeight:600}}>{d.name.slice(0,3).toUpperCase()}</div><div style={{fontSize:11,fontVariantNumeric:"tabular-nums",marginTop:2}}>{d.date}</div>{cnt>0&&<div style={{width:6,height:6,borderRadius:3,background:sd===i?"#1c1917":"#16a34a",margin:"4px auto 0"}}/>}</button>);})}
 </div>
 </div>
 
 {/* TABS */}
 <div style={{display:"flex",gap:5,padding:"12px 16px",background:"#e7e5e4",borderBottom:"1px solid #d6d3d1"}}>
-{[{k:"manifest",l:"Manifests"},{k:"routes",l:"Routes"},{k:"daily",l:"Daily"},{k:"weekly",l:"Weekly"},{k:"add",l:"+ Add"}].map(v=>
-<button key={v.k} onClick={()=>{setView(v.k);setSelCust(null);setSelStop(null);setQuoteMode(null);setInsertPickupFor(null);setMultiSelect(false);setMultiChecked([]);if(v.k!=="add")setPreAssignDriver(null);}}
-style={{flex:1,border:v.k==="add"?"2px solid #16a34a":v.k==="routes"?"2px solid #d97706":"1px solid #d6d3d1",borderRadius:10,padding:"9px 4px",cursor:"pointer",fontSize:12,fontWeight:600,background:view===v.k?(v.k==="add"?"#16a34a":v.k==="routes"?"#d97706":"#1c1917"):"#fff",color:view===v.k?"#fff":v.k==="add"?"#16a34a":v.k==="routes"?"#d97706":"#57534e"}}>{v.l}</button>
+{[{k:"manifest",l:"Manifests"},{k:"routes",l:"Routes"},{k:"daily",l:"Daily"},{k:"weekly",l:"Weekly"},{k:"history",l:"History"},{k:"add",l:"+ Add"}].map(v=>
+<button key={v.k} onClick={()=>{setView(v.k);setSelCust(null);setSelStop(null);setQuoteMode(null);setInsertPickupFor(null);setMultiSelect(false);setMultiChecked([]);setShowCustPickup(false);if(v.k!=="add")setPreAssignDriver(null);}}
+style={{flex:1,border:v.k==="add"?"2px solid #16a34a":v.k==="routes"?"2px solid #d97706":v.k==="history"?"2px solid #7c3aed":"1px solid #d6d3d1",borderRadius:10,padding:"9px 2px",cursor:"pointer",fontSize:11,fontWeight:600,background:view===v.k?(v.k==="add"?"#16a34a":v.k==="routes"?"#d97706":v.k==="history"?"#7c3aed":BRAND.main):"#fff",color:view===v.k?"#fff":v.k==="add"?"#16a34a":v.k==="routes"?"#d97706":v.k==="history"?"#7c3aed":"#57534e"}}>{v.l}</button>
 )}
 </div>
 
@@ -1153,7 +1660,7 @@ style={{flex:1,border:v.k==="add"?"2px solid #16a34a":v.k==="routes"?"2px solid 
 {insertPickupFor&&(()=>{
 const handleSelect=src=>{setPickupCustomer(src.customer);setPickupStop(src.label);setPickupAddr(src.addr);};
 const allStops=new Set();Object.values(CUSTOMERS).forEach(cd=>(cd.deliveries||[]).forEach(d=>{allStops.add(typeof d==="string"?d:d.s);}));
-const remaining=[...allStops].filter(s=>!SHARED_STOPS.includes(s)&&s!=="Transfer"&&s!=="Drop Ship Liftgate").sort();
+const remaining=[...allStops].filter(s=>!SHARED_STOPS.includes(s)&&!s.startsWith("Transfer")&&s!=="Drop Ship Liftgate").sort();
 return(
 <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:100,display:"flex",alignItems:"flex-start",justifyContent:"center",padding:20,paddingTop:40,overflowY:"auto"}}>
 <div style={{background:"#fff",borderRadius:20,padding:24,width:"100%",maxWidth:400}}>
@@ -1162,7 +1669,7 @@ return(
 <div style={{maxHeight:180,overflowY:"auto",marginBottom:12,border:"1px solid #e7e5e4",borderRadius:12,padding:4}}>
 {PICKUP_SOURCES.map((src,i)=><button key={i} onClick={()=>handleSelect(src)} style={{display:"block",width:"100%",textAlign:"left",padding:"8px 12px",marginBottom:2,borderRadius:8,cursor:"pointer",background:pickupStop===src.label?"#eff6ff":"#fafaf9",border:pickupStop===src.label?"2px solid #2563eb":"1px solid transparent"}}><div style={{fontSize:13,fontWeight:600}}>{src.label}</div><div style={{fontSize:10,color:"#a8a29e"}}>{src.addr}</div></button>)}
 </div>
-<details style={{marginBottom:12}}><summary style={{fontSize:13,fontWeight:600,color:"#2563eb",cursor:"pointer",padding:"4px 0"}}>Manual Entry</summary><div style={{display:"flex",flexDirection:"column",gap:6,marginTop:8}}><input value={pickupCustomer} onChange={e=>setPickupCustomer(e.target.value)} placeholder="Customer" style={{border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 12px",fontSize:13,outline:"none"}}/><input value={pickupStop} onChange={e=>setPickupStop(e.target.value)} placeholder="Location" style={{border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 12px",fontSize:13,outline:"none"}}/><input value={pickupAddr} onChange={e=>setPickupAddr(e.target.value)} placeholder="Address" style={{border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 12px",fontSize:13,outline:"none"}}/></div></details>
+<details style={{marginBottom:12}}><summary style={{fontSize:13,fontWeight:600,color:"#2563eb",cursor:"pointer",padding:"4px 0"}}>Manual Entry</summary><div style={{display:"flex",flexDirection:"column",gap:6,marginTop:8}}><input value={pickupCustomer} onChange={e=>setPickupCustomer(e.target.value)} placeholder="Customer" style={{border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 12px",fontSize:13,outline:"none"}}/><input value={pickupStop} onChange={e=>setPickupStop(e.target.value)} placeholder="Location" style={{border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 12px",fontSize:13,outline:"none"}}/><AddressInput value={pickupAddr} onChange={v=>setPickupAddr(v)} placeholder="Address"/></div></details>
 {pickupStop&&<div style={{marginBottom:12}}><label style={{fontSize:12,fontWeight:700,display:"block",marginBottom:6}}>Picking up for</label>
 <div style={{fontSize:10,fontWeight:600,color:"#d97706",marginBottom:4}}>Multi-customer stops</div>
 <div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:8}}>{SHARED_STOPS.map(s=><button key={s} onClick={()=>setPickupForDel(s)} style={{padding:"5px 10px",borderRadius:8,border:"none",cursor:"pointer",fontSize:11,fontWeight:600,background:pickupForDel===s?"#16a34a":"#fef3c7",color:pickupForDel===s?"#fff":"#92400e"}}>{s.split(" - ")[0]}</button>)}</div>
@@ -1302,21 +1809,27 @@ onDragEnd={()=>{setDragSrc(null);setDragOver(null);}}
 onTouchMove={e=>{
 if(!dragSrc)return;
 const touch=e.touches[0];
-const els=document.querySelectorAll(`[data-drv="${dragSrc.drvId}"]`);
+/* Search ALL driver sections, not just the source driver */
+const els=document.querySelectorAll("[data-drv]");
 els.forEach(el=>{
 const rect=el.getBoundingClientRect();
 if(touch.clientY>=rect.top&&touch.clientY<=rect.bottom){
+const drvId=parseInt(el.getAttribute("data-drv"));
 const idx=parseInt(el.getAttribute("data-idx"));
-if(!isNaN(idx))setDragOver({drvId:dragSrc.drvId,idx});
+if(!isNaN(idx)&&!isNaN(drvId))setDragOver({drvId,idx});
 }
 });
 }}
 onTouchEnd={()=>{
-if(dragSrc&&dragOver&&dragSrc.drvId===dragOver.drvId&&dragSrc.idx!==dragOver.idx){
-handleDrop(dragSrc.drvId,dragOver.idx);
+if(dragSrc&&dragOver){
+handleDrop(dragOver.drvId,dragOver.idx);
 }else{setDragSrc(null);setDragOver(null);}
 }}>
-<div style={{padding:"16px 4px 8px"}}><h2 style={{margin:0,fontSize:16,fontWeight:600}}>Load Manifests — {wd[sd].name}</h2><p style={{margin:"4px 0 0",fontSize:12,color:"#78716c"}}>Grab ⠿ to drag and reorder. Tap stop to add instructions.</p></div>
+<div style={{padding:"16px 4px 8px"}}><h2 style={{margin:0,fontSize:16,fontWeight:600}}>Load Manifests — {wd[sd].name}</h2><p style={{margin:"4px 0 0",fontSize:12,color:"#78716c"}}>Drag stops to reorder or move between drivers. Tap for details.</p></div>
+{dispNotes[dk]&&<div onClick={()=>{setView("daily");setEditingNote(true);setNoteText(dispNotes[dk]);}} style={{background:"#faf5ff",border:"1px solid #d8b4fe",borderRadius:10,padding:"8px 12px",marginBottom:10,cursor:"pointer",display:"flex",alignItems:"flex-start",gap:6}}>
+<span style={{fontSize:12,flexShrink:0}}>📝</span>
+<div style={{flex:1}}><div style={{fontSize:10,fontWeight:700,color:"#7c3aed",textTransform:"uppercase"}}>Day Notes</div><div style={{fontSize:12,color:"#57534e",whiteSpace:"pre-wrap",lineHeight:1.3}}>{dispNotes[dk].length>120?dispNotes[dk].slice(0,120)+"…":dispNotes[dk]}</div></div>
+</div>}
 {drivers.map((drv,di)=>{const de=drvEntries(drv.id);return(
 <div key={drv.id} style={{background:"#fff",border:"1px solid #e7e5e4",borderRadius:14,padding:16,marginBottom:12}}>
 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:de.length?10:0}}>
@@ -1330,13 +1843,21 @@ handleDrop(dragSrc.drvId,dragOver.idx);
 </div>
 </div>
 {de.length===0&&<p style={{fontSize:13,color:"#a8a29e",margin:"8px 0 0"}}>No stops</p>}
+{de.length>0&&(()=>{const loads=getDriverLoads(drv.id);return loads.map(loadN=>{const w=getLoadWeight(drv.id,loadN);const pct=weightPct(w);const col=weightColor(w);const over=w>TRUCK_LIMITS.default;return w>0||loads.length>1?(<div key={loadN} style={{display:"flex",alignItems:"center",gap:8,padding:"4px 0",marginBottom:2}}>
+<span style={{fontSize:10,fontWeight:700,color:"#78716c",flexShrink:0}}>Load {loadN}</span>
+<div style={{flex:1,height:8,background:"#e7e5e4",borderRadius:4,overflow:"hidden"}}>
+<div style={{height:"100%",width:pct+"%",background:col,borderRadius:4,transition:"width 0.3s"}}/>
+</div>
+<span style={{fontSize:10,fontWeight:700,color:col,fontVariantNumeric:"tabular-nums",flexShrink:0}}>{w.toLocaleString()}<span style={{fontSize:8,color:"#a8a29e"}}>/{(TRUCK_LIMITS.default/1000).toFixed(0)}k</span></span>
+{over&&<span style={{fontSize:8,background:"#dc2626",color:"#fff",padding:"1px 4px",borderRadius:3,fontWeight:700}}>OVER</span>}
+</div>):null;});})()}
 {de.map((entry,eIdx)=><div key={entry.id}>
-<ManifestStop entry={entry} eIdx={eIdx} total={de.length} drivers={drivers} onMove={dir=>moveInDriver(drv.id,eIdx,dir)} onReassign={did=>reassign(entry.id,did)} onRemove={()=>rmDel(entry.id)} onUpdateInstructions={text=>updateInstructions(entry.id,text)} onShipPlan={val=>setShipPlan(entry.id,val)}
+<ManifestStop entry={entry} eIdx={eIdx} total={de.length} drivers={drivers} onMove={dir=>moveInDriver(drv.id,eIdx,dir)} onReassign={did=>reassign(entry.id,did)} onRemove={()=>rmDel(entry.id)} onUpdateInstructions={text=>updateInstructions(entry.id,text)} onShipPlan={val=>setShipPlan(entry.id,val)} onDueBy={time=>setDueBy(entry.id,time)} onWeight={w=>setWeight(entry.id,w)} onLoadNum={n=>setLoadNum(entry.id,n)} maxLoad={getMaxLoad(drv.id)}
 isDragging={dragSrc?.drvId===drv.id&&dragSrc?.idx===eIdx} isDragOver={dragOver?.drvId===drv.id&&dragOver?.idx===eIdx} onDragStart={()=>setDragSrc({drvId:drv.id,idx:eIdx})} onDragOver={()=>setDragOver({drvId:drv.id,idx:eIdx})} onDrop={()=>handleDrop(drv.id,eIdx)}/>
 <button onClick={()=>setInsertPickupFor({driverId:drv.id,afterIdx:eIdx})} style={{display:"block",width:"100%",background:"none",border:"1px dashed #bfdbfe",borderRadius:6,padding:"3px",cursor:"pointer",fontSize:10,color:"#93c5fd",marginBottom:4,textAlign:"center"}}>+ insert pickup here</button>
 </div>)}
 </div>);})}
-{(()=>{const ua=dl.filter(e=>e.driverId===0);if(!ua.length)return null;return(<div style={{background:"#fff",border:"2px dashed #d6d3d1",borderRadius:14,padding:16,marginBottom:12}}><div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}><div style={{width:14,height:14,borderRadius:4,background:"#a8a29e"}}/><span style={{fontSize:15,fontWeight:700,color:"#78716c"}}>Unassigned</span><span style={{fontSize:12,color:"#a8a29e"}}>({ua.length})</span></div>{ua.map((entry,eIdx)=><ManifestStop key={entry.id} entry={entry} eIdx={eIdx} total={ua.length} drivers={drivers} onMove={dir=>moveInDriver(0,eIdx,dir)} onReassign={did=>reassign(entry.id,did)} onRemove={()=>rmDel(entry.id)} onUpdateInstructions={text=>updateInstructions(entry.id,text)} onShipPlan={val=>setShipPlan(entry.id,val)}/>)}</div>);})()}
+{(()=>{const ua=dl.filter(e=>e.driverId===0);if(!ua.length)return null;return(<div style={{background:"#fff",border:"2px dashed #d6d3d1",borderRadius:14,padding:16,marginBottom:12}}><div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}><div style={{width:14,height:14,borderRadius:4,background:"#a8a29e"}}/><span style={{fontSize:15,fontWeight:700,color:"#78716c"}}>Unassigned</span><span style={{fontSize:12,color:"#a8a29e"}}>({ua.length})</span></div>{ua.map((entry,eIdx)=><ManifestStop key={entry.id} entry={entry} eIdx={eIdx} total={ua.length} drivers={drivers} onMove={dir=>moveInDriver(0,eIdx,dir)} onReassign={did=>reassign(entry.id,did)} onRemove={()=>rmDel(entry.id)} onUpdateInstructions={text=>updateInstructions(entry.id,text)} onShipPlan={val=>setShipPlan(entry.id,val)} onDueBy={time=>setDueBy(entry.id,time)} onWeight={w=>setWeight(entry.id,w)} onLoadNum={n=>setLoadNum(entry.id,n)} maxLoad={1}/>)}</div>);})()}
 </div>}
 
 {/* ═══ ROUTES ═══ */}
@@ -1351,6 +1872,21 @@ onBack={()=>setView("manifest")}/>}
 {/* ═══ DAILY ═══ */}
 {view==="daily"&&<div>
 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"16px 4px 8px"}}><h2 style={{margin:0,fontSize:16,fontWeight:600}}>{wd[sd].name} — {wd[sd].date}</h2><div style={{display:"flex",alignItems:"center",gap:8}}>{dl.length>0&&<button onClick={printDailyLog} style={{background:"#e7e5e4",border:"none",borderRadius:8,padding:"5px 10px",cursor:"pointer",fontSize:11,fontWeight:600,color:"#57534e"}}>Print</button>}<span style={{fontVariantNumeric:"tabular-nums",fontSize:15,fontWeight:700,color:"#16a34a"}}>{fmt(dc.total)}</span></div></div>
+{!editingNote?<div onClick={()=>{setEditingNote(true);setNoteText(dispNotes[dk]||"");}} style={{background:"#fff",border:dispNotes[dk]?"2px solid #7c3aed":"1px solid #e7e5e4",borderRadius:12,padding:"10px 14px",marginBottom:12,cursor:"pointer",minHeight:28,display:"flex",alignItems:"flex-start",gap:8}}>
+<span style={{fontSize:14,flexShrink:0}}>{"📝"}</span>
+{dispNotes[dk]?<div style={{flex:1}}><div style={{fontSize:10,fontWeight:700,color:"#7c3aed",textTransform:"uppercase",marginBottom:2}}>Dispatcher Notes</div><div style={{fontSize:13,color:"#1c1917",whiteSpace:"pre-wrap",lineHeight:1.4}}>{dispNotes[dk]}</div></div>
+:<div style={{fontSize:12,color:"#a8a29e",paddingTop:2}}>Tap to add dispatcher notes for this day</div>}
+</div>
+:<div style={{background:"#fff",border:"2px solid #7c3aed",borderRadius:12,padding:"10px 14px",marginBottom:12}}>
+<div style={{fontSize:11,fontWeight:700,color:"#7c3aed",textTransform:"uppercase",marginBottom:6}}>Dispatcher Notes</div>
+<textarea value={noteText} onChange={e=>setNoteText(e.target.value)} autoFocus placeholder="Route changes, special instructions, notes for the day…" rows={3}
+style={{width:"100%",border:"1px solid #d8b4fe",borderRadius:8,padding:"10px 12px",fontSize:13,outline:"none",resize:"vertical",fontFamily:"inherit",background:"#faf5ff"}}/>
+<div style={{display:"flex",gap:6,marginTop:6,justifyContent:"flex-end"}}>
+{dispNotes[dk]&&<button onClick={()=>{setDispNotes(p=>{const n={...p};delete n[dk];return n;});setEditingNote(false);setNoteText("");}} style={{background:"#fef2f2",border:"none",borderRadius:6,padding:"5px 10px",cursor:"pointer",fontSize:11,color:"#dc2626",fontWeight:600}}>Clear</button>}
+<button onClick={()=>setEditingNote(false)} style={{background:"#e7e5e4",border:"none",borderRadius:6,padding:"5px 10px",cursor:"pointer",fontSize:11,fontWeight:600}}>Cancel</button>
+<button onClick={()=>{setDispNotes(p=>({...p,[dk]:noteText.trim()}));setEditingNote(false);showToast("Notes saved");}} style={{background:"#7c3aed",color:"#fff",border:"none",borderRadius:6,padding:"5px 14px",cursor:"pointer",fontSize:11,fontWeight:600}}>Save</button>
+</div>
+</div>}
 {dl.some(e=>e.isHourly)&&<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:12,padding:"12px 16px",marginBottom:12}}>
 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}><span style={{fontSize:13,color:"#2563eb",fontWeight:600}}>Emser Hours</span><span style={{fontSize:16,fontWeight:700,fontVariantNumeric:"tabular-nums"}}>{fmt(102.50*(emH[`${dk}-emser`]||4))}</span></div>
 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><span style={{fontSize:12,color:"#64748b",fontVariantNumeric:"tabular-nums"}}>{emH[`${dk}-emser`]||4}h x $102.50</span><div style={{display:"flex",gap:4,alignItems:"center",flexWrap:"wrap",justifyContent:"flex-end"}}>{[4,5,6,7,8,9,10].map(h=><button key={h} onClick={()=>{setEmH(p=>({...p,[`${dk}-emser`]:h}));setShowCustomHrs(false);}} style={{width:30,height:30,borderRadius:8,border:"none",cursor:"pointer",fontSize:13,fontWeight:600,background:!showCustomHrs&&(emH[`${dk}-emser`]||4)===h?"#2563eb":"#e7e5e4",color:!showCustomHrs&&(emH[`${dk}-emser`]||4)===h?"#fff":"#78716c"}}>{h}</button>)}<button onClick={()=>setShowCustomHrs(!showCustomHrs)} style={{height:30,borderRadius:8,border:"none",cursor:"pointer",fontSize:11,fontWeight:600,padding:"0 8px",background:showCustomHrs?"#2563eb":"#dbeafe",color:showCustomHrs?"#fff":"#2563eb"}}>Other</button></div></div>
@@ -1365,6 +1901,7 @@ onBack={()=>setView("manifest")}/>}
 <span style={{fontSize:11,fontWeight:600,color:c.accent,textTransform:"uppercase"}}>{entry.customer}</span>
 {entry.stopType==="pickup"&&<span style={{fontSize:9,background:"#2563eb",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700}}>PICKUP</span>}
 {entry.priority&&<span style={{fontSize:9,background:"#f59e0b",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700}}>PRIORITY</span>}
+{entry.dueBy&&<span style={{fontSize:9,background:entry.dueBy.startsWith("After")?"#2563eb":"#dc2626",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700,display:"inline-flex",alignItems:"center",gap:2}}>{"\u23F0"} {entry.dueBy}</span>}
 <span style={{fontSize:10,background:drv?(DCOL[di]||"#78716c"):"#a8a29e",color:"#fff",padding:"1px 6px",borderRadius:4,fontWeight:600}}>{drv?.name||"Unassigned"}</span>
 </div>
 <div style={{fontSize:14,fontWeight:600}}>{entry.stop}</div>
@@ -1390,6 +1927,36 @@ style={{flex:1,border:entry.shipPlan?"1px solid #bbf7d0":"1px solid #fca5a5",bor
 {/* ═══ WEEKLY ═══ */}
 {view==="weekly"&&<div>
 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"16px 4px 12px"}}><h2 style={{margin:0,fontSize:16,fontWeight:600}}>Weekly Summary</h2><div style={{display:"flex",alignItems:"center",gap:8}}><button onClick={printWeekly} style={{background:"#e7e5e4",border:"none",borderRadius:8,padding:"5px 10px",cursor:"pointer",fontSize:11,fontWeight:600,color:"#57534e"}}>Print</button><span style={{fontVariantNumeric:"tabular-nums",fontSize:18,fontWeight:700,color:"#16a34a"}}>{fmt(wkT)}</span></div></div>
+<div style={{background:"#fff",border:"1px solid #e7e5e4",borderRadius:14,padding:"14px 16px",marginBottom:16}}>
+<div style={{fontSize:11,fontWeight:700,color:"#57534e",textTransform:"uppercase",marginBottom:10}}>Week-over-Week</div>
+<div style={{display:"flex",gap:12,marginBottom:10}}>
+<div style={{flex:1,background:"#f5f5f4",borderRadius:10,padding:"10px 12px",textAlign:"center"}}>
+<div style={{fontSize:10,color:"#a8a29e",marginBottom:2}}>Last Week</div>
+<div style={{fontSize:16,fontWeight:700,fontVariantNumeric:"tabular-nums",color:prevWkT>0?"#57534e":"#a8a29e"}}>{prevWkT>0?fmt(prevWkT):"—"}</div>
+</div>
+<div style={{flex:1,background:"#f0fdf4",borderRadius:10,padding:"10px 12px",textAlign:"center",border:"1px solid #bbf7d0"}}>
+<div style={{fontSize:10,color:"#16a34a",marginBottom:2}}>This Week</div>
+<div style={{fontSize:16,fontWeight:700,fontVariantNumeric:"tabular-nums",color:"#16a34a"}}>{fmt(wkT)}</div>
+</div>
+</div>
+{prevWkT>0?<div style={{display:"flex",justifyContent:"center",alignItems:"center",gap:8}}>
+<div style={{fontSize:14,fontWeight:700,fontVariantNumeric:"tabular-nums",color:wowDelta>=0?"#16a34a":"#dc2626"}}>{wowDelta>=0?"\u25B2":"\u25BC"} {fmt(Math.abs(wowDelta))}</div>
+<div style={{fontSize:12,fontWeight:600,color:wowDelta>=0?"#16a34a":"#dc2626",background:wowDelta>=0?"#dcfce7":"#fef2f2",padding:"2px 8px",borderRadius:6}}>{wowPct>=0?"+":""}{wowPct.toFixed(1)}%</div>
+</div>:<div style={{textAlign:"center",fontSize:12,color:"#a8a29e"}}>No previous week data to compare</div>}
+<div style={{display:"flex",gap:4,marginTop:12}}>
+{DAYS.map((day,i)=>{const cur=wkD[i].calc.total;const prev=prevWkD[i].calc.total;const maxVal=Math.max(...DAYS.map((_2,j)=>Math.max(wkD[j].calc.total,prevWkD[j].calc.total)),1);const curH=Math.max((cur/maxVal)*60,2);const prevH=Math.max((prev/maxVal)*60,prev>0?2:0);return(<div key={day} style={{flex:1,textAlign:"center"}}>
+<div style={{height:68,display:"flex",alignItems:"flex-end",justifyContent:"center",gap:2,marginBottom:4}}>
+<div style={{width:10,height:prevH,background:"#d6d3d1",borderRadius:"3px 3px 0 0"}}/>
+<div style={{width:10,height:curH,background:cur>=prev?"#16a34a":"#f59e0b",borderRadius:"3px 3px 0 0"}}/>
+</div>
+<div style={{fontSize:9,color:"#a8a29e",fontWeight:600}}>{day.slice(0,2)}</div>
+</div>);})}
+</div>
+<div style={{display:"flex",justifyContent:"center",gap:12,marginTop:6}}>
+<div style={{display:"flex",alignItems:"center",gap:4}}><div style={{width:8,height:8,borderRadius:2,background:"#d6d3d1"}}/><span style={{fontSize:9,color:"#a8a29e"}}>Last wk</span></div>
+<div style={{display:"flex",alignItems:"center",gap:4}}><div style={{width:8,height:8,borderRadius:2,background:"#16a34a"}}/><span style={{fontSize:9,color:"#a8a29e"}}>This wk</span></div>
+</div>
+</div>
 {DAYS.map((day,i)=>{const{entries,calc}=wkD[i];const wk2=`${wo}-${i}`;if(!entries.length)return null;return(<div key={day} style={{marginBottom:16}}><div style={{display:"flex",justifyContent:"space-between",padding:"8px 4px",borderBottom:"1px solid #e7e5e4"}}><span style={{fontSize:14,fontWeight:700}}>{day} — {wd[i].date}</span><span style={{fontVariantNumeric:"tabular-nums",fontWeight:700,color:"#16a34a",fontSize:14}}>{fmt(calc.total)}</span></div>{entries.map(entry=>{const c=getCustColor(entry.customer);const drv=drivers.find(d=>d.id===entry.driverId);const di2=drivers.findIndex(d=>d.id===entry.driverId);const isImetco=entry.customer==="IMETCO";return(<div key={entry.id}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 8px 6px 16px",borderLeft:`3px solid ${c.accent}`,marginTop:4,background:"#fff",borderRadius:isImetco?"0 8px 0 0":"0 8px 8px 0"}}><div style={{display:"flex",alignItems:"center",gap:4,flex:1,minWidth:0}}><span style={{fontSize:11,color:c.accent,fontWeight:600}}>{entry.customer}</span><span style={{fontSize:12,color:"#57534e",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{entry.stop}</span>{drv&&<span style={{fontSize:9,background:DCOL[di2]||"#78716c",color:"#fff",padding:"1px 4px",borderRadius:3,fontWeight:600,flexShrink:0}}>{drv.name.charAt(0)}</span>}</div><span style={{fontVariantNumeric:"tabular-nums",fontSize:12,fontWeight:600,color:"#44403c",flexShrink:0,marginLeft:4}}>{entry.isHourly?"HR":fmt(entry.baseRate)}</span></div>
 {isImetco&&<div style={{padding:"4px 8px 6px 16px",borderLeft:`3px solid ${c.accent}`,background:"#fff",borderRadius:"0 0 8px 0",display:"flex",alignItems:"center",gap:6}}>
 <span style={{fontSize:10,fontWeight:700,color:"#ea580c",flexShrink:0}}>SP#:</span>
@@ -1399,6 +1966,199 @@ style={{width:80,border:"1px solid #e7e5e4",borderRadius:6,padding:"3px 6px",fon
 </div>);})}</div>);})}
 {wkD.every(d=>!d.entries.length)&&<div style={{textAlign:"center",padding:"48px 20px",color:"#a8a29e"}}><p>No deliveries this week</p></div>}
 {Object.keys(wkF).length>0&&<div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:14,padding:"14px 16px",marginBottom:12}}><div style={{fontSize:12,fontWeight:700,color:"#d97706",textTransform:"uppercase",marginBottom:8}}>Week Fuel</div>{Object.entries(wkF).map(([cu,cf])=><div key={cu} style={{display:"flex",justifyContent:"space-between",padding:"4px 0"}}><span style={{fontSize:13}}>{cu} <span style={{fontSize:11,color:"#a8a29e",fontVariantNumeric:"tabular-nums"}}>{fmt(cf.base)} x {Math.round(cf.pct*100)}%</span></span><span style={{fontSize:14,fontWeight:700,color:"#d97706",fontVariantNumeric:"tabular-nums"}}>{fmt(cf.base*cf.pct)}</span></div>)}</div>}
+</div>}
+
+{/* ═══ HISTORY ═══ */}
+{view==="history"&&<div>
+<div style={{padding:"16px 4px 8px"}}><h2 style={{margin:0,fontSize:16,fontWeight:600}}>Delivery History</h2><p style={{margin:"4px 0 0",fontSize:12,color:"#78716c"}}>{histMode==="emser"?"Track Emser driver hours":"Search deliveries and proof of delivery photos"}</p></div>
+
+{/* Mode toggle - 3 options */}
+<div style={{display:"flex",gap:3,marginBottom:10,background:"#f5f5f4",borderRadius:10,padding:3}}>
+{[{k:"deliveries",l:"Deliveries"},{k:"photos",l:"📷 Photos"},{k:"emser",l:"⏱ Emser Hrs"}].map(m=>(
+<button key={m.k} onClick={()=>setHistMode(m.k)} style={{flex:1,padding:"8px 4px",borderRadius:8,border:"none",cursor:"pointer",fontSize:11,fontWeight:600,background:histMode===m.k?"#fff":"transparent",color:histMode===m.k?BRAND.main:"#78716c",boxShadow:histMode===m.k?"0 1px 3px rgba(0,0,0,0.08)":"none"}}>{m.l}</button>
+))}
+</div>
+
+{/* EMSER HOURS CALCULATOR MODE */}
+{histMode==="emser"&&(()=>{
+const shifts=getEmserDayShifts();
+const totalMins=shifts.reduce((sum,s)=>sum+calcShiftMins(s),0);
+const totalHrs=Math.round(totalMins/15)*15/60;
+const perDriver={};shifts.forEach(s=>{if(!perDriver[s.driverId])perDriver[s.driverId]=0;perDriver[s.driverId]+=calcShiftMins(s);});
+const TIME_PRESETS=["5:00 AM","5:30 AM","6:00 AM","6:30 AM","7:00 AM","7:30 AM","8:00 AM","8:30 AM","9:00 AM","9:30 AM","10:00 AM","10:30 AM","11:00 AM","11:30 AM","12:00 PM","12:30 PM","1:00 PM","1:30 PM","2:00 PM","2:30 PM","3:00 PM","3:30 PM","4:00 PM","4:30 PM","5:00 PM","5:30 PM","6:00 PM"];
+return(<div>
+{/* Day header */}
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"0 4px",marginBottom:12}}>
+<span style={{fontSize:14,fontWeight:700}}>{wd[sd].name} — {wd[sd].date}</span>
+<div style={{textAlign:"right"}}>
+<div style={{fontSize:18,fontWeight:800,color:BRAND.main,fontVariantNumeric:"tabular-nums"}}>{totalMins>0?formatMins(totalMins):(emH[`${dk}-emser`]||4)+"h"}</div>
+<div style={{fontSize:10,color:"#78716c"}}>{totalMins>0?fmt(102.50*totalHrs):fmt(102.50*(emH[`${dk}-emser`]||4))}</div>
+</div>
+</div>
+
+{/* Per-driver sections */}
+{drivers.map((drv,di)=>{
+const drvShifts=shifts.filter(s=>s.driverId===drv.id);
+const drvMins=perDriver[drv.id]||0;
+return(<div key={drv.id} style={{background:"#fff",border:"1px solid #e7e5e4",borderRadius:14,padding:"12px 14px",marginBottom:10,borderLeft:`3px solid ${DCOL[di]}`}}>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:drvShifts.length?8:0}}>
+<div style={{display:"flex",alignItems:"center",gap:8}}>
+<div style={{width:22,height:22,borderRadius:7,background:DCOL[di],display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:"#fff",fontWeight:700}}>{drv.name.charAt(0)}</div>
+<span style={{fontSize:14,fontWeight:700}}>{drv.name}</span>
+{drvMins>0&&<span style={{fontSize:12,fontWeight:700,color:BRAND.main,fontVariantNumeric:"tabular-nums"}}>{formatMins(drvMins)}</span>}
+</div>
+<button onClick={()=>addEmserShift(drv.id)} style={{background:BRAND.pale,border:"1px solid "+BRAND.light,borderRadius:6,padding:"4px 10px",cursor:"pointer",fontSize:11,fontWeight:600,color:BRAND.main}}>+ Shift</button>
+</div>
+
+{drvShifts.map((shift,si)=>{const mins=calcShiftMins(shift);return(
+<div key={shift.id} style={{background:"#fafaf9",border:"1px solid #e7e5e4",borderRadius:10,padding:"10px 12px",marginBottom:6}}>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+<span style={{fontSize:11,fontWeight:600,color:"#57534e"}}>Shift {si+1}</span>
+<div style={{display:"flex",alignItems:"center",gap:6}}>
+{mins>0&&<span style={{fontSize:12,fontWeight:700,color:BRAND.main}}>{formatMins(mins)}</span>}
+<button onClick={()=>removeEmserShift(shift.id)} style={{background:"#fef2f2",border:"none",borderRadius:5,padding:"2px 6px",cursor:"pointer",fontSize:10,color:"#dc2626"}}>{"✕"}</button>
+</div>
+</div>
+<div style={{display:"flex",gap:8,alignItems:"center",marginBottom:6}}>
+<div style={{flex:1}}>
+<label style={{fontSize:10,fontWeight:600,color:"#78716c",display:"block",marginBottom:3}}>Start</label>
+<input type="time" value={shift.start} onChange={e=>updateEmserShift(shift.id,"start",e.target.value)} style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px",fontSize:14,fontWeight:700,outline:"none",background:shift.start?"#fff":"#fafaf9"}}/>
+</div>
+<div style={{fontSize:16,color:"#d6d3d1",paddingTop:16}}>{"\u2192"}</div>
+<div style={{flex:1}}>
+<label style={{fontSize:10,fontWeight:600,color:"#78716c",display:"block",marginBottom:3}}>End</label>
+<input type="time" value={shift.end} onChange={e=>updateEmserShift(shift.id,"end",e.target.value)} style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px",fontSize:14,fontWeight:700,outline:"none",background:shift.end?"#fff":"#fafaf9"}}/>
+</div>
+</div>
+<div style={{display:"flex",gap:3,flexWrap:"wrap"}}>
+{TIME_PRESETS.filter((_,i)=>i%2===0).map(t=>{const isStart=shift.start===t;const isEnd=shift.end===t;return(
+<button key={t} onClick={()=>{if(!shift.start||isStart)updateEmserShift(shift.id,"start",t);else if(!shift.end||isEnd)updateEmserShift(shift.id,"end",t);}} style={{padding:"3px 6px",borderRadius:4,border:"none",cursor:"pointer",fontSize:9,fontWeight:600,background:isStart?BRAND.main:isEnd?"#16a34a":"#f5f5f4",color:isStart||isEnd?"#fff":"#78716c"}}>{t.replace(":00","").replace(" ","")}</button>);})}
+</div>
+</div>);})}
+
+{drvShifts.length===0&&<div style={{fontSize:12,color:"#a8a29e",padding:"4px 0"}}>No shifts logged — tap + Shift to add</div>}
+</div>);})}
+
+{/* Apply button */}
+{totalMins>0&&<div style={{background:BRAND.pale,border:"2px solid "+BRAND.main,borderRadius:14,padding:"14px 16px",marginTop:8}}>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+<div>
+<div style={{fontSize:13,fontWeight:700,color:BRAND.dark}}>Total Emser Time</div>
+<div style={{fontSize:11,color:"#78716c"}}>Across all drivers</div>
+</div>
+<div style={{textAlign:"right"}}>
+<div style={{fontSize:20,fontWeight:800,color:BRAND.main,fontVariantNumeric:"tabular-nums"}}>{formatMins(totalMins)}</div>
+<div style={{fontSize:12,fontWeight:700,color:"#16a34a"}}>{fmt(102.50*totalHrs)}</div>
+</div>
+</div>
+{Object.entries(perDriver).map(([did,mins])=>{const drv=drivers.find(d=>d.id===Number(did));const di=drivers.findIndex(d=>d.id===Number(did));return drv?(<div key={did} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"3px 0"}}>
+<div style={{display:"flex",alignItems:"center",gap:6}}>
+<div style={{width:14,height:14,borderRadius:4,background:DCOL[di]}}/>
+<span style={{fontSize:12,color:"#57534e"}}>{drv.name}</span>
+</div>
+<span style={{fontSize:12,fontWeight:700,color:"#57534e",fontVariantNumeric:"tabular-nums"}}>{formatMins(mins)}</span>
+</div>):null;})}
+<button onClick={()=>{const hrs=calcAndApplyEmserHours();showToast("Emser hours set to "+hrs+"h");}} style={{display:"block",width:"100%",marginTop:10,background:BRAND.main,color:"#fff",border:"none",borderRadius:10,padding:"12px",cursor:"pointer",fontSize:14,fontWeight:700}}>{"Apply "+totalHrs+"h to Today's Billing"}</button>
+</div>}
+</div>);
+})()}
+
+{histMode!=="emser"&&<div>
+<input value={histSearch} onChange={e=>setHistSearch(e.target.value)} placeholder={histMode==="photos"?"Search photos by stop, customer…":"Search stops, customers, addresses…"} style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:10,padding:"10px 14px",fontSize:14,outline:"none",background:"#fff",marginBottom:10}}/>
+<div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap"}}>
+<select value={histCustFilter} onChange={e=>setHistCustFilter(e.target.value)} style={{flex:1,minWidth:120,border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px",fontSize:12,outline:"none",background:"#fff",color:histCustFilter?"#1c1917":"#a8a29e"}}>
+<option value="">All Customers</option>
+{Object.keys(CUSTOMERS).map(c=><option key={c} value={c}>{c}</option>)}
+</select>
+<select value={histDrvFilter} onChange={e=>setHistDrvFilter(e.target.value)} style={{flex:1,minWidth:100,border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px",fontSize:12,outline:"none",background:"#fff",color:histDrvFilter?"#1c1917":"#a8a29e"}}>
+<option value="">All Drivers</option>
+{drivers.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}
+</select>
+<select value={histWeekRange} onChange={e=>setHistWeekRange(Number(e.target.value))} style={{minWidth:80,border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px",fontSize:12,outline:"none",background:"#fff"}}>
+<option value={2}>2 wks</option><option value={4}>4 wks</option><option value={8}>8 wks</option><option value={12}>12 wks</option>
+</select>
+</div>
+</div>}
+
+{/* PHOTO GALLERY MODE */}
+{histMode==="photos"&&(()=>{
+const photosAll=[];
+histFiltered.forEach(e=>{
+if(e.photos&&e.photos.length>0){
+e.photos.forEach((p,pi)=>photosAll.push({src:p,stop:e.stop,customer:e.customer,dayName:e.dayName,dayDate:e.dayDate,weekOff:e.weekOff,signature:e.signature,addr:e.addr,driverId:e.driverId,id:e.id+"-"+pi}));
+}
+});
+const photoCount=photosAll.length;
+return(<div>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"0 4px",marginBottom:8}}>
+<span style={{fontSize:12,color:"#78716c"}}>{photoCount} photo{photoCount!==1?"s":""}</span>
+{(histSearch||histCustFilter||histDrvFilter)&&<button onClick={()=>{setHistSearch("");setHistCustFilter("");setHistDrvFilter("");}} style={{background:"#fef2f2",border:"none",borderRadius:6,padding:"4px 10px",cursor:"pointer",fontSize:11,color:"#dc2626",fontWeight:600}}>Clear</button>}
+</div>
+{photoCount===0?<div style={{textAlign:"center",padding:"48px 20px",color:"#a8a29e"}}><div style={{fontSize:36,marginBottom:12}}>{"📷"}</div><p style={{fontSize:14,fontWeight:600,margin:"0 0 4px"}}>No photos found</p><p style={{fontSize:12,margin:0}}>{histFiltered.length>0?"No photos on these deliveries":"Try adjusting your filters"}</p></div>
+:<div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6}}>
+{photosAll.map(photo=>{const c=CC[photo.customer]||CC["One-Off Delivery"];const drv=drivers.find(d=>d.id===photo.driverId);return(
+<div key={photo.id} onClick={()=>setLightboxPhoto(photo)} style={{cursor:"pointer",borderRadius:10,overflow:"hidden",border:"1px solid #e7e5e4",background:"#fff"}}>
+<div style={{position:"relative",paddingTop:"100%",background:"#f5f5f4"}}>
+<img src={photo.src} alt={photo.stop} style={{position:"absolute",top:0,left:0,width:"100%",height:"100%",objectFit:"cover"}}/>
+{photo.signature&&<div style={{position:"absolute",bottom:4,right:4,background:"#16a34a",color:"#fff",fontSize:8,fontWeight:700,padding:"2px 5px",borderRadius:4}}>{"✓ POD"}</div>}
+</div>
+<div style={{padding:"6px 8px"}}>
+<div style={{fontSize:10,fontWeight:600,color:"#1c1917",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{photo.stop}</div>
+<div style={{fontSize:9,color:c.accent}}>{photo.customer}</div>
+<div style={{fontSize:9,color:"#a8a29e"}}>{photo.dayName} {photo.dayDate}</div>
+</div>
+</div>);})}
+</div>}
+</div>);
+})()}
+
+{/* DELIVERIES LIST MODE */}
+{histMode==="deliveries"&&<div>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"0 4px",marginBottom:8}}>
+<span style={{fontSize:12,color:"#78716c"}}>{histFiltered.length} deliveries</span>
+{(histSearch||histCustFilter||histDrvFilter)&&<button onClick={()=>{setHistSearch("");setHistCustFilter("");setHistDrvFilter("");}} style={{background:"#fef2f2",border:"none",borderRadius:6,padding:"4px 10px",cursor:"pointer",fontSize:11,color:"#dc2626",fontWeight:600}}>Clear</button>}
+</div>
+{histFiltered.length===0&&<div style={{textAlign:"center",padding:"48px 20px",color:"#a8a29e"}}><div style={{fontSize:36,marginBottom:12}}>{"🔍"}</div><p style={{fontSize:14,margin:0}}>{histAll.length===0?"No delivery data yet":"No matches"}</p></div>}
+{histFiltered.length>0&&(()=>{const grouped={};histFiltered.forEach(e=>{const gk=`${e.weekOff}-${e.dayIdx}`;if(!grouped[gk])grouped[gk]={dayName:e.dayName,dayDate:e.dayDate,weekOff:e.weekOff,dayIdx:e.dayIdx,entries:[]};grouped[gk].entries.push(e);});return Object.values(grouped).sort((a,b)=>a.weekOff!==b.weekOff?b.weekOff-a.weekOff:b.dayIdx-a.dayIdx).map((grp,gi)=>{const dayTotal=grp.entries.reduce((s,e)=>s+e.baseRate,0);const isCur=grp.weekOff===wo;return(<div key={gi} style={{marginBottom:12}}>
+<div style={{display:"flex",justifyContent:"space-between",padding:"6px 4px",borderBottom:"1px solid #e7e5e4",marginBottom:4}}>
+<span style={{fontSize:13,fontWeight:700,color:isCur?"#1c1917":"#78716c"}}>{grp.dayName} — {grp.dayDate}{!isCur&&<span style={{fontSize:10,color:"#a8a29e",fontWeight:500,marginLeft:4}}>{grp.weekOff===wo-1?"last wk":(wo-grp.weekOff)+"w ago"}</span>}</span>
+<span style={{fontSize:12,fontWeight:600,color:"#16a34a",fontVariantNumeric:"tabular-nums"}}>{fmt(dayTotal)}</span>
+</div>
+{grp.entries.map(entry=>{const c=getCustColor(entry.customer);const drv=drivers.find(d=>d.id===entry.driverId);const di=drivers.findIndex(d=>d.id===entry.driverId);const hasPhotos=entry.photos&&entry.photos.length>0;return(
+<div key={entry.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 8px 6px 16px",borderLeft:"3px solid "+(entry.stopType==="pickup"?"#2563eb":c.accent),marginBottom:3,background:"#fff",borderRadius:"0 8px 8px 0"}}>
+<div style={{flex:1,minWidth:0}}>
+<div style={{display:"flex",alignItems:"center",gap:4,flexWrap:"wrap"}}>
+{entry.stopType==="pickup"&&<span style={{fontSize:8,background:"#2563eb",color:"#fff",padding:"1px 4px",borderRadius:3,fontWeight:700}}>PU</span>}
+<span style={{fontSize:11,color:c.accent,fontWeight:600}}>{entry.customer}</span>
+<span style={{fontSize:12,color:"#57534e",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{entry.stop}</span>
+{hasPhotos&&<span style={{fontSize:9,background:"#dbeafe",color:"#2563eb",padding:"1px 4px",borderRadius:3,fontWeight:600}}>{"📷"}{entry.photos.length}</span>}
+{entry.signature&&<span style={{fontSize:9,background:"#dcfce7",color:"#16a34a",padding:"1px 4px",borderRadius:3,fontWeight:600}}>{"✓"} POD</span>}
+</div>
+{entry.addr&&<div style={{fontSize:10,color:"#a8a29e",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{entry.addr}</div>}
+{hasPhotos&&<div style={{display:"flex",gap:4,marginTop:4}}>
+{entry.photos.slice(0,4).map((p,pi)=><img key={pi} src={p} alt="" onClick={()=>setLightboxPhoto({src:p,stop:entry.stop,customer:entry.customer,dayName:entry.dayName,dayDate:entry.dayDate,signature:entry.signature})} style={{width:36,height:36,objectFit:"cover",borderRadius:6,border:"1px solid #e7e5e4",cursor:"pointer"}}/>)}
+{entry.photos.length>4&&<div style={{width:36,height:36,borderRadius:6,background:"#f5f5f4",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,color:"#78716c"}}>+{entry.photos.length-4}</div>}
+</div>}
+</div>
+<div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0,marginLeft:6}}>
+{drv&&<span style={{fontSize:9,background:DCOL[di]||"#78716c",color:"#fff",padding:"1px 4px",borderRadius:3,fontWeight:600}}>{drv.name.charAt(0)}</span>}
+<span style={{fontVariantNumeric:"tabular-nums",fontSize:12,fontWeight:600,color:"#44403c"}}>{entry.isHourly?"HR":fmt(entry.baseRate)}</span>
+</div>
+</div>);})}
+</div>);});})()}
+</div>}
+
+{/* LIGHTBOX */}
+{lightboxPhoto&&<div onClick={()=>setLightboxPhoto(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:200,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:20}}>
+<button onClick={()=>setLightboxPhoto(null)} style={{position:"absolute",top:16,right:16,background:"rgba(255,255,255,0.2)",border:"none",borderRadius:8,padding:"8px 14px",cursor:"pointer",fontSize:16,color:"#fff"}}>{"✕"}</button>
+<img src={lightboxPhoto.src} alt={lightboxPhoto.stop} style={{maxWidth:"100%",maxHeight:"70vh",borderRadius:12,objectFit:"contain"}} onClick={e=>e.stopPropagation()}/>
+<div style={{marginTop:12,textAlign:"center"}} onClick={e=>e.stopPropagation()}>
+<div style={{fontSize:16,fontWeight:700,color:"#fff"}}>{lightboxPhoto.stop}</div>
+<div style={{fontSize:13,color:"#a8a29e",marginTop:2}}>{lightboxPhoto.customer}</div>
+<div style={{fontSize:12,color:"#78716c",marginTop:2}}>{lightboxPhoto.dayName} {lightboxPhoto.dayDate}</div>
+{lightboxPhoto.signature&&<div style={{marginTop:8,background:"#16a34a",color:"#fff",display:"inline-block",padding:"4px 12px",borderRadius:6,fontSize:12,fontWeight:600}}>{"✓"} Received by: {lightboxPhoto.signature}</div>}
+</div>
+</div>}
 </div>}
 
 {/* ═══ ADD ═══ */}
@@ -1417,7 +2177,7 @@ style={{width:80,border:"1px solid #e7e5e4",borderRadius:6,padding:"3px 6px",fon
 
 {/* ═══ ADD — Delivery List ═══ */}
 {view==="add"&&selCust&&<div>
-<button onClick={()=>{setSelCust(null);setMultiSelect(false);setMultiChecked([]);setShowAddCustomDel(false);}} style={BB}>← Back</button>
+<button onClick={()=>{setSelCust(null);setMultiSelect(false);setMultiChecked([]);setShowAddCustomDel(false);setShowCustPickup(false);}} style={BB}>← Back</button>
 {preAssignDriver&&(()=>{const drv=drivers.find(d=>d.id===preAssignDriver);const di=drivers.findIndex(d=>d.id===preAssignDriver);return(<div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",margin:"0 4px 8px",background:"#f0fdf4",border:`1px solid ${DCOL[di]||"#bbf7d0"}`,borderRadius:10}}><div style={{width:20,height:20,borderRadius:6,background:DCOL[di],display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:"#fff",fontWeight:700}}>{drv?.name?.charAt(0)}</div><span style={{fontSize:12,fontWeight:600,color:"#16a34a"}}>Auto-adding to {drv?.name}</span></div>);})()}
 <div style={{padding:"0 4px"}}>
 <h2 style={{margin:"0 0 4px",fontSize:18,fontWeight:700,color:CC[selCust].accent}}>{selCust}</h2>
@@ -1435,7 +2195,7 @@ style={{width:80,border:"1px solid #e7e5e4",borderRadius:6,padding:"3px 6px",fon
 {CUSTOMERS[selCust].deliveries.map((d,idx)=>{const isStr=typeof d==="string";const stop=isStr?d:d.s;const rate=isStr?0:d.r;const note=isStr?null:d.n;const addr=getAddr(stop);const curInstr=customInstr[stop]!==undefined?customInstr[stop]:getDefaultInstr(stop);const checked=multiChecked.includes(idx);
 return(<DeliveryListItem key={idx} stop={stop} rate={rate} note={note} addr={addr} curInstr={curInstr} checked={checked} multiSelect={multiSelect} accent={CC[selCust].accent}
 onCheck={()=>setMultiChecked(p=>p.includes(idx)?p.filter(x=>x!==idx):[...p,idx])}
-onAdd={()=>{const cd=CUSTOMERS[selCust];addDel(selCust,stop,rate||0,preAssignDriver||0,{isHourly:cd.rate_type==="hourly",fuelPct:(cd.fuel_surcharge&&!cd.fuel_included)?cd.fuel_surcharge:0,note:note||null,addr,priority:cd.priority});}}
+onAdd={(dueBy,weight)=>{const cd=CUSTOMERS[selCust];addDel(selCust,stop,rate||0,preAssignDriver||0,{isHourly:cd.rate_type==="hourly",fuelPct:(cd.fuel_surcharge&&!cd.fuel_included)?cd.fuel_surcharge:0,note:note||null,addr,priority:cd.priority,dueBy:dueBy||null,weight:weight||0});}}
 onSaveInstr={text=>setCustomInstr(p=>({...p,[stop]:text}))}
 />);})}
 {/* Add new delivery location for this customer */}
@@ -1448,8 +2208,7 @@ onSaveInstr={text=>setCustomInstr(p=>({...p,[stop]:text}))}
 <div style={{display:"flex",flexDirection:"column",gap:8}}>
 <input value={customDelName} onChange={e=>setCustomDelName(e.target.value)} placeholder="Stop name (e.g. Smith Flooring - Kennesaw)" autoFocus
 style={{border:"1px solid #d6d3d1",borderRadius:10,padding:"10px 14px",fontSize:14,outline:"none"}}/>
-<input value={customDelAddr} onChange={e=>setCustomDelAddr(e.target.value)} placeholder="Full address"
-style={{border:"1px solid #d6d3d1",borderRadius:10,padding:"10px 14px",fontSize:13,outline:"none"}}/>
+<AddressInput value={customDelAddr} onChange={v=>setCustomDelAddr(v)} placeholder="Full address" style={{borderRadius:10,padding:"10px 14px"}}/>
 <div style={{display:"flex",gap:8}}>
 <div style={{flex:1}}>
 <label style={{fontSize:11,fontWeight:600,color:"#57534e",display:"block",marginBottom:4}}>Rate ($)</label>
@@ -1480,6 +2239,52 @@ Add {customDelName.trim()||"Delivery"} to {selCust}
 </button>
 </div>
 </div>}
+
+{/* CUSTOMER PICKUP BUILDER */}
+{!showCustPickup&&<button onClick={()=>{setShowCustPickup(true);setCustPUFrom("");setCustPUAddr("");setCustPUNote("");}} style={{display:"block",width:"100%",marginTop:8,background:"#eff6ff",border:"2px dashed #93c5fd",borderRadius:12,padding:"14px 16px",cursor:"pointer",textAlign:"center",color:"#2563eb",fontSize:13,fontWeight:600}}>{"+ Add Pickup for "+selCust}</button>}
+{showCustPickup&&<div style={{marginTop:8,background:"#fff",border:"2px solid #2563eb",borderRadius:14,padding:16}}>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+<span style={{fontSize:13,fontWeight:700,color:"#2563eb"}}>{"Pickup for "+selCust}</span>
+<button onClick={()=>setShowCustPickup(false)} style={{background:"none",border:"none",fontSize:16,cursor:"pointer",color:"#78716c"}}>{"\u2715"}</button>
+</div>
+<p style={{fontSize:11,color:"#78716c",margin:"0 0 10px"}}>{"Select where to pick up material going back to "+selCust}</p>
+{(()=>{
+const cd=CUSTOMERS[selCust];
+const custDeliveries=cd?cd.deliveries||[]:[];
+const deliveryNames=custDeliveries.map(d=>typeof d==="string"?d:d.s);
+const custSources=PICKUP_SOURCES.filter(ps=>ps.customer===selCust);
+const allLocs=[...custSources.map(s=>({name:s.label,addr:s.addr,type:"warehouse"})),...deliveryNames.map(n=>({name:n,addr:getAddr(n),type:"delivery"}))];
+return(<div>
+{allLocs.length>0&&<div style={{marginBottom:10}}>
+<div style={{fontSize:11,fontWeight:600,color:"#57534e",marginBottom:6}}>Pick up from:</div>
+<div style={{maxHeight:200,overflowY:"auto",border:"1px solid #e7e5e4",borderRadius:10}}>
+{custSources.length>0&&<div style={{padding:"6px 10px",fontSize:10,fontWeight:700,color:"#2563eb",textTransform:"uppercase",background:"#eff6ff"}}>Warehouses</div>}
+{custSources.map((src,si)=><div key={"w"+si} onClick={()=>{setCustPUFrom(src.label);setCustPUAddr(src.addr);}} style={{padding:"8px 12px",cursor:"pointer",background:custPUFrom===src.label?"#dbeafe":"#fff",borderBottom:"1px solid #f5f5f4"}}>
+<div style={{fontSize:12,fontWeight:600,color:custPUFrom===src.label?"#2563eb":"#1c1917"}}>{src.label}</div>
+<div style={{fontSize:10,color:"#a8a29e"}}>{src.addr}</div>
+</div>)}
+{deliveryNames.length>0&&<div style={{padding:"6px 10px",fontSize:10,fontWeight:700,color:"#16a34a",textTransform:"uppercase",background:"#f0fdf4"}}>{selCust+" Delivery Locations"}</div>}
+{deliveryNames.map((n,di)=>{const addr=getAddr(n);return(<div key={"d"+di} onClick={()=>{setCustPUFrom(n);setCustPUAddr(addr);}} style={{padding:"8px 12px",cursor:"pointer",background:custPUFrom===n?"#dbeafe":"#fff",borderBottom:"1px solid #f5f5f4"}}>
+<div style={{fontSize:12,fontWeight:600,color:custPUFrom===n?"#2563eb":"#1c1917"}}>{n}</div>
+{addr&&<div style={{fontSize:10,color:"#a8a29e"}}>{addr}</div>}
+</div>);})}
+</div>
+</div>}
+<div style={{fontSize:11,fontWeight:600,color:"#57534e",marginBottom:4,marginTop:8}}>Or enter manually:</div>
+<div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:10}}>
+<input value={custPUFrom} onChange={e=>setCustPUFrom(e.target.value)} placeholder="Pickup location name" style={{border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 12px",fontSize:13,outline:"none"}}/>
+<AddressInput value={custPUAddr} onChange={v=>setCustPUAddr(v)} placeholder="Address"/>
+<input value={custPUNote} onChange={e=>setCustPUNote(e.target.value)} placeholder="Note (optional)" style={{border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 12px",fontSize:13,outline:"none"}}/>
+</div>
+</div>);})()}
+{custPUFrom&&<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:10,padding:"10px 14px",marginBottom:10}}>
+<div style={{fontSize:10,color:"#2563eb",fontWeight:700}}>PICKUP</div>
+<div style={{fontSize:14,fontWeight:700}}>{custPUFrom+" \u2192 "+selCust}</div>
+{custPUAddr&&<div style={{fontSize:11,color:"#78716c"}}>{custPUAddr}</div>}
+</div>}
+<button onClick={()=>{if(!custPUFrom.trim())return;const cd=CUSTOMERS[selCust];const custPS=PICKUP_SOURCES.filter(ps=>ps.customer===selCust);const homeAddr=custPS.length>0?custPS[0].addr:"";addDel(selCust,custPUFrom.trim(),0,preAssignDriver||0,{stopType:"pickup",addr:custPUAddr.trim()||"",note:custPUNote.trim()||("Pickup for "+selCust),instructions:"Picking up for "+selCust+". Return to: "+(homeAddr||(cd&&cd.pickup)||selCust),priority:(cd&&cd.priority)||false});setShowCustPickup(false);setCustPUFrom("");setCustPUAddr("");setCustPUNote("");}} disabled={!custPUFrom.trim()} style={{display:"block",width:"100%",background:custPUFrom.trim()?"#2563eb":"#e7e5e4",color:custPUFrom.trim()?"#fff":"#a8a29e",border:"none",borderRadius:10,padding:"12px",fontSize:14,fontWeight:600,cursor:custPUFrom.trim()?"pointer":"default"}}>{"Add Pickup \u2192 "+selCust}</button>
+</div>}
+
 </div>}
 
 {/* ═══ QUOTE BUILDER ═══ */}
@@ -1610,13 +2415,13 @@ const updateStatus=(eid,status)=>{const now=new Date().toLocaleTimeString("en-US
 const addPhoto=(eid,dataUrl)=>setLog(p=>{const n={...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,photos:[...(e.photos||[]),dataUrl]}:e)};saveDriverLog(n);return n;});
 const addSignature=(eid,sig)=>setLog(p=>{const n={...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,signature:sig}:e)};saveDriverLog(n);return n;});
 const setShipPlanD=(eid,num)=>setLog(p=>{const n={...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,shipPlan:num}:e)};saveDriverLog(n);return n;});
-const setEtaD=(eid,mins)=>setLog(p=>{const n={...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,eta:mins}:e)};saveDriverLog(n);return n;});
+const setEtaD=(eid,mins,dest)=>setLog(p=>{const n={...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,eta:mins,etaDest:dest||null}:e)};saveDriverLog(n);return n;});
 
 if(!driver){
 return(
-<div style={{fontFamily:"'DM Sans',system-ui,sans-serif",background:"#1c1917",color:"#fff",minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",padding:40}}>
+<div style={{fontFamily:"'DM Sans',system-ui,sans-serif",background:BRAND.dark,color:"#fff",minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",padding:40}}>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet"/>
-<h1 style={{fontSize:24,fontWeight:700,margin:"0 0 8px"}}>DAVIS DELIVERY</h1>
+<h1 style={{fontSize:24,fontWeight:800,margin:"0 0 8px"}}><img src={LOGO_WHITE} alt="Davis Delivery" style={{height:36,objectFit:"contain"}}/></h1>
 <p style={{color:"#a8a29e",fontSize:14,margin:0}}>Driver not found</p>
 <p style={{color:"#78716c",fontSize:12,marginTop:12}}>Check your link or contact dispatch</p>
 </div>
@@ -1626,12 +2431,12 @@ return(
 /* PIN screen — simple gate before showing route */
 if(!authenticated){
 return(
-<div style={{fontFamily:"'DM Sans',system-ui,sans-serif",background:"#1c1917",color:"#fff",minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",padding:40}}>
+<div style={{fontFamily:"'DM Sans',system-ui,sans-serif",background:BRAND.dark,color:"#fff",minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",padding:40}}>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet"/>
 <div style={{textAlign:"center",width:"100%",maxWidth:320}}>
-<h1 style={{fontSize:22,fontWeight:700,margin:"0 0 4px"}}>DAVIS DELIVERY</h1>
-<p style={{color:"#a8a29e",fontSize:11,letterSpacing:"0.08em",margin:"0 0 32px"}}>DRIVER ACCESS</p>
-<div style={{width:56,height:56,borderRadius:16,background:"#292524",margin:"0 auto 16px",display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,fontWeight:700,color:"#16a34a"}}>{driver.name.charAt(0)}</div>
+<h1 style={{fontSize:22,fontWeight:800,margin:"0 0 4px"}}><img src={LOGO_WHITE} alt="Davis Delivery" style={{height:32,objectFit:"contain"}}/></h1>
+<p style={{color:BRAND.light,fontSize:11,letterSpacing:"0.08em",margin:"0 0 32px"}}>DRIVER ACCESS</p>
+<div style={{width:56,height:56,borderRadius:16,background:BRAND.main,margin:"0 auto 16px",display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,fontWeight:700,color:"#16a34a"}}>{driver.name.charAt(0)}</div>
 <p style={{fontSize:16,fontWeight:600,margin:"0 0 24px"}}>{driver.name}</p>
 <p style={{fontSize:13,color:"#78716c",margin:"0 0 12px"}}>Enter your PIN</p>
 <div style={{display:"flex",gap:8,justifyContent:"center",marginBottom:16}}>
@@ -1674,11 +2479,11 @@ return(
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet"/>
 {toast&&<div style={{position:"fixed",top:20,left:"50%",transform:"translateX(-50%)",background:"#16a34a",color:"#fff",padding:"10px 24px",borderRadius:12,fontWeight:600,fontSize:14,zIndex:999,boxShadow:"0 8px 32px rgba(22,163,74,0.3)",animation:"slideDown 0.3s ease"}}>✓ {toast}</div>}
 
-<div style={{background:"#1c1917",color:"#fff",padding:"16px 20px"}}>
+<div style={{background:BRAND.dark,color:"#fff",padding:"16px 20px"}}>
 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
 <div>
-<h1 style={{margin:0,fontSize:20,fontWeight:700}}>DAVIS DELIVERY</h1>
-<p style={{margin:"2px 0 0",fontSize:11,color:"#a8a29e",letterSpacing:"0.08em"}}>DRIVER MANIFEST</p>
+<h1 style={{margin:0}}><img src={LOGO_WHITE} alt="Davis Delivery" style={{height:26,objectFit:"contain"}}/></h1>
+<p style={{margin:"2px 0 0",fontSize:11,color:"#93c5fd",letterSpacing:"0.08em"}}>DRIVER MANIFEST</p>
 </div>
 <button onClick={()=>{setAuthenticated(false);setPinEntry("");}} style={{background:"#292524",border:"1px solid #44403c",color:"#a8a29e",borderRadius:8,padding:"6px 10px",cursor:"pointer",fontSize:11}}>Lock</button>
 </div>
@@ -1702,21 +2507,41 @@ return(
 
 {/* Driver notifications from dispatch */}
 {driverNotifs.filter(n=>!n.read).length>0&&<div style={{padding:"0 16px",marginBottom:4}}>
-{driverNotifs.filter(n=>!n.read).slice(0,3).map(n=>(
-<div key={n.id} style={{background:"#fef3c7",border:"1px solid #fde68a",borderRadius:10,padding:"10px 14px",marginBottom:6,display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
+{driverNotifs.filter(n=>!n.read).slice(0,5).map(n=>{
+const isRouteChange=n.type==="route_change"||n.message?.includes("ROUTE CHANGED");
+return(
+<div key={n.id} style={{background:isRouteChange?"#fef2f2":"#fef3c7",border:isRouteChange?"2px solid #dc2626":"1px solid #fde68a",borderRadius:10,padding:"10px 14px",marginBottom:6,display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8,animation:isRouteChange?"routeAlert 0.5s ease":"none"}}>
 <div style={{flex:1}}>
-<div style={{fontSize:12,fontWeight:700,color:"#92400e"}}>📢 Dispatch</div>
+<div style={{fontSize:12,fontWeight:700,color:isRouteChange?"#dc2626":"#92400e"}}>{isRouteChange?"🔄 Route Changed":"📢 Dispatch"}</div>
 <div style={{fontSize:12,color:"#1c1917",whiteSpace:"pre-wrap",marginTop:2}}>{n.message}</div>
 <div style={{fontSize:10,color:"#a8a29e",marginTop:4}}>{n.time}</div>
 </div>
-<button onClick={()=>markNotificationRead(n.id)} style={{background:"#f59e0b",color:"#fff",border:"none",borderRadius:6,padding:"4px 8px",cursor:"pointer",fontSize:10,fontWeight:600,flexShrink:0}}>Got it</button>
-</div>
-))}
+<button onClick={()=>markNotificationRead(n.id)} style={{background:isRouteChange?"#dc2626":"#f59e0b",color:"#fff",border:"none",borderRadius:6,padding:"4px 8px",cursor:"pointer",fontSize:10,fontWeight:600,flexShrink:0}}>Got it</button>
+</div>);})}
 </div>}
 
 {total===0&&<div style={{textAlign:"center",padding:"60px 20px",color:"#a8a29e"}}><div style={{fontSize:48,marginBottom:12}}>🚚</div><p style={{fontSize:16,fontWeight:600,margin:"0 0 4px"}}>No stops yet</p><p style={{fontSize:13,margin:0}}>Dispatch hasn't loaded your manifest yet.<br/>Pull down to refresh.</p></div>}
 
 <div style={{padding:"0 16px 100px"}}>
+{/* Leaving warehouse ETA */}
+{entries.length>0&&!entries.some(e=>e.status==="arrived"||e.status==="departed")&&(
+<div style={{background:"#fff",border:"2px solid "+BRAND.main,borderRadius:14,padding:"14px 16px",marginBottom:10}}>
+<div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+<span style={{fontSize:18}}>{"🏠"}</span>
+<div>
+<div style={{fontSize:14,fontWeight:700,color:BRAND.main}}>Leaving Warehouse</div>
+<div style={{fontSize:11,color:"#78716c"}}>ETA to first stop: {entries[0].stop}</div>
+</div>
+</div>
+<div style={{display:"flex",gap:6,alignItems:"center"}}>
+<input placeholder="mins" type="number" defaultValue={entries[0].eta||""} style={{width:70,border:"1px solid #d6d3d1",borderRadius:8,padding:"8px",fontSize:14,fontWeight:700,outline:"none",textAlign:"center"}}
+onBlur={e=>{if(e.target.value)setEtaD(entries[0].id,e.target.value,entries[0].stop);}}/>
+<span style={{fontSize:12,color:"#78716c"}}>min to</span>
+<span style={{fontSize:12,fontWeight:700,color:BRAND.main,flex:1}}>{entries[0].stop}</span>
+</div>
+{entries[0].eta&&entries[0].etaDest&&<div style={{marginTop:6,fontSize:11,color:BRAND.main,fontWeight:600}}>{"🚚"} ETA: {entries[0].eta} min → {entries[0].etaDest}</div>}
+</div>
+)}
 {entries.map((entry,i)=>{
 const c=CC[entry.customer]||CC["One-Off Delivery"];
 const addr=entry.addr||getAddr(entry.stop);
@@ -1736,6 +2561,7 @@ return(
 {departed&&<span style={{fontSize:9,background:"#16a34a",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700}}>DONE</span>}
 {arrived&&!departed&&<span style={{fontSize:9,background:"#f59e0b",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700}}>ON SITE</span>}
 {wantsShipPlan&&<span style={{fontSize:9,background:"#ea580c",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700}}>SHIP PLAN REQ</span>}
+{entry.dueBy&&<span style={{fontSize:9,background:entry.dueBy.startsWith("After")?"#2563eb":"#dc2626",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700,display:"inline-flex",alignItems:"center",gap:2}}>{"\u23F0"} {entry.dueBy}</span>}
 </div>
 <div style={{fontSize:16,fontWeight:700,color:"#1c1917",marginBottom:2}}>{entry.stop}</div>
 {/* Customer name shown but NO pricing */}
@@ -1761,25 +2587,35 @@ style={{width:"100%",border:isReturn&&!shipVal.trim()?"2px solid #dc2626":"1px s
 {entry.shipPlan&&<div style={{marginTop:6,background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:8,padding:"6px 12px"}}><span style={{fontSize:10,color:"#16a34a",fontWeight:600}}>Ship Plan #:</span> <span style={{fontSize:14,fontWeight:700}}>{entry.shipPlan}</span></div>}
 {/* NO note shown — notes often contain pricing info */}
 {addr&&<a href={`https://maps.google.com/maps/dir/?api=1&destination=${encodeURIComponent(addr)}`} target="_blank" rel="noopener"
-style={{display:"inline-flex",alignItems:"center",gap:6,background:"#1c1917",color:"#fff",border:"none",borderRadius:10,padding:"10px 16px",cursor:"pointer",fontSize:13,fontWeight:600,marginTop:8,textDecoration:"none",width:"100%",justifyContent:"center"}}>
+style={{display:"inline-flex",alignItems:"center",gap:6,background:BRAND.main,color:"#fff",border:"none",borderRadius:10,padding:"10px 16px",cursor:"pointer",fontSize:13,fontWeight:600,marginTop:8,textDecoration:"none",width:"100%",justifyContent:"center"}}>
 🧭 Get Directions
 </a>}
 {entry.arrivedAt&&<div style={{fontSize:10,color:"#16a34a",marginTop:6}}>Arrived: {entry.arrivedAt}</div>}
 {entry.departedAt&&<div style={{fontSize:10,color:"#16a34a"}}>Departed: {entry.departedAt}</div>}
-{entry.eta&&<div style={{fontSize:10,color:"#2563eb"}}>ETA to next: {entry.eta} min</div>}
+{entry.eta&&<div style={{fontSize:10,color:"#2563eb"}}>ETA: {entry.eta} min{entry.etaDest?" → "+entry.etaDest:""}</div>}
 <div style={{display:"flex",gap:6,marginTop:10,flexWrap:"wrap"}}>
 {!arrived&&<button onClick={()=>{updateStatus(entry.id,"arrived");showToast("Arrived ✓");}} style={{flex:1,background:"#f59e0b",color:"#fff",border:"none",borderRadius:10,padding:"10px",cursor:"pointer",fontSize:13,fontWeight:600}}>Arrived</button>}
 {arrived&&!departed&&<button onClick={()=>{if(!canDepart)return;updateStatus(entry.id,"departed");showToast("Departed ✓");}} style={{flex:1,background:canDepart?"#16a34a":"#a8a29e",color:"#fff",border:"none",borderRadius:10,padding:"10px",cursor:canDepart?"pointer":"not-allowed",fontSize:13,fontWeight:600}}>{canDepart?"Departed":"Enter Ship Plan # First"}</button>}
 {arrived&&(
-<div style={{display:"flex",gap:6,width:"100%",marginTop:4}}>
-<input placeholder="ETA mins" type="number" defaultValue={entry.eta||""} style={{flex:1,border:"1px solid #d6d3d1",borderRadius:8,padding:"8px",fontSize:13,outline:"none"}}
-onBlur={e=>{if(e.target.value)setEtaD(entry.id,e.target.value);}}/>
-<label style={{display:"flex",alignItems:"center",gap:4,background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:8,padding:"8px 12px",cursor:"pointer",fontSize:12,fontWeight:600,color:"#2563eb"}}>
-📷 Photo
+<div style={{width:"100%",marginTop:4}}>
+<div style={{display:"flex",gap:6,marginBottom:4}}>
+<select defaultValue={entry.etaDest||""} onChange={e=>{const dest=e.target.value;const curMins=entry.eta||"";if(dest&&curMins)setEtaD(entry.id,curMins,dest);}}
+style={{flex:1,border:"1px solid #d6d3d1",borderRadius:8,padding:"8px",fontSize:12,outline:"none",background:"#fff",color:entry.etaDest?"#1c1917":"#a8a29e"}}>
+<option value="">ETA to where?</option>
+{entries.filter((_,ei)=>ei>i&&_.status!=="departed").map(ne=><option key={ne.id} value={ne.stop}>{ne.stop}</option>)}
+<option value="Davis Warehouse">{"🏠 Davis Warehouse"}</option>
+</select>
+<input placeholder="mins" type="number" defaultValue={entry.eta||""} style={{width:70,border:"1px solid #d6d3d1",borderRadius:8,padding:"8px",fontSize:13,fontWeight:700,outline:"none",textAlign:"center"}}
+onBlur={e=>{if(e.target.value){const select=e.target.parentElement.querySelector("select");const dest=select?select.value:"";setEtaD(entry.id,e.target.value,dest||entry.etaDest);}}}/>
+</div>
+<div style={{display:"flex",gap:6}}>
+<label style={{display:"flex",alignItems:"center",gap:4,background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:8,padding:"8px 12px",cursor:"pointer",fontSize:12,fontWeight:600,color:"#2563eb",flex:1,justifyContent:"center"}}>
+{"📷"} Photo
 <input type="file" accept="image/*" capture="environment" style={{display:"none"}}
 onChange={e=>{if(e.target.files[0]){const r=new FileReader();r.onload=ev=>addPhoto(entry.id,ev.target.result);r.readAsDataURL(e.target.files[0]);}}}/>
 </label>
-<button onClick={()=>setSigStop(entry.id)} style={{background:"#f3e8f9",border:"1px solid #d8b4fe",borderRadius:8,padding:"8px 12px",cursor:"pointer",fontSize:12,fontWeight:600,color:"#7c3aed"}}>✍ Sign</button>
+<button onClick={()=>setSigStop(entry.id)} style={{background:"#f3e8f9",border:"1px solid #d8b4fe",borderRadius:8,padding:"8px 12px",cursor:"pointer",fontSize:12,fontWeight:600,color:"#7c3aed",flex:1}}>{"✍"} Sign</button>
+</div>
 </div>
 )}
 </div>
@@ -1794,7 +2630,7 @@ onChange={e=>{if(e.target.files[0]){const r=new FileReader();r.onload=ev=>addPho
 );
 })}
 </div>
-<style>{`@keyframes slideDown{from{transform:translate(-50%,-20px);opacity:0}to{transform:translate(-50%,0);opacity:1}}button:active{transform:scale(0.97)}*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}`}</style>
+<style>{`@keyframes slideDown{from{transform:translate(-50%,-20px);opacity:0}to{transform:translate(-50%,0);opacity:1}}@keyframes routeAlert{0%{transform:scale(1);box-shadow:0 0 0 0 rgba(220,38,38,0.4)}50%{transform:scale(1.02);box-shadow:0 0 0 8px rgba(220,38,38,0)}100%{transform:scale(1);box-shadow:0 0 0 0 rgba(220,38,38,0)}}button:active{transform:scale(0.97)}*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}`}</style>
 </div>
 );
 }
