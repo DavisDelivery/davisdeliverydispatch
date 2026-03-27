@@ -271,13 +271,229 @@ if(_gmpState==="loading"||_gmpState==="failed")return;
 _gmpState="loading";
 try{
 const s=document.createElement("script");
-s.src="https://maps.googleapis.com/maps/api/js?key=AIzaSyB29mVeZXedDhLVT3eMVgl07EsOneWCUu4&libraries=places";
+s.src="https://maps.googleapis.com/maps/api/js?key=AIzaSyB29mVeZXedDhLVT3eMVgl07EsOneWCUu4&libraries=places,geometry";
 s.async=true;
 s.onload=()=>{_gmpState="ready";};
 s.onerror=()=>{_gmpState="failed";};
 document.head.appendChild(s);
 }catch(e){_gmpState="failed";}
 }
+
+/* ── INTERACTIVE GOOGLE MAP COMPONENT ── */
+function GoogleMapView({stops,drivers,height,onStopClick,activeDriver,showSearch,searchLabel}){
+const containerRef=useRef(null);
+const mapInstanceRef=useRef(null);
+const markersRef=useRef([]);
+const polylinesRef=useRef([]);
+const searchInputRef=useRef(null);
+const searchBoxRef=useRef(null);
+const [selectedStop,setSelectedStop]=useState(null);
+const [mapReady,setMapReady]=useState(false);
+
+/* Initialize map */
+useEffect(()=>{
+loadGoogleMaps();
+const tryInit=()=>{
+if(!containerRef.current)return;
+if(!window.google?.maps?.Map){setTimeout(tryInit,200);return;}
+if(mapInstanceRef.current)return;
+const map=new window.google.maps.Map(containerRef.current,{
+center:{lat:33.92,lng:-84.25},
+zoom:10,
+mapTypeControl:false,
+streetViewControl:false,
+fullscreenControl:true,
+zoomControl:true,
+styles:[
+{featureType:"poi",stylers:[{visibility:"off"}]},
+{featureType:"transit",stylers:[{visibility:"off"}]},
+{featureType:"water",elementType:"geometry.fill",stylers:[{color:"#c9e4f5"}]},
+{featureType:"landscape",elementType:"geometry.fill",stylers:[{color:"#f0efe9"}]},
+{featureType:"road.highway",elementType:"geometry.fill",stylers:[{color:"#fcd34d"}]},
+{featureType:"road.highway",elementType:"geometry.stroke",stylers:[{color:"#fbbf24"}]},
+{featureType:"road.arterial",elementType:"geometry.fill",stylers:[{color:"#ffffff"}]},
+{featureType:"road.local",elementType:"geometry.fill",stylers:[{color:"#f5f5f4"}]},
+{featureType:"administrative.locality",elementType:"labels.text.fill",stylers:[{color:"#1e5b92"}]},
+]
+});
+mapInstanceRef.current=map;
+setMapReady(true);
+
+/* Search box */
+if(showSearch&&searchInputRef.current){
+const sb=new window.google.maps.places.SearchBox(searchInputRef.current);
+searchBoxRef.current=sb;
+map.addListener("bounds_changed",()=>{sb.setBounds(map.getBounds());});
+sb.addListener("places_changed",()=>{
+const places=sb.getPlaces();
+if(!places||!places.length)return;
+const place=places[0];
+if(!place.geometry||!place.geometry.location)return;
+map.panTo(place.geometry.location);
+map.setZoom(14);
+new window.google.maps.Marker({
+position:place.geometry.location,
+map,
+icon:{path:window.google.maps.SymbolPath.CIRCLE,scale:8,fillColor:"#dc2626",fillOpacity:1,strokeColor:"#fff",strokeWeight:2},
+title:place.name||place.formatted_address,
+});
+});
+}
+};
+tryInit();
+return()=>{
+markersRef.current.forEach(m=>m.setMap(null));
+polylinesRef.current.forEach(p=>p.setMap(null));
+};
+},[]);
+
+/* Update markers & routes when stops change */
+useEffect(()=>{
+if(!mapReady||!mapInstanceRef.current||!window.google?.maps)return;
+const map=mapInstanceRef.current;
+
+/* Clear old markers & lines */
+markersRef.current.forEach(m=>m.setMap(null));
+polylinesRef.current.forEach(p=>p.setMap(null));
+markersRef.current=[];
+polylinesRef.current=[];
+
+if(!stops||stops.length===0)return;
+
+const bounds=new window.google.maps.LatLngBounds();
+
+/* Group by driver for route lines */
+const drvStops={};
+stops.forEach(s=>{
+if(!s.coords)return;
+const pos={lat:s.coords.lat,lng:s.coords.lng};
+bounds.extend(pos);
+
+const di=drivers.findIndex(d=>d.id===s.driverId);
+const col=di>=0?DCOL[di]:(CC[s.customer]||CC["One-Off Delivery"]).accent;
+const done=s.status==="departed";
+const onSite=s.status==="arrived";
+const isPU=s.stopType==="pickup";
+const isP=s.priority;
+const isSelected=activeDriver&&s.driverId===activeDriver;
+
+/* Marker icon */
+const scale=done?6:onSite?10:isSelected?10:8;
+const fillColor=done?"#a8a29e":col;
+const strokeColor=onSite?"#f59e0b":isSelected?"#1c1917":"#fff";
+const strokeWeight=onSite?3:isSelected?3:2;
+
+const marker=new window.google.maps.Marker({
+position:pos,
+map,
+icon:{
+path:isPU?'M -6,-6 L 0,-10 L 6,-6 L 6,6 L -6,6 Z':window.google.maps.SymbolPath.CIRCLE,
+scale,
+fillColor,
+fillOpacity:done?0.5:1,
+strokeColor,
+strokeWeight,
+},
+zIndex:done?1:onSite?10:isSelected?8:5,
+title:s.stop,
+});
+
+/* Info window */
+const addr=s.addr||getAddr(s.stop);
+const badges=[];
+if(isPU)badges.push('<span style="background:#2563eb;color:#fff;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:700">PICKUP</span>');
+if(isP)badges.push('<span style="background:#f59e0b;color:#fff;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:700">PRIORITY</span>');
+if(done)badges.push('<span style="background:#16a34a;color:#fff;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:700">DONE</span>');
+if(onSite&&!done)badges.push('<span style="background:#f59e0b;color:#fff;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:700">ON SITE</span>');
+if(s.dueBy)badges.push(`<span style="background:${s.dueBy.startsWith("After")?"#2563eb":"#dc2626"};color:#fff;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:700">⏰ ${s.dueBy}</span>`);
+const drvName=drivers.find(d=>d.id===s.driverId)?.name?.split(" ")[0]||"";
+const infoContent=`<div style="font-family:DM Sans,system-ui,sans-serif;max-width:220px;padding:2px">
+<div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:4px">${badges.join(" ")}</div>
+<div style="font-size:14px;font-weight:700;color:#1c1917;margin-bottom:2px">${s.stop}</div>
+<div style="font-size:11px;color:${col};font-weight:600;margin-bottom:2px">${s.customer}</div>
+${drvName?`<div style="font-size:10px;color:#78716c;margin-bottom:2px">🚚 ${drvName}</div>`:""}
+${addr?`<div style="font-size:10px;color:#78716c;margin-bottom:4px">${addr}</div>`:""}
+${s.instructions?`<div style="font-size:10px;color:#2563eb;background:#eff6ff;padding:4px 6px;border-radius:4px;margin-bottom:3px">📋 ${s.instructions}</div>`:""}
+${s.weight?`<div style="font-size:10px;color:#1e5b92;font-weight:700">${s.weight.toLocaleString()} lbs</div>`:""}
+${s.eta?`<div style="font-size:10px;color:#2563eb">ETA: ${s.eta} min${s.etaDest?" → "+s.etaDest:""}</div>`:""}
+${s.shipPlan?`<div style="font-size:10px;color:#ea580c;font-weight:700">SP# ${s.shipPlan}</div>`:""}
+${addr?`<a href="https://maps.google.com/maps/dir/?api=1&destination=${encodeURIComponent(addr)}" target="_blank" style="display:inline-block;margin-top:6px;background:#1e5b92;color:#fff;padding:5px 12px;border-radius:6px;font-size:11px;font-weight:600;text-decoration:none">🧭 Directions</a>`:""}
+</div>`;
+
+const infoWindow=new window.google.maps.InfoWindow({content:infoContent});
+marker.addListener("click",()=>{
+setSelectedStop(s.id);
+infoWindow.open(map,marker);
+if(onStopClick)onStopClick(s.id);
+});
+
+/* Pulse animation for on-site */
+if(onSite&&!done){
+const pulse=new window.google.maps.Marker({
+position:pos,map,
+icon:{path:window.google.maps.SymbolPath.CIRCLE,scale:18,fillColor:"#f59e0b",fillOpacity:0.15,strokeColor:"#f59e0b",strokeWeight:1,strokeOpacity:0.3},
+zIndex:0,clickable:false,
+});
+markersRef.current.push(pulse);
+}
+
+markersRef.current.push(marker);
+
+/* Group for route lines */
+if(s.driverId&&s.driverId>0){
+if(!drvStops[s.driverId])drvStops[s.driverId]=[];
+drvStops[s.driverId].push(pos);
+}
+});
+
+/* Draw route polylines per driver */
+Object.entries(drvStops).forEach(([did,positions])=>{
+if(positions.length<2)return;
+const di=drivers.findIndex(d=>d.id===Number(did));
+const col=DCOL[di]||"#78716c";
+const line=new window.google.maps.Polyline({
+path:positions,
+geodesic:true,
+strokeColor:col,
+strokeOpacity:0.7,
+strokeWeight:4,
+map,
+icons:[{icon:{path:'M 0,-1 L 2,0 L 0,1',scale:3,fillColor:col,fillOpacity:0.9,strokeWeight:0},offset:'50%',repeat:'80px'}],
+});
+polylinesRef.current.push(line);
+/* Dashed overlay */
+const dash=new window.google.maps.Polyline({
+path:positions,geodesic:true,strokeColor:col,strokeOpacity:0,strokeWeight:0,map,
+icons:[{icon:{path:'M 0 0 L 1 0',scale:3,strokeColor:"#fff",strokeOpacity:0.5,strokeWeight:2},offset:'0',repeat:'16px'}],
+});
+polylinesRef.current.push(dash);
+});
+
+/* Fit map to bounds */
+if(stops.filter(s=>s.coords).length>0){
+map.fitBounds(bounds,{top:60,bottom:20,left:20,right:20});
+}
+},[stops,drivers,mapReady,activeDriver]);
+
+return(
+<div style={{position:"relative",borderRadius:14,overflow:"hidden",border:"1px solid #d6d3d1",boxShadow:"0 2px 12px rgba(0,0,0,0.08)"}}>
+{showSearch&&(
+<div style={{position:"absolute",top:10,left:10,right:60,zIndex:5}}>
+<input ref={searchInputRef} type="text" placeholder={searchLabel||"Search address…"}
+style={{width:"100%",padding:"10px 14px 10px 36px",border:"none",borderRadius:10,fontSize:13,fontWeight:500,outline:"none",boxShadow:"0 2px 12px rgba(0,0,0,0.15)",background:"#fff",fontFamily:"'DM Sans',system-ui,sans-serif"}}/>
+<span style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",fontSize:14,pointerEvents:"none",opacity:0.5}}>🔍</span>
+</div>
+)}
+<div ref={containerRef} style={{width:"100%",height:height||380,background:"#e8e4df"}}/>
+{!mapReady&&<div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",background:"#e8e4df"}}>
+<div style={{textAlign:"center"}}>
+<div style={{fontSize:28,marginBottom:8,animation:"pulse 1.5s infinite"}}>🗺️</div>
+<div style={{fontSize:13,color:"#78716c",fontWeight:500}}>Loading map…</div>
+</div>
+</div>}
+</div>
+);}
+
 
 function AddressInput({value,onChange,placeholder,style:customStyle}){
 const inputRef=useRef(null);
@@ -811,70 +1027,8 @@ style={{display:"flex",alignItems:"center",gap:6,padding:"8px 14px",borderRadius
 {!activeDriver&&<div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:10,padding:"10px 14px",margin:"0 4px 12px",fontSize:12,color:"#92400e",fontWeight:600}}>👆 Tap a driver above to start building their route</div>}
 
 {/* MAP */}
-<div style={{margin:"0 4px",background:"#e8e4df",borderRadius:14,overflow:"hidden",border:"1px solid #d6d3d1",position:"relative"}}>
-{/* Map background with road grid hint */}
-<svg width={mapW} height={mapH} viewBox={`0 0 ${mapW} ${mapH}`} style={{display:"block"}}>
-{/* Background */}
-<rect width={mapW} height={mapH} fill="#e8e4df"/>
-{/* Grid lines to suggest roads */}
-{Array.from({length:20}).map((_,i)=><line key={`h${i}`} x1={0} y1={i*20} x2={mapW} y2={i*20} stroke="#d6d3d1" strokeWidth={0.5} opacity={0.5}/>)}
-{Array.from({length:24}).map((_,i)=><line key={`v${i}`} x1={i*20} y1={0} x2={i*20} y2={mapH} stroke="#d6d3d1" strokeWidth={0.5} opacity={0.5}/>)}
-
-{/* Route lines */}
-{routeLines.map((rl,ri)=>(
-<g key={ri}>
-<polyline points={rl.points.map(p=>`${p.x},${p.y}`).join(" ")} fill="none" stroke={rl.color} strokeWidth={3} strokeLinejoin="round" strokeLinecap="round" opacity={0.7}/>
-<polyline points={rl.points.map(p=>`${p.x},${p.y}`).join(" ")} fill="none" stroke={rl.color} strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round" strokeDasharray="6 4" opacity={0.9}/>
-</g>
-))}
-
-{/* Stop dots */}
-{stopsWithCoords.map(s=>{
-const xy=toXY(s.coords);
-const drvColor=getStopDriverColor(s.id);
-const order=getStopOrder(s.id);
-const isPickup=s.stopType==="pickup";
-const custColor=(CC[s.customer]||CC["One-Off Delivery"]).accent;
-const isHovered=hoveredStop===s.id;
-const isAssignable=activeDriver&&!drvColor;
-const dotSize=isHovered?14:drvColor?12:10;
-return(
-<g key={s.id} onClick={()=>handleStopClick(s.id)} onMouseEnter={()=>setHoveredStop(s.id)} onMouseLeave={()=>setHoveredStop(null)}
-style={{cursor:activeDriver?"pointer":"default"}}>
-{/* Pulse ring for unassigned when driver selected */}
-{isAssignable&&<circle cx={xy.x} cy={xy.y} r={16} fill="none" stroke={DCOL[drivers.findIndex(d=>d.id===activeDriver)]} strokeWidth={1.5} opacity={0.4}>
-<animate attributeName="r" from="10" to="18" dur="1.5s" repeatCount="indefinite"/>
-<animate attributeName="opacity" from="0.6" to="0" dur="1.5s" repeatCount="indefinite"/>
-</circle>}
-{/* Dot */}
-<circle cx={xy.x} cy={xy.y} r={dotSize} fill={drvColor||custColor} stroke={isHovered?"#1c1917":"#fff"} strokeWidth={isHovered?3:2}/>
-{/* Pickup diamond */}
-{isPickup&&<rect x={xy.x-4} y={xy.y-4} width={8} height={8} fill="#fff" transform={`rotate(45 ${xy.x} ${xy.y})`} opacity={0.9}/>}
-{/* Order number */}
-{order&&<text x={xy.x} y={xy.y+4} textAnchor="middle" fontSize={9} fontWeight={700} fill="#fff" style={{pointerEvents:"none"}}>{order}</text>}
-{/* Due time flag */}
-{s.dueBy&&<g style={{pointerEvents:"none"}}>
-<rect x={xy.x+dotSize} y={xy.y-16} width={40} height={16} rx={4} fill="#dc2626"/>
-<text x={xy.x+dotSize+20} y={xy.y-5} textAnchor="middle" fontSize={8} fontWeight={700} fill="#fff">{"\u23F0 "+s.dueBy}</text>
-</g>}
-</g>
-);})}
-</svg>
-
-{/* Hover tooltip */}
-{hoveredStop&&(()=>{
-const s=stopsWithCoords.find(sw=>sw.id===hoveredStop);
-if(!s)return null;
-const xy=toXY(s.coords);
-const custColor=(CC[s.customer]||CC["One-Off Delivery"]).accent;
-return(
-<div style={{position:"absolute",left:Math.min(xy.x,mapW-180),top:Math.max(xy.y-65,4),background:"#1c1917",color:"#fff",padding:"8px 12px",borderRadius:10,fontSize:11,pointerEvents:"none",maxWidth:180,zIndex:10,boxShadow:"0 4px 12px rgba(0,0,0,0.3)"}}>
-<div style={{fontWeight:700,fontSize:12,marginBottom:2}}>{s.stop}</div>
-<div style={{color:custColor,fontWeight:600,fontSize:10}}>{s.customer}</div>
-{s.priority&&<div style={{color:"#fbbf24",fontSize:9,fontWeight:600}}>⚡ PRIORITY</div>}
-</div>
-);
-})()}
+<div style={{margin:"0 4px"}}>
+<GoogleMapView stops={stopsWithCoords} drivers={drivers} height={400} onStopClick={handleStopClick} activeDriver={activeDriver} showSearch={true} searchLabel="Search address…"/>
 </div>
 
 {/* Stats bar */}
@@ -1414,25 +1568,56 @@ return(
 <span style={{fontSize:13,fontWeight:700}}>{drv.name}</span>
 <span style={{fontSize:11,color:"#a8a29e"}}>({de.length})</span>
 </div>
-<div style={{display:"flex",gap:3}}>
-<button onClick={()=>{setNotifyDriver(drv.id);setNotifyCustomMsg("");}} style={{background:"#fef3c7",border:"none",borderRadius:5,padding:"3px 8px",cursor:"pointer",fontSize:10,color:"#92400e",fontWeight:600}}>Notify</button>
-<button onClick={()=>{setPreAssignDriver(drv.id);setView("add");setSelCust(null);setQuoteMode(null);}} style={{background:"#dcfce7",border:"none",borderRadius:5,padding:"3px 8px",cursor:"pointer",fontSize:10,color:"#16a34a",fontWeight:600}}>+</button>
+<div style={{display:"flex",gap:3,flexWrap:"wrap"}}>
+{de.length>0&&<><button onClick={()=>printManifest(drv.id)} style={{background:"#e7e5e4",border:"none",borderRadius:5,padding:"3px 6px",cursor:"pointer",fontSize:9,color:"#57534e",fontWeight:600}}>Print</button><button onClick={()=>copyManifest(drv.id)} style={{background:"#dcfce7",border:"none",borderRadius:5,padding:"3px 6px",cursor:"pointer",fontSize:9,color:"#16a34a",fontWeight:600}}>Copy</button><button onClick={()=>textManifest(drv.id)} style={{background:"#dbeafe",border:"none",borderRadius:5,padding:"3px 6px",cursor:"pointer",fontSize:9,color:"#2563eb",fontWeight:600}}>Text</button></>}
+<button onClick={()=>setInsertPickupFor({driverId:drv.id,afterIdx:-1})} style={{background:"#eff6ff",border:"none",borderRadius:5,padding:"3px 6px",cursor:"pointer",fontSize:9,color:"#2563eb",fontWeight:600}}>+PU</button>
+<button onClick={()=>{setNotifyDriver(drv.id);setNotifyCustomMsg("");}} style={{background:"#fef3c7",border:"none",borderRadius:5,padding:"3px 6px",cursor:"pointer",fontSize:9,color:"#92400e",fontWeight:600}}>Notify</button>
+<button onClick={()=>setDriverViewId(drv.id)} style={{background:"#f3e8f9",border:"none",borderRadius:5,padding:"3px 6px",cursor:"pointer",fontSize:9,color:"#7c3aed",fontWeight:600}}>View</button>
+<button onClick={()=>{setPreAssignDriver(drv.id);setView("add");setSelCust(null);setQuoteMode(null);}} style={{background:"#dcfce7",border:"none",borderRadius:5,padding:"3px 6px",cursor:"pointer",fontSize:9,color:"#16a34a",fontWeight:600}}>+</button>
 </div>
 </div>
 <div style={{background:"#fafaf9",border:"1px solid #e7e5e4",borderTop:"none",borderRadius:"0 0 10px 10px",padding:de.length?"6px 6px 2px":"8px 10px",minHeight:40}}>
 {de.length===0&&<div style={{fontSize:11,color:"#a8a29e",textAlign:"center",padding:4}}>No stops</div>}
-{de.map((entry,eIdx)=>{const c=CC[entry.customer]||CC["One-Off Delivery"];const isPU=entry.stopType==="pickup";const done=entry.status==="departed";const onSite=entry.status==="arrived";const hasDue=!!entry.dueBy;
-return(<div key={entry.id} style={{background:done?"#f0fdf4":onSite?"#fffbeb":hasDue?"#fef2f2":"#fff",border:`1px solid ${done?"#bbf7d0":onSite?"#fde68a":hasDue?"#fca5a5":"#e7e5e4"}`,borderRadius:8,padding:"8px 10px",marginBottom:4,borderLeft:`3px solid ${isPU?"#2563eb":c.accent}`,opacity:done?0.6:1}}>
-<div style={{display:"flex",alignItems:"center",gap:4,marginBottom:2}}>
+{de.length>0&&(()=>{const loads=getDriverLoads(drv.id);return loads.map(loadN=>{const w=getLoadWeight(drv.id,loadN);const pct=weightPct(w);const col=weightColor(w);const over=w>TRUCK_LIMITS.default;return w>0||loads.length>1?(<div key={loadN} style={{display:"flex",alignItems:"center",gap:6,padding:"3px 4px",marginBottom:2}}>
+<span style={{fontSize:9,fontWeight:700,color:"#78716c",flexShrink:0}}>L{loadN}</span>
+<div style={{flex:1,height:6,background:"#e7e5e4",borderRadius:3,overflow:"hidden"}}>
+<div style={{height:"100%",width:pct+"%",background:col,borderRadius:3,transition:"width 0.3s"}}/>
+</div>
+<span style={{fontSize:9,fontWeight:700,color:col,fontVariantNumeric:"tabular-nums",flexShrink:0}}>{w.toLocaleString()}<span style={{fontSize:7,color:"#a8a29e"}}>/{(TRUCK_LIMITS.default/1000).toFixed(0)}k</span></span>
+{over&&<span style={{fontSize:7,background:"#dc2626",color:"#fff",padding:"0px 3px",borderRadius:2,fontWeight:700}}>OVER</span>}
+</div>):null;});})()}
+{de.map((entry,eIdx)=>{const c=CC[entry.customer]||CC["One-Off Delivery"];const isPU=entry.stopType==="pickup";const done=entry.status==="departed";const onSite=entry.status==="arrived";const hasDue=!!entry.dueBy;const addr=entry.addr||getAddr(entry.stop);const isP=entry.priority;const hasInstr=entry.instructions?.trim();const isImetco=entry.customer==="IMETCO";
+return(<div key={entry.id} style={{background:done?"#f0fdf4":onSite?"#fffbeb":hasDue?"#fef2f2":isP?"#fef3c7":isPU?"#eff6ff":"#fff",border:`1px solid ${done?"#bbf7d0":onSite?"#fde68a":hasDue?"#fca5a5":"#e7e5e4"}`,borderRadius:8,padding:"8px 10px",marginBottom:4,borderLeft:`3px solid ${isPU?"#2563eb":isP?"#f59e0b":c.accent}`,opacity:done?0.6:1}}>
+<div style={{display:"flex",alignItems:"center",gap:4,marginBottom:2,flexWrap:"wrap"}}>
 <span style={{fontSize:10,color:"#a8a29e",fontVariantNumeric:"tabular-nums"}}>{eIdx+1}.</span>
 {isPU&&<span style={{fontSize:8,background:"#2563eb",color:"#fff",padding:"1px 4px",borderRadius:2,fontWeight:700}}>PU</span>}
+{isP&&<span style={{fontSize:8,background:"#f59e0b",color:"#fff",padding:"1px 4px",borderRadius:2,fontWeight:700}}>PRIORITY</span>}
 {done&&<span style={{fontSize:8,background:"#16a34a",color:"#fff",padding:"1px 4px",borderRadius:2,fontWeight:700}}>DONE</span>}
 {onSite&&!done&&<span style={{fontSize:8,background:"#f59e0b",color:"#fff",padding:"1px 4px",borderRadius:2,fontWeight:700}}>ON SITE</span>}
 {hasDue&&<span style={{fontSize:8,background:entry.dueBy.startsWith("After")?"#2563eb":"#dc2626",color:"#fff",padding:"1px 4px",borderRadius:2,fontWeight:700,display:"inline-flex",alignItems:"center",gap:1}}>{"\u23F0"}{entry.dueBy}</span>}
+{isImetco&&<span style={{fontSize:8,background:"#ea580c",color:"#fff",padding:"1px 4px",borderRadius:2,fontWeight:700}}>SHIP PLAN REQ</span>}
 <span style={{fontSize:11,fontWeight:600,color:"#1c1917",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{entry.stop}</span>
 </div>
-<div style={{fontSize:10,color:c.accent}}>{entry.customer}</div>
-{entry.shipPlan&&<div style={{fontSize:9,color:"#ea580c",marginTop:1}}>SP# {entry.shipPlan}</div>}
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+<div style={{fontSize:10,color:c.accent,fontWeight:600}}>{entry.customer}</div>
+<span style={{fontSize:10,fontWeight:700,color:"#44403c",fontVariantNumeric:"tabular-nums"}}>{entry.isHourly?"HR":fmt(entry.baseRate)}</span>
+</div>
+{addr&&<div style={{fontSize:9,color:"#78716c",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:1}}>{addr}</div>}
+{entry.note&&<div style={{fontSize:9,color:"#a8a29e",marginTop:1}}>{entry.note}</div>}
+{hasInstr&&<div style={{fontSize:9,color:"#2563eb",marginTop:2,background:"#eff6ff",padding:"3px 6px",borderRadius:4}}>📋 {entry.instructions}</div>}
+{entry.shipPlan&&<div style={{fontSize:9,color:"#ea580c",fontWeight:700,marginTop:1}}>SP# {entry.shipPlan}</div>}
+{entry.weight>0&&<div style={{fontSize:9,color:BRAND.main,fontWeight:700,marginTop:1}}>{entry.weight.toLocaleString()} lbs{(entry.loadNum||1)>1?" (Load "+(entry.loadNum||1)+")":""}</div>}
+{entry.eta&&<div style={{fontSize:9,color:"#2563eb",marginTop:1}}>ETA: {entry.eta} min{entry.etaDest?" → "+entry.etaDest:""}</div>}
+{entry.arrivedAt&&<div style={{fontSize:9,color:"#16a34a",marginTop:1}}>Arrived: {entry.arrivedAt}</div>}
+{entry.departedAt&&<div style={{fontSize:9,color:"#16a34a"}}>Departed: {entry.departedAt}</div>}
+{entry.signature&&<div style={{fontSize:9,color:"#16a34a",marginTop:1}}>✍ {entry.signature}</div>}
+{entry.photos&&entry.photos.length>0&&<div style={{display:"flex",gap:3,marginTop:3}}>{entry.photos.map((p,pi)=><img key={pi} src={p} alt="" style={{width:24,height:24,objectFit:"cover",borderRadius:4,border:"1px solid #e7e5e4"}}/>)}</div>}
+<div style={{display:"flex",gap:3,marginTop:4,flexWrap:"wrap"}}>
+<select value={entry.driverId} onChange={e=>{e.stopPropagation();reassign(entry.id,Number(e.target.value));}} style={{background:"#f5f5f4",border:"1px solid #e7e5e4",borderRadius:5,padding:"2px 4px",fontSize:9,color:"#57534e",cursor:"pointer",maxWidth:70}}><option value={0}>Assign</option>{drivers.map(dd=><option key={dd.id} value={dd.id}>{dd.name}</option>)}</select>
+<button onClick={()=>moveInDriver(drv.id,eIdx,-1)} style={{background:"#f5f5f4",border:"1px solid #e7e5e4",borderRadius:4,padding:"1px 5px",cursor:"pointer",fontSize:9,color:"#78716c"}} title="Move up">▲</button>
+<button onClick={()=>moveInDriver(drv.id,eIdx,1)} style={{background:"#f5f5f4",border:"1px solid #e7e5e4",borderRadius:4,padding:"1px 5px",cursor:"pointer",fontSize:9,color:"#78716c"}} title="Move down">▼</button>
+<button onClick={()=>rmDel(entry.id)} style={{background:"none",border:"none",color:"#dc2626",fontSize:9,cursor:"pointer",padding:"1px 4px"}}>✕</button>
+</div>
 </div>);})}
 </div>
 </div>
@@ -1443,10 +1628,22 @@ return(<div key={entry.id} style={{background:done?"#f0fdf4":onSite?"#fffbeb":ha
 <span style={{fontSize:13,fontWeight:700,color:"#78716c"}}>Unassigned ({uaEntries.length})</span>
 </div>
 <div style={{background:"#fafaf9",border:"1px solid #e7e5e4",borderTop:"none",borderRadius:"0 0 10px 10px",padding:"6px 6px 2px"}}>
-{uaEntries.map(entry=>{const c=CC[entry.customer]||CC["One-Off Delivery"];return(
-<div key={entry.id} style={{background:"#fff",border:"1px solid #e7e5e4",borderRadius:8,padding:"8px 10px",marginBottom:4,borderLeft:`3px solid ${c.accent}`}}>
-<div style={{fontSize:11,fontWeight:600}}>{entry.stop}</div>
+{uaEntries.map(entry=>{const c=CC[entry.customer]||CC["One-Off Delivery"];const addr=entry.addr||getAddr(entry.stop);const hasInstr=entry.instructions?.trim();return(
+<div key={entry.id} style={{background:entry.priority?"#fef3c7":"#fff",border:`1px solid ${entry.priority?"#fde68a":"#e7e5e4"}`,borderRadius:8,padding:"8px 10px",marginBottom:4,borderLeft:`3px solid ${entry.stopType==="pickup"?"#2563eb":c.accent}`}}>
+<div style={{display:"flex",alignItems:"center",gap:4,marginBottom:2,flexWrap:"wrap"}}>
+{entry.stopType==="pickup"&&<span style={{fontSize:8,background:"#2563eb",color:"#fff",padding:"1px 4px",borderRadius:2,fontWeight:700}}>PU</span>}
+{entry.priority&&<span style={{fontSize:8,background:"#f59e0b",color:"#fff",padding:"1px 4px",borderRadius:2,fontWeight:700}}>PRIORITY</span>}
+{entry.dueBy&&<span style={{fontSize:8,background:entry.dueBy.startsWith("After")?"#2563eb":"#dc2626",color:"#fff",padding:"1px 4px",borderRadius:2,fontWeight:700}}>{"\u23F0"}{entry.dueBy}</span>}
+<span style={{fontSize:11,fontWeight:600}}>{entry.stop}</span>
+</div>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
 <div style={{fontSize:10,color:c.accent}}>{entry.customer}</div>
+<span style={{fontSize:10,fontWeight:700,color:"#44403c",fontVariantNumeric:"tabular-nums"}}>{entry.isHourly?"HR":fmt(entry.baseRate)}</span>
+</div>
+{addr&&<div style={{fontSize:9,color:"#78716c",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:1}}>{addr}</div>}
+{entry.note&&<div style={{fontSize:9,color:"#a8a29e",marginTop:1}}>{entry.note}</div>}
+{hasInstr&&<div style={{fontSize:9,color:"#2563eb",marginTop:2,background:"#eff6ff",padding:"3px 6px",borderRadius:4}}>📋 {entry.instructions}</div>}
+{entry.weight>0&&<div style={{fontSize:9,color:BRAND.main,fontWeight:700,marginTop:1}}>{entry.weight.toLocaleString()} lbs</div>}
 <select value={entry.driverId} onChange={e=>reassign(entry.id,Number(e.target.value))} style={{marginTop:4,background:"#f5f5f4",border:"1px solid #e7e5e4",borderRadius:5,padding:"3px 6px",fontSize:10,color:"#57534e",cursor:"pointer"}}>
 <option value={0}>Assign...</option>{drivers.map(dd=><option key={dd.id} value={dd.id}>{dd.name}</option>)}
 </select>
@@ -1471,29 +1668,9 @@ return(<div key={entry.id} style={{background:done?"#f0fdf4":onSite?"#fffbeb":ha
 </div>
 {(()=>{
 const stopsWithCoords2=dl.map(e=>{const addr=e.addr||getAddr(e.stop);const coords=getCoords(addr);return coords?{...e,coords}:null;}).filter(Boolean);
-if(stopsWithCoords2.length===0)return(<div style={{margin:"0 20px",background:"#fff",borderRadius:14,padding:"60px 20px",textAlign:"center",border:"1px solid #e7e5e4"}}><div style={{fontSize:36,marginBottom:8}}>{"\uD83D\uDDFA\uFE0F"}</div><div style={{fontSize:14,color:"#a8a29e"}}>Add stops to see routes on the map</div></div>);
-const allC=stopsWithCoords2.map(s=>s.coords);
-const mnLat=Math.min(...allC.map(c=>c.lat))-0.015;const mxLat=Math.max(...allC.map(c=>c.lat))+0.015;
-const mnLng=Math.min(...allC.map(c=>c.lng))-0.015;const mxLng=Math.max(...allC.map(c=>c.lng))+0.015;
-const mW=700;const mH=380;
-const toXY2=coords=>({x:((coords.lng-mnLng)/(mxLng-mnLng))*mW,y:((mxLat-coords.lat)/(mxLat-mnLat))*mH});
-const drvRoutes={};drivers.forEach(d=>{drvRoutes[d.id]=stopsWithCoords2.filter(s=>s.driverId===d.id);});
 return(
-<div style={{margin:"0 20px",background:"#fff",borderRadius:14,overflow:"hidden",border:"1px solid #e7e5e4",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}>
-<svg width="100%" height={mH} viewBox={`0 0 ${mW} ${mH}`} style={{display:"block"}}>
-<rect width={mW} height={mH} fill="#fafaf9"/>
-{Array.from({length:30}).map((_,i)=><line key={"h"+i} x1={0} y1={i*14} x2={mW} y2={i*14} stroke="#f5f5f4" strokeWidth={0.5}/>)}
-{Array.from({length:50}).map((_,i)=><line key={"v"+i} x1={i*14} y1={0} x2={i*14} y2={mH} stroke="#f5f5f4" strokeWidth={0.5}/>)}
-{drivers.map((drv,di)=>{const pts=drvRoutes[drv.id].map(s=>toXY2(s.coords));if(pts.length<2)return null;return(<polyline key={drv.id} points={pts.map(p=>p.x+","+p.y).join(" ")} fill="none" stroke={DCOL[di]} strokeWidth={2.5} strokeLinejoin="round" strokeLinecap="round" opacity={0.5} strokeDasharray="8 4"/>);})}
-{stopsWithCoords2.map(s=>{const xy=toXY2(s.coords);const di=drivers.findIndex(d=>d.id===s.driverId);const col=di>=0?DCOL[di]:(CC[s.customer]||CC["One-Off Delivery"]).accent;const done=s.status==="departed";const onSite=s.status==="arrived";const isPU=s.stopType==="pickup";const sz=done?5:onSite?9:7;
-return(<g key={s.id}>
-{onSite&&!done&&<circle cx={xy.x} cy={xy.y} r={14} fill="none" stroke="#f59e0b" strokeWidth={1.5} opacity={0.4}><animate attributeName="r" from="8" to="16" dur="1.5s" repeatCount="indefinite"/><animate attributeName="opacity" from="0.6" to="0" dur="1.5s" repeatCount="indefinite"/></circle>}
-<circle cx={xy.x} cy={xy.y} r={sz} fill={done?"#d6d3d1":col} stroke="#fff" strokeWidth={2}/>
-{isPU&&<rect x={xy.x-3} y={xy.y-3} width={6} height={6} fill="#fff" transform={`rotate(45 ${xy.x} ${xy.y})`} opacity={0.8}/>}
-<title>{s.stop+" ("+s.customer+")"}</title>
-{s.dueBy&&<g><rect x={xy.x+sz+2} y={xy.y-14} width={42} height={14} rx={3} fill="#dc2626"/><text x={xy.x+sz+23} y={xy.y-4} textAnchor="middle" fontSize={8} fontWeight={700} fill="#fff">{"\u23F0 "+s.dueBy}</text></g>}
-</g>);})}
-</svg>
+<div style={{margin:"0 20px"}}>
+<GoogleMapView stops={stopsWithCoords2} drivers={drivers} height={380} showSearch={true} searchLabel="Search address on map…"/>
 </div>);
 })()}
 
@@ -1562,18 +1739,30 @@ return(<g key={s.id}>
 </div>}
 
 {dl.length===0?<div style={{textAlign:"center",padding:"40px 20px",color:"#a8a29e"}}><div style={{fontSize:28,marginBottom:8}}>{"\uD83D\uDE9A"}</div><div style={{fontSize:13}}>No deliveries yet</div></div>
-:dl.map(entry=>{const c=getCustColor(entry.customer);const drv=drivers.find(d=>d.id===entry.driverId);const di=drivers.findIndex(d=>d.id===entry.driverId);return(
-<div key={entry.id} style={{background:"#fafaf9",borderRadius:10,padding:"10px 14px",marginBottom:6,borderLeft:`3px solid ${entry.priority?"#f59e0b":entry.stopType==="pickup"?"#2563eb":c.accent}`,border:"1px solid #e7e5e4"}}>
+:dl.map(entry=>{const c=getCustColor(entry.customer);const drv=drivers.find(d=>d.id===entry.driverId);const di=drivers.findIndex(d=>d.id===entry.driverId);const done=entry.status==="departed";const onSite=entry.status==="arrived";const addr=entry.addr||getAddr(entry.stop);const hasInstr=entry.instructions?.trim();return(
+<div key={entry.id} style={{background:done?"#f0fdf4":onSite?"#fffbeb":"#fafaf9",borderRadius:10,padding:"10px 14px",marginBottom:6,borderLeft:`3px solid ${entry.priority?"#f59e0b":entry.stopType==="pickup"?"#2563eb":c.accent}`,border:`1px solid ${done?"#bbf7d0":onSite?"#fde68a":"#e7e5e4"}`,opacity:done?0.7:1}}>
 <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
 <div style={{flex:1,minWidth:0}}>
 <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:2,flexWrap:"wrap"}}>
 <span style={{fontSize:10,fontWeight:600,color:c.accent,textTransform:"uppercase"}}>{entry.customer}</span>
 {entry.stopType==="pickup"&&<span style={{fontSize:8,background:"#2563eb",color:"#fff",padding:"1px 4px",borderRadius:2,fontWeight:700}}>PU</span>}
+{entry.priority&&<span style={{fontSize:8,background:"#f59e0b",color:"#fff",padding:"1px 4px",borderRadius:2,fontWeight:700}}>PRIORITY</span>}
+{done&&<span style={{fontSize:8,background:"#16a34a",color:"#fff",padding:"1px 4px",borderRadius:2,fontWeight:700}}>DONE</span>}
+{onSite&&!done&&<span style={{fontSize:8,background:"#f59e0b",color:"#fff",padding:"1px 4px",borderRadius:2,fontWeight:700}}>ON SITE</span>}
 {entry.dueBy&&<span style={{fontSize:8,background:entry.dueBy.startsWith("After")?"#2563eb":"#dc2626",color:"#fff",padding:"1px 4px",borderRadius:2,fontWeight:700,display:"inline-flex",alignItems:"center",gap:1}}>{"\u23F0"}{entry.dueBy}</span>}
 {drv&&<span style={{fontSize:9,background:DCOL[di]||"#78716c",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:600}}>{drv.name.split(" ")[0]}</span>}
 </div>
 <div style={{fontSize:13,fontWeight:600}}>{entry.stop}</div>
-{entry.addr&&<div style={{fontSize:10,color:"#a8a29e",marginTop:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{entry.addr}</div>}
+{addr&&<div style={{fontSize:10,color:"#a8a29e",marginTop:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{addr}</div>}
+{entry.note&&<div style={{fontSize:10,color:"#a8a29e",marginTop:1}}>{entry.note}</div>}
+{hasInstr&&<div style={{fontSize:10,color:"#2563eb",marginTop:2,background:"#eff6ff",padding:"3px 6px",borderRadius:4}}>📋 {entry.instructions}</div>}
+{entry.shipPlan&&<div style={{fontSize:10,color:"#ea580c",fontWeight:700,marginTop:1}}>SP# {entry.shipPlan}</div>}
+{entry.weight>0&&<div style={{fontSize:10,color:BRAND.main,fontWeight:700,marginTop:1}}>{entry.weight.toLocaleString()} lbs{(entry.loadNum||1)>1?" (Load "+(entry.loadNum||1)+")":""}</div>}
+{entry.eta&&<div style={{fontSize:10,color:"#2563eb",marginTop:1}}>ETA: {entry.eta} min{entry.etaDest?" → "+entry.etaDest:""}</div>}
+{entry.arrivedAt&&<div style={{fontSize:9,color:"#16a34a",marginTop:1}}>Arrived: {entry.arrivedAt}</div>}
+{entry.departedAt&&<div style={{fontSize:9,color:"#16a34a"}}>Departed: {entry.departedAt}</div>}
+{entry.signature&&<div style={{fontSize:9,color:"#16a34a",marginTop:1}}>✍ {entry.signature}</div>}
+{entry.photos&&entry.photos.length>0&&<div style={{display:"flex",gap:3,marginTop:3}}>{entry.photos.map((p,pi)=><img key={pi} src={p} alt="" style={{width:24,height:24,objectFit:"cover",borderRadius:4,border:"1px solid #e7e5e4"}}/>)}</div>}
 </div>
 <div style={{fontSize:14,fontWeight:700,fontVariantNumeric:"tabular-nums",flexShrink:0,marginLeft:8}}>{entry.isHourly?"HR":fmt(entry.baseRate)}</div>
 </div>
