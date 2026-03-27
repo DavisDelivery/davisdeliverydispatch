@@ -1504,6 +1504,13 @@ const[driverViewId,setDriverViewId]=useState(null);
 const[customInstr,setCustomInstr]=useState(()=>lsGet(LS_CUSTOM_INSTR,{}));
 const[showAddCustomDel,setShowAddCustomDel]=useState(false);
 const[mapActiveDrv,setMapActiveDrv]=useState(null); /* driver selected for click-to-assign on Live Routes map */
+/* ── ROUTE PLANNER STATE ── */
+const[rpActive,setRpActive]=useState(null);
+const[rpOrders,setRpOrders]=useState({});
+const[rpDragSrc,setRpDragSrc]=useState(null);
+const[rpDragOver,setRpDragOver]=useState(null);
+const[rpShowUnassigned,setRpShowUnassigned]=useState(true);
+const[rpInited,setRpInited]=useState(false);
 const[customDelName,setCustomDelName]=useState("");
 const[customDelAddr,setCustomDelAddr]=useState("");
 const[customDelRate,setCustomDelRate]=useState("");
@@ -1745,11 +1752,15 @@ const setLoadNum=(eid,n)=>setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{.
 
 /* ── TRUCK WEIGHT LIMITS ── */
 const TRUCK_LIMITS={default:10000,heavy:14000};
+const[driverCapacity,setDriverCapacity]=useState(()=>lsGet("dd_driver_capacity",{})); /* {driverId: 10000|14000} */
+useEffect(()=>{lsSet("dd_driver_capacity",driverCapacity);},[driverCapacity]);
+const getDriverCapacity=(drvId)=>driverCapacity[drvId]||TRUCK_LIMITS.default;
+const toggleDriverCapacity=(drvId)=>{setDriverCapacity(p=>{const cur=p[drvId]||TRUCK_LIMITS.default;return{...p,[drvId]:cur===TRUCK_LIMITS.default?TRUCK_LIMITS.heavy:TRUCK_LIMITS.default};});};
 const getLoadWeight=(drvId,loadN)=>dl.filter(e=>e.driverId===drvId&&(e.loadNum||1)===loadN).reduce((s,e)=>s+(e.weight||0),0);
 const getDriverLoads=(drvId)=>{const loads=new Set();dl.filter(e=>e.driverId===drvId).forEach(e=>loads.add(e.loadNum||1));return[...loads].sort((a,b)=>a-b);};
 const getMaxLoad=(drvId)=>{const loads=getDriverLoads(drvId);return loads.length>0?Math.max(...loads):1;};
-const weightPct=(w)=>Math.min((w/TRUCK_LIMITS.default)*100,100);
-const weightColor=(w)=>w>TRUCK_LIMITS.default?"#dc2626":w>TRUCK_LIMITS.default*0.85?"#d97706":"#16a34a";
+const weightPct=(w,cap)=>Math.min((w/(cap||TRUCK_LIMITS.default))*100,100);
+const weightColor=(w,cap)=>w>(cap||TRUCK_LIMITS.default)?"#dc2626":w>(cap||TRUCK_LIMITS.default)*0.85?"#d97706":"#16a34a";
 
 /* ── EMSER SHIFT HELPERS ── */
 /* parseTime accepts both "14:30" (from <input type=time>) and "2:30 PM" (legacy) */
@@ -1838,12 +1849,13 @@ if(dragSrc.drvId===drvId){
 /* Same driver — reorder */
 setLog(p=>{const all=[...(p[dk]||[])];const de=all.filter(e=>e.driverId===drvId);const rest=all.filter(e=>e.driverId!==drvId);const[moved]=de.splice(dragSrc.idx,1);de.splice(toIdx,0,moved);return{...p,[dk]:[...rest,...de]};});
 }else{
-/* Cross-driver — reassign */
+/* Cross-driver — reassign (including to/from unassigned drvId=0) */
 const srcEntries=dl.filter(e=>e.driverId===dragSrc.drvId);
 const entry=srcEntries[dragSrc.idx];
 if(entry){
 reassign(entry.id,drvId);
-showToast("Moved to "+((drivers.find(d=>d.id===drvId))?.name||"driver"));
+const targetName=drvId===0?"Unassigned":((drivers.find(d=>d.id===drvId))?.name||"driver");
+showToast("Moved to "+targetName);
 }
 }
 setDragSrc(null);setDragOver(null);
@@ -2049,7 +2061,7 @@ return(
 </div>
 <div style={{display:"flex",alignItems:"center",gap:10}}>
 {view!=="manifest"&&<button onClick={()=>{setView("manifest");setSelCust(null);setQuoteMode(null);}} style={{background:BRAND.main,border:"none",color:"#fff",borderRadius:8,padding:"7px 16px",cursor:"pointer",fontSize:12,fontWeight:700}}>{"← Dashboard"}</button>}
-{[{k:"daily",l:"Daily"},{k:"weekly",l:"Weekly"},{k:"history",l:"History"},{k:"routes",l:"Routes"},{k:"add",l:"+ Add"}].map(v=><button key={v.k} onClick={()=>{setView(v.k);setSelCust(null);setQuoteMode(null);}} style={{background:view===v.k?(v.k==="add"?"#16a34a":v.k==="routes"?"#d97706":BRAND.main):v.k==="add"?"#f0fdf4":v.k==="routes"?"#fffbeb":"#fff",border:view===v.k?"none":v.k==="add"?"1px solid #bbf7d0":v.k==="routes"?"1px solid #fde68a":"1px solid #e7e5e4",color:view===v.k?"#fff":v.k==="add"?"#16a34a":v.k==="routes"?"#d97706":"#57534e",borderRadius:8,padding:"7px 14px",cursor:"pointer",fontSize:12,fontWeight:600}}>{v.l}</button>)}
+{[{k:"daily",l:"Daily"},{k:"weekly",l:"Weekly"},{k:"history",l:"History"},{k:"routes",l:"Routes"},{k:"add",l:"+ Add"}].map(v=><button key={v.k} onClick={()=>{setView(v.k);setSelCust(null);setQuoteMode(null);if(v.k==="routes"){setRpInited(false);}}} style={{background:view===v.k?(v.k==="add"?"#16a34a":v.k==="routes"?"#d97706":BRAND.main):v.k==="add"?"#f0fdf4":v.k==="routes"?"#fffbeb":"#fff",border:view===v.k?"none":v.k==="add"?"1px solid #bbf7d0":v.k==="routes"?"1px solid #fde68a":"1px solid #e7e5e4",color:view===v.k?"#fff":v.k==="add"?"#16a34a":v.k==="routes"?"#d97706":"#57534e",borderRadius:8,padding:"7px 14px",cursor:"pointer",fontSize:12,fontWeight:600}}>{v.l}</button>)}
 <button onClick={()=>setShowDatePicker(!showDatePicker)} style={{background:"#fff",border:"1px solid #e7e5e4",color:"#57534e",borderRadius:8,padding:"7px 10px",cursor:"pointer",fontSize:13}}>📅</button>
 {showDatePicker&&<div style={{position:"fixed",top:52,right:220,zIndex:200,background:"#fff",border:"1px solid #e7e5e4",borderRadius:12,padding:"10px 14px",boxShadow:"0 8px 32px rgba(0,0,0,0.12)",display:"flex",alignItems:"center",gap:8}}>
 <span style={{fontSize:12,color:"#78716c"}}>Jump to:</span>
@@ -2064,14 +2076,279 @@ return(
 </div>
 </div>
 
-{/* ── NON-MANIFEST DESKTOP VIEWS (full width, scrollable) ── */}
-{(view==="routes"||view==="daily"||view==="weekly"||view==="history")&&(
-<div style={{flex:1,overflowY:"auto",padding:"24px 40px",background:"#f8f7f5"}}>
-{/* Routes */}
+{/* ── ROUTES — Advanced Route Planner ── */}
 {view==="routes"&&(dl.length===0
-?<div style={{textAlign:"center",padding:"80px 20px",color:"#a8a29e"}}><div style={{fontSize:48,marginBottom:12}}>🗺️</div><p style={{fontSize:16,fontWeight:600,margin:"0 0 8px"}}>No stops to route</p><p style={{fontSize:13,margin:0}}>Add deliveries via + Add, then build routes here.</p></div>
-:<RouteBuilder entries={dl} drivers={drivers} onAssign={(eid,did)=>reassign(eid,did)} onReorder={(drvId,orderedIds)=>reorderDriver(drvId,orderedIds)} onBack={()=>setView("manifest")}/>
+?<div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",background:"#f8f7f5"}}><div style={{textAlign:"center",color:"#a8a29e"}}><div style={{fontSize:48,marginBottom:12}}>🗺️</div><p style={{fontSize:16,fontWeight:600,margin:"0 0 8px"}}>No stops to route</p><p style={{fontSize:13,margin:0}}>Add deliveries via + Add, then build routes here.</p></div></div>
+:(()=>{
+if(!rpInited){
+const o={};drivers.forEach(d=>{o[d.id]=dl.filter(e=>e.driverId===d.id).map(e=>e.id);});
+setRpOrders(o);setRpInited(true);
+}
+
+const rpUnassigned=dl.filter(e=>!Object.values(rpOrders).flat().includes(e.id));
+const rpGetEntry=(id)=>dl.find(e=>e.id===id);
+const rpTotalAssigned=Object.values(rpOrders).reduce((s,ids)=>s+ids.length,0);
+
+const rpHandleMapClick=(entryId)=>{
+if(!rpActive)return;
+const ids=rpOrders[rpActive]||[];
+if(ids.includes(entryId)){
+setRpOrders(p=>({...p,[rpActive]:ids.filter(x=>x!==entryId)}));
+}else{
+const cleaned={};Object.entries(rpOrders).forEach(([did,arr])=>{cleaned[did]=arr.filter(x=>x!==entryId);});
+cleaned[rpActive]=[...(cleaned[rpActive]||[]),entryId];
+setRpOrders(cleaned);
+}
+};
+
+const rpApply=()=>{
+Object.entries(rpOrders).forEach(([did,ids])=>{
+ids.forEach(id=>reassign(id,Number(did)));
+if(ids.length>0)reorderDriver(Number(did),ids);
+});
+rpUnassigned.forEach(e=>{if(e.driverId!==0)reassign(e.id,0);});
+showToast("Routes applied to manifests");
+setView("manifest");
+};
+
+const rpDrop=(drvId,toIdx)=>{
+if(!rpDragSrc)return;
+if(rpDragSrc.drvId===drvId){
+setRpOrders(p=>{const ids=[...(p[drvId]||[])];const[moved]=ids.splice(rpDragSrc.idx,1);ids.splice(toIdx,0,moved);return{...p,[drvId]:ids};});
+}else if(rpDragSrc.drvId==="pool"){
+/* Drag from unassigned pool */
+const entryId=rpDragSrc.idx;
+setRpOrders(p=>({...p,[drvId]:[...(p[drvId]||[]),entryId]}));
+}else{
+const entryId=(rpOrders[rpDragSrc.drvId]||[])[rpDragSrc.idx];
+if(entryId){
+setRpOrders(p=>{const src=[...(p[rpDragSrc.drvId]||[])].filter(x=>x!==entryId);const dest=[...(p[drvId]||[])];dest.splice(toIdx,0,entryId);return{...p,[rpDragSrc.drvId]:src,[drvId]:dest};});
+}
+}
+setRpDragSrc(null);setRpDragOver(null);
+};
+
+const rpAssignUnassigned=(entryId,drvId)=>{
+setRpOrders(p=>({...p,[drvId]:[...(p[drvId]||[]),entryId]}));
+};
+
+const rpUnassignStop=(entryId,drvId)=>{
+setRpOrders(p=>({...p,[drvId]:(p[drvId]||[]).filter(x=>x!==entryId)}));
+};
+
+/* Auto-optimize: nearest-neighbor with pickups first, then timed stops, then geographic sort */
+const rpAutoOptimize=(drvId)=>{
+const ids=rpOrders[drvId]||[];
+if(ids.length<2)return;
+const entries=ids.map(id=>rpGetEntry(id)).filter(Boolean);
+const getC=(e)=>{const addr=e.addr||getAddr(e.stop);return getCoords(addr);};
+const pickups=entries.filter(e=>e.stopType==="pickup"||e.dueBy?.startsWith("Pickup"));
+const withTime=entries.filter(e=>e.dueBy&&!e.dueBy.startsWith("Pickup")&&!pickups.includes(e));
+const regular=entries.filter(e=>!pickups.includes(e)&&!withTime.includes(e));
+const sorted=[];
+const remaining=[...regular];
+let current=pickups.length?getC(pickups[pickups.length-1]):{lat:33.93,lng:-84.21};
+while(remaining.length){
+let bestIdx=0,bestDist=Infinity;
+remaining.forEach((e,i)=>{const c=getC(e);if(!c)return;const d=Math.sqrt(Math.pow(c.lat-current.lat,2)+Math.pow(c.lng-current.lng,2));if(d<bestDist){bestDist=d;bestIdx=i;}});
+const next=remaining.splice(bestIdx,1)[0];
+const nc=getC(next);if(nc)current=nc;
+sorted.push(next);
+}
+withTime.sort((a,b)=>{const tA=(a.dueBy||"").replace(/[^0-9:]/g,"");const tB=(b.dueBy||"").replace(/[^0-9:]/g,"");return tA.localeCompare(tB);});
+const finalOrder=[...pickups,...withTime,...sorted];
+setRpOrders(p=>({...p,[drvId]:finalOrder.map(e=>e.id)}));
+showToast("Route optimized");
+};
+
+/* Auto-fill: distribute unassigned to nearest driver's last stop */
+const rpAutoFill=()=>{
+if(!rpUnassigned.length)return;
+const getC2=(e)=>{const addr=e.addr||getAddr(e.stop);return getCoords(addr);};
+const newOrders={...rpOrders};
+rpUnassigned.forEach(e=>{
+const ec=getC2(e);
+if(!ec){let minDrv=drivers[0]?.id;let minCount=Infinity;drivers.forEach(d=>{const c=(newOrders[d.id]||[]).length;if(c<minCount){minCount=c;minDrv=d.id;}});newOrders[minDrv]=[...(newOrders[minDrv]||[]),e.id];return;}
+let bestDrv=drivers[0]?.id;let bestDist=Infinity;
+drivers.forEach(d=>{const ids=newOrders[d.id]||[];let lastCoord={lat:33.93,lng:-84.21};if(ids.length){const last=rpGetEntry(ids[ids.length-1]);if(last){const lc=getC2(last);if(lc)lastCoord=lc;}}const dist=Math.sqrt(Math.pow(ec.lat-lastCoord.lat,2)+Math.pow(ec.lng-lastCoord.lng,2));if(dist<bestDist){bestDist=dist;bestDrv=d.id;}});
+newOrders[bestDrv]=[...(newOrders[bestDrv]||[]),e.id];
+});
+setRpOrders(newOrders);
+showToast("Auto-filled "+rpUnassigned.length+" stops");
+};
+
+/* Time conflict detection */
+const rpGetConflicts=(drvId)=>{
+const ids=rpOrders[drvId]||[];
+const conflicts=[];
+const timed=ids.map((id,i)=>{const e=rpGetEntry(id);return e?.dueBy?{stop:e.stop,dueBy:e.dueBy,idx:i}:null;}).filter(Boolean);
+for(let i=0;i<timed.length;i++){for(let j=i+1;j<timed.length;j++){
+const a=timed[i],b=timed[j];
+if(a.dueBy.includes("By")&&b.dueBy.includes("By")){
+const tA=a.dueBy.replace(/^By\s*/,""),tB=b.dueBy.replace(/^By\s*/,"");
+if(tA<tB&&a.idx>b.idx)conflicts.push(`${a.stop} (${a.dueBy}) is after ${b.stop} (${b.dueBy})`);
+if(tB<tA&&b.idx>a.idx)conflicts.push(`${b.stop} (${b.dueBy}) is after ${a.stop} (${a.dueBy})`);
+}}}
+return conflicts;
+};
+
+const rpDriverStats=(drvId)=>{
+const ids=rpOrders[drvId]||[];
+const cap=getDriverCapacity(drvId);
+const totalWeight=ids.reduce((s,id)=>{const e=rpGetEntry(id);return s+(e?.weight||0);},0);
+const pickupCount=ids.filter(id=>{const e=rpGetEntry(id);return e?.stopType==="pickup";}).length;
+const deliveryCount=ids.length-pickupCount;
+const timedCount=ids.filter(id=>{const e=rpGetEntry(id);return!!e?.dueBy;}).length;
+const rev=ids.reduce((s,id)=>{const e=rpGetEntry(id);return s+(e?.isHourly?0:(e?.baseRate||0));},0);
+return{totalWeight,cap,pickupCount,deliveryCount,timedCount,rev};
+};
+
+const mapStops=dl.map(e=>{
+const addr=e.addr||getAddr(e.stop);const coords=getCoords(addr);if(!coords)return null;
+let assignedDrv=0;Object.entries(rpOrders).forEach(([did,ids])=>{if(ids.includes(e.id))assignedDrv=Number(did);});
+return{...e,coords,driverId:assignedDrv};
+}).filter(Boolean);
+
+return(
+<div style={{display:"grid",gridTemplateColumns:"340px 1fr",gap:0,height:"calc(100vh - 60px)",overflow:"hidden"}}>
+
+{/* LEFT — Command Panel */}
+<div style={{background:"#fff",borderRight:"1px solid #e7e5e4",display:"flex",flexDirection:"column",overflow:"hidden"}}>
+<div style={{padding:"14px 16px 10px",borderBottom:"1px solid #e7e5e4",flexShrink:0}}>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+<div>
+<h2 style={{margin:0,fontSize:17,fontWeight:800,color:"#1c1917"}}>Route Planner</h2>
+<p style={{margin:"2px 0 0",fontSize:11,color:"#78716c"}}>{wd[sd].name} — {wd[sd].date}</p>
+</div>
+<div style={{display:"flex",gap:4}}>
+<button onClick={()=>{setView("manifest");setRpInited(false);}} style={{background:"#f5f5f4",border:"1px solid #e7e5e4",borderRadius:8,padding:"5px 10px",cursor:"pointer",fontSize:11,fontWeight:600,color:"#57534e"}}>← Back</button>
+{rpTotalAssigned>0&&<button onClick={rpApply} style={{background:"#16a34a",border:"none",borderRadius:8,padding:"5px 12px",cursor:"pointer",fontSize:11,fontWeight:700,color:"#fff"}}>✓ Apply</button>}
+</div>
+</div>
+<div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:6}}>
+<div style={{background:"#f0fdf4",borderRadius:8,padding:"6px 4px",textAlign:"center",border:"1px solid #bbf7d0"}}><div style={{fontSize:16,fontWeight:800,color:"#16a34a"}}>{rpTotalAssigned}</div><div style={{fontSize:8,color:"#16a34a",fontWeight:600}}>ROUTED</div></div>
+<div style={{background:rpUnassigned.length?"#fef2f2":"#f5f5f4",borderRadius:8,padding:"6px 4px",textAlign:"center",border:rpUnassigned.length?"1px solid #fca5a5":"1px solid #e7e5e4"}}><div style={{fontSize:16,fontWeight:800,color:rpUnassigned.length?"#dc2626":"#a8a29e"}}>{rpUnassigned.length}</div><div style={{fontSize:8,color:rpUnassigned.length?"#dc2626":"#a8a29e",fontWeight:600}}>POOL</div></div>
+<div style={{background:"#f5f5f4",borderRadius:8,padding:"6px 4px",textAlign:"center",border:"1px solid #e7e5e4"}}><div style={{fontSize:16,fontWeight:800,color:"#57534e"}}>{dl.length}</div><div style={{fontSize:8,color:"#78716c",fontWeight:600}}>TOTAL</div></div>
+<div style={{borderRadius:8,padding:"6px 4px",textAlign:"center"}}>{rpUnassigned.length>0?<button onClick={rpAutoFill} style={{background:"#d97706",color:"#fff",border:"none",borderRadius:6,padding:"4px 8px",cursor:"pointer",fontSize:9,fontWeight:700,width:"100%"}}>Auto Fill</button>:<div style={{fontSize:12,color:"#16a34a",fontWeight:700}}>✓</div>}</div>
+</div>
+</div>
+
+<div style={{flex:1,overflowY:"auto",padding:"8px 10px"}}>
+{drivers.map((drv,di)=>{
+const ids=rpOrders[drv.id]||[];const isActive=rpActive===drv.id;const stats=rpDriverStats(drv.id);const conflicts=rpGetConflicts(drv.id);
+return(
+<div key={drv.id} onDragOver={e=>{e.preventDefault();if(!ids.length)setRpDragOver({drvId:drv.id,idx:0});}} onDrop={()=>{if(!ids.length)rpDrop(drv.id,0);}}
+style={{marginBottom:8,borderRadius:12,border:isActive?`2px solid ${DCOL[di]}`:"1px solid #e7e5e4",overflow:"hidden",transition:"all 0.15s",boxShadow:isActive?"0 4px 16px "+DCOL[di]+"22":"none"}}>
+<div onClick={()=>setRpActive(isActive?null:drv.id)}
+style={{display:"flex",alignItems:"center",gap:8,padding:"10px 12px",cursor:"pointer",background:isActive?DCOL[di]+"0D":"#fafaf9",borderBottom:ids.length||isActive?"1px solid #e7e5e4":"none"}}>
+<div style={{width:32,height:32,borderRadius:9,background:DCOL[di],display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,color:"#fff",fontWeight:800,flexShrink:0,boxShadow:isActive?"0 2px 8px "+DCOL[di]+"44":"none"}}>{drv.name.charAt(0)}</div>
+<div style={{flex:1,minWidth:0}}>
+<div style={{display:"flex",alignItems:"center",gap:6}}>
+<span style={{fontSize:14,fontWeight:700,color:isActive?DCOL[di]:"#1c1917"}}>{drv.name}</span>
+{ids.length>0&&<span style={{fontSize:10,background:DCOL[di]+"18",color:DCOL[di],padding:"1px 7px",borderRadius:10,fontWeight:700}}>{ids.length}</span>}
+</div>
+{ids.length>0&&<div style={{display:"flex",alignItems:"center",gap:8,marginTop:3}}>
+{stats.pickupCount>0&&<span style={{fontSize:9,color:"#2563eb",fontWeight:600}}>{stats.pickupCount} PU</span>}
+<span style={{fontSize:9,color:"#57534e"}}>{stats.deliveryCount} del</span>
+{stats.timedCount>0&&<span style={{fontSize:9,color:"#dc2626",fontWeight:600}}>⏰{stats.timedCount}</span>}
+{stats.rev>0&&<span style={{fontSize:9,color:"#16a34a",fontWeight:700,fontVariantNumeric:"tabular-nums"}}>{fmt(stats.rev)}</span>}
+</div>}
+{stats.totalWeight>0&&<div style={{display:"flex",alignItems:"center",gap:5,marginTop:3}}>
+<div style={{flex:1,maxWidth:100,height:4,background:"#e7e5e4",borderRadius:2,overflow:"hidden"}}><div style={{height:"100%",width:weightPct(stats.totalWeight,stats.cap)+"%",background:weightColor(stats.totalWeight,stats.cap),borderRadius:2}}/></div>
+<span style={{fontSize:8,fontWeight:700,color:weightColor(stats.totalWeight,stats.cap)}}>{stats.totalWeight.toLocaleString()}/{(stats.cap/1000).toFixed(0)}k</span>
+</div>}
+</div>
+<div style={{display:"flex",gap:3,flexShrink:0}}>
+{isActive&&ids.length>=2&&<button onClick={e=>{e.stopPropagation();rpAutoOptimize(drv.id);}} style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:6,padding:"3px 7px",cursor:"pointer",fontSize:9,fontWeight:700,color:"#2563eb"}}>⚡ Optimize</button>}
+{isActive&&ids.length>0&&<button onClick={e=>{e.stopPropagation();setRpOrders(p=>({...p,[drv.id]:[]}));}} style={{background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:6,padding:"3px 7px",cursor:"pointer",fontSize:9,fontWeight:700,color:"#dc2626"}}>Clear</button>}
+{isActive&&<div style={{fontSize:9,background:DCOL[di],color:"#fff",padding:"3px 8px",borderRadius:6,fontWeight:700,display:"flex",alignItems:"center"}}>ACTIVE</div>}
+</div>
+</div>
+{conflicts.length>0&&<div style={{padding:"6px 12px",background:"#fef2f2",borderBottom:"1px solid #fca5a5"}}>{conflicts.map((c2,ci)=><div key={ci} style={{fontSize:10,color:"#dc2626",fontWeight:600}}>⚠ {c2}</div>)}</div>}
+{ids.length>0&&<div style={{padding:"4px 6px 6px",maxHeight:isActive?400:160,overflowY:"auto",transition:"max-height 0.2s"}}>
+{ids.map((id,oi)=>{const e=rpGetEntry(id);if(!e)return null;const c=CC[e.customer]||CC["One-Off Delivery"];const isPU=e.stopType==="pickup";const isDrgSrc=rpDragSrc?.drvId===drv.id&&rpDragSrc?.idx===oi;const isDrgOver=rpDragOver?.drvId===drv.id&&rpDragOver?.idx===oi;
+return(<div key={id} draggable onDragStart={()=>setRpDragSrc({drvId:drv.id,idx:oi})} onDragOver={ev=>{ev.preventDefault();setRpDragOver({drvId:drv.id,idx:oi});}} onDrop={()=>rpDrop(drv.id,oi)}
+style={{display:"flex",alignItems:"center",gap:6,padding:"5px 8px",marginBottom:2,borderRadius:8,background:isDrgOver?"#dcfce7":isDrgSrc?"#fef9c3":"#fff",border:isDrgOver?"1px dashed #16a34a":"1px solid #f5f5f4",opacity:isDrgSrc?0.4:1,cursor:"grab"}}>
+<div style={{width:20,height:20,borderRadius:6,background:DCOL[di],display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,color:"#fff",fontWeight:800,flexShrink:0}}>{oi+1}</div>
+<div style={{width:3,height:18,borderRadius:2,background:isPU?"#2563eb":c.accent,flexShrink:0}}/>
+<div style={{flex:1,minWidth:0}}>
+<div style={{fontSize:11,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.stop}</div>
+<div style={{display:"flex",alignItems:"center",gap:3,flexWrap:"wrap"}}>
+<span style={{fontSize:9,color:c.accent}}>{e.customer}</span>
+{isPU&&<span style={{fontSize:7,background:"#2563eb",color:"#fff",padding:"0 3px",borderRadius:2,fontWeight:700}}>PU</span>}
+{e.priority&&<span style={{fontSize:7,background:"#f59e0b",color:"#fff",padding:"0 3px",borderRadius:2,fontWeight:700}}>PRI</span>}
+{e.dueBy&&<span style={{fontSize:7,background:e.dueBy.includes("By")?"#dc2626":"#2563eb",color:"#fff",padding:"0 3px",borderRadius:2,fontWeight:700}}>⏰{e.dueBy}</span>}
+{e.weight>0&&<span style={{fontSize:8,color:BRAND.main,fontWeight:700}}>{e.weight.toLocaleString()}lb</span>}
+</div>
+</div>
+<button onClick={ev=>{ev.stopPropagation();rpUnassignStop(id,drv.id);}} style={{background:"none",border:"none",color:"#dc2626",fontSize:10,cursor:"pointer",padding:"2px 4px",flexShrink:0,opacity:0.5}}>✕</button>
+</div>);})}
+</div>}
+{ids.length===0&&isActive&&<div onDragOver={ev=>{ev.preventDefault();setRpDragOver({drvId:drv.id,idx:0});}} onDrop={()=>rpDrop(drv.id,0)} style={{padding:"14px",textAlign:"center",color:DCOL[di],fontSize:11,fontWeight:600,background:DCOL[di]+"08"}}>Click stops on the map to build route</div>}
+</div>);})}
+
+{/* Unassigned Pool — also a drop target */}
+<div style={{marginTop:4,borderRadius:12,border:rpUnassigned.length?"2px dashed #d97706":"1px solid #e7e5e4",overflow:"hidden"}}
+onDragOver={e=>e.preventDefault()}
+onDrop={()=>{if(rpDragSrc&&rpDragSrc.drvId!=="pool"){const entryId=(rpOrders[rpDragSrc.drvId]||[])[rpDragSrc.idx];if(entryId)rpUnassignStop(entryId,rpDragSrc.drvId);setRpDragSrc(null);setRpDragOver(null);}}}>
+<div onClick={()=>setRpShowUnassigned(!rpShowUnassigned)} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 14px",cursor:"pointer",background:rpUnassigned.length?"#fffbeb":"#fafaf9"}}>
+<div style={{display:"flex",alignItems:"center",gap:8}}>
+<div style={{width:28,height:28,borderRadius:8,background:"#d97706",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,color:"#fff",fontWeight:800}}>!</div>
+<span style={{fontSize:13,fontWeight:700,color:rpUnassigned.length?"#92400e":"#78716c"}}>Unassigned Pool</span>
+<span style={{fontSize:11,color:rpUnassigned.length?"#dc2626":"#a8a29e",fontWeight:700}}>{rpUnassigned.length}</span>
+</div>
+<span style={{fontSize:12,color:"#a8a29e"}}>{rpShowUnassigned?"▾":"▸"}</span>
+</div>
+{rpShowUnassigned&&rpUnassigned.length>0&&<div style={{padding:"6px 8px",maxHeight:220,overflowY:"auto"}}>
+{rpUnassigned.map(e=>{const c=CC[e.customer]||CC["One-Off Delivery"];return(
+<div key={e.id} draggable onDragStart={()=>setRpDragSrc({drvId:"pool",idx:e.id})}
+style={{display:"flex",alignItems:"center",gap:6,padding:"5px 8px",marginBottom:2,borderRadius:8,background:"#fff",border:"1px solid #f5f5f4",cursor:"grab"}}>
+<div style={{width:3,height:18,borderRadius:2,background:c.accent,flexShrink:0}}/>
+<div style={{flex:1,minWidth:0}}>
+<div style={{fontSize:11,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.stop}</div>
+<div style={{display:"flex",alignItems:"center",gap:3}}><span style={{fontSize:9,color:c.accent}}>{e.customer}</span>
+{e.dueBy&&<span style={{fontSize:7,background:"#dc2626",color:"#fff",padding:"0 3px",borderRadius:2,fontWeight:700}}>⏰{e.dueBy}</span>}</div>
+</div>
+{rpActive&&<button onClick={()=>rpAssignUnassigned(e.id,rpActive)} style={{background:DCOL[drivers.findIndex(d=>d.id===rpActive)]||BRAND.main,color:"#fff",border:"none",borderRadius:6,padding:"3px 10px",cursor:"pointer",fontSize:9,fontWeight:700,flexShrink:0}}>+ {drivers.find(d=>d.id===rpActive)?.name?.split(" ")[0]}</button>}
+</div>);})}
+</div>}
+</div>
+</div>
+
+<div style={{padding:"10px 12px",borderTop:"1px solid #e7e5e4",flexShrink:0}}>
+<button onClick={rpApply} disabled={!rpTotalAssigned} style={{width:"100%",background:rpTotalAssigned?"#16a34a":"#e7e5e4",color:rpTotalAssigned?"#fff":"#a8a29e",border:"none",borderRadius:10,padding:"12px",cursor:rpTotalAssigned?"pointer":"default",fontSize:14,fontWeight:700}}>✓ Apply Routes to Manifests ({rpTotalAssigned} stops)</button>
+</div>
+</div>
+
+{/* RIGHT — Full Google Map */}
+<div style={{position:"relative",background:"#e8e4df",overflow:"hidden"}}>
+{rpActive&&(()=>{const di=drivers.findIndex(d=>d.id===rpActive);const drv=drivers.find(d=>d.id===rpActive);const ids=rpOrders[rpActive]||[];
+return(<div style={{position:"absolute",top:12,left:12,right:60,zIndex:5,display:"flex",gap:8,alignItems:"center"}}>
+<div style={{background:DCOL[di],color:"#fff",borderRadius:12,padding:"10px 18px",fontSize:13,fontWeight:700,boxShadow:"0 4px 20px "+DCOL[di]+"44",display:"flex",alignItems:"center",gap:10,flex:1}}>
+<div style={{width:28,height:28,borderRadius:8,background:"rgba(255,255,255,0.25)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:800}}>{drv?.name?.charAt(0)}</div>
+<div><div>Building route for {drv?.name}</div><div style={{fontSize:10,opacity:0.8}}>{ids.length} stop{ids.length!==1?"s":""} — click map to add in order</div></div>
+</div>
+</div>);})()}
+{!rpActive&&<div style={{position:"absolute",top:12,left:12,right:60,zIndex:5,background:"#fff",borderRadius:12,padding:"10px 18px",fontSize:12,fontWeight:600,color:"#78716c",boxShadow:"0 4px 20px rgba(0,0,0,0.1)",display:"flex",alignItems:"center",gap:8}}>
+<span style={{fontSize:18}}>👈</span><span>Select a driver on the left panel, then click stops on the map in delivery order</span>
+</div>}
+<div style={{position:"absolute",bottom:12,left:12,zIndex:5,background:"#fff",borderRadius:12,padding:"8px 14px",boxShadow:"0 4px 20px rgba(0,0,0,0.1)",display:"flex",gap:10,flexWrap:"wrap"}}>
+{drivers.map((d,di)=>{const count=(rpOrders[d.id]||[]).length;const isAct=rpActive===d.id;return(
+<div key={d.id} onClick={()=>setRpActive(rpActive===d.id?null:d.id)} style={{display:"flex",alignItems:"center",gap:5,cursor:"pointer",padding:isAct?"3px 10px":"3px 6px",borderRadius:8,background:isAct?DCOL[di]:"transparent",transition:"all 0.15s"}}>
+<div style={{width:10,height:10,borderRadius:4,background:isAct?"#fff":DCOL[di]}}/><span style={{fontSize:11,fontWeight:700,color:isAct?"#fff":"#57534e"}}>{d.name.split(" ")[0]}</span>
+{count>0&&<span style={{fontSize:10,color:isAct?"rgba(255,255,255,0.8)":"#a8a29e",fontWeight:600}}>{count}</span>}
+</div>);})}
+</div>
+<GoogleMapView stops={mapStops} drivers={drivers} height={"100%"} showSearch={true} searchLabel="Search address…"
+activeDriver={rpActive} onStopClick={rpHandleMapClick} onAssignStop={rpActive?(stopId)=>rpHandleMapClick(stopId):null}/>
+</div>
+
+</div>);
+})()
 )}
+{/* ── NON-MANIFEST DESKTOP VIEWS (scrollable) ── */}
+{(view==="daily"||view==="weekly"||view==="history")&&(
+<div style={{flex:1,overflowY:"auto",padding:"24px 40px",background:"#f8f7f5"}}>
 
 {/* Daily */}
 {view==="daily"&&<div style={{maxWidth:900,margin:"0 auto"}}>
@@ -2128,7 +2405,7 @@ return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius
 <span style={{fontSize:11,fontWeight:700,color:"#92400e"}}>+1h Eatonton Bonus</span>
 <span style={{fontSize:10,color:"#78716c",marginLeft:"auto"}}>Long-distance run</span>
 </div>}
-{!totalMins&&<div style={{fontSize:11,color:"#64748b",marginBottom:8}}>💡 Log shifts in History → ⏱ Emser Hrs for auto-calculation</div>}
+{!totalMins&&<div style={{fontSize:11,color:"#64748b",marginBottom:8}}>💡 Log shifts in History → ⏱ Emser Hours for auto-calculation</div>}
 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
 <span style={{fontSize:12,color:"#64748b"}}>{hoursUsed}h × $102.50</span>
 <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
@@ -2258,7 +2535,7 @@ return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius
 </div>
 {/* Mode toggle */}
 <div style={{display:"flex",gap:3,marginBottom:16,background:"#f5f5f4",borderRadius:10,padding:3,width:"fit-content"}}>
-{[{k:"deliveries",l:"Deliveries"},{k:"photos",l:"📷 Photos"},{k:"emser",l:"⏱ Emser Hrs"},{k:"quotes",l:"💰 Quotes"}].map(m=>(
+{[{k:"deliveries",l:"Deliveries"},{k:"photos",l:"📷 Photos"},{k:"emser",l:"⏱ Emser Hours"},{k:"quotes",l:"💰 Quotes"}].map(m=>(
 <button key={m.k} onClick={()=>setHistMode(m.k)} style={{padding:"8px 16px",borderRadius:8,border:"none",cursor:"pointer",fontSize:12,fontWeight:600,background:histMode===m.k?"#fff":"transparent",color:histMode===m.k?BRAND.main:"#78716c",boxShadow:histMode===m.k?"0 1px 3px rgba(0,0,0,0.08)":"none"}}>{m.l}</button>
 ))}
 </div>
@@ -2588,14 +2865,19 @@ style={{width:"100%",border:"1px solid #d8b4fe",borderRadius:8,padding:"8px 10px
 </div>
 <div style={{background:"#fafaf9",border:"1px solid #e7e5e4",borderTop:"none",borderRadius:"0 0 10px 10px",padding:de.length?"6px 6px 2px":"8px 10px",minHeight:40}}>
 {de.length===0&&<div style={{fontSize:11,color:"#a8a29e",textAlign:"center",padding:4}}>No stops</div>}
-{de.length>0&&(()=>{const loads=getDriverLoads(drv.id);return loads.map(loadN=>{const w=getLoadWeight(drv.id,loadN);const pct=weightPct(w);const col=weightColor(w);const over=w>TRUCK_LIMITS.default;return w>0||loads.length>1?(<div key={loadN} style={{display:"flex",alignItems:"center",gap:6,padding:"3px 4px",marginBottom:2}}>
+{de.length>0&&(()=>{const cap=getDriverCapacity(drv.id);const loads=getDriverLoads(drv.id);return(<>
+{loads.map(loadN=>{const w=getLoadWeight(drv.id,loadN);const pct=weightPct(w,cap);const col=weightColor(w,cap);const over=w>cap;return w>0||loads.length>1?(<div key={loadN} style={{display:"flex",alignItems:"center",gap:6,padding:"3px 4px",marginBottom:2}}>
 <span style={{fontSize:9,fontWeight:700,color:"#78716c",flexShrink:0}}>L{loadN}</span>
 <div style={{flex:1,height:6,background:"#e7e5e4",borderRadius:3,overflow:"hidden"}}>
 <div style={{height:"100%",width:pct+"%",background:col,borderRadius:3,transition:"width 0.3s"}}/>
 </div>
-<span style={{fontSize:9,fontWeight:700,color:col,fontVariantNumeric:"tabular-nums",flexShrink:0}}>{w.toLocaleString()}<span style={{fontSize:7,color:"#a8a29e"}}>/{(TRUCK_LIMITS.default/1000).toFixed(0)}k</span></span>
+<span style={{fontSize:9,fontWeight:700,color:col,fontVariantNumeric:"tabular-nums",flexShrink:0}}>{w.toLocaleString()}<span style={{fontSize:7,color:"#a8a29e"}}>/{(cap/1000).toFixed(0)}k</span></span>
 {over&&<span style={{fontSize:7,background:"#dc2626",color:"#fff",padding:"0px 3px",borderRadius:2,fontWeight:700}}>OVER</span>}
-</div>):null;});})()}
+</div>):null;})}
+<button onClick={()=>toggleDriverCapacity(drv.id)} style={{fontSize:8,color:cap===TRUCK_LIMITS.heavy?"#d97706":"#a8a29e",background:cap===TRUCK_LIMITS.heavy?"#fef3c7":"transparent",border:"none",borderRadius:4,padding:"1px 6px",cursor:"pointer",fontWeight:600}}>
+{cap===TRUCK_LIMITS.heavy?"🚛 14k":"→ 14k"}
+</button>
+</>);})()}
 {de.map((entry,eIdx)=>{const c=CC[entry.customer]||CC["One-Off Delivery"];const isPU=entry.stopType==="pickup";const done=entry.status==="departed";const onSite=entry.status==="arrived";const hasDue=!!entry.dueBy;const addr=entry.addr||getAddr(entry.stop);const isP=entry.priority;const hasInstr=entry.instructions?.trim();const isImetco=entry.customer==="IMETCO";
 return(<div key={entry.id} style={{background:done?"#f0fdf4":onSite?"#fffbeb":hasDue?"#fef2f2":isP?"#fef3c7":isPU?"#eff6ff":"#fff",border:`1px solid ${done?"#bbf7d0":onSite?"#fde68a":hasDue?"#fca5a5":"#e7e5e4"}`,borderRadius:8,padding:"8px 10px",marginBottom:4,borderLeft:`3px solid ${isPU?"#2563eb":isP?"#f59e0b":c.accent}`,opacity:done?0.6:1}}>
 <div style={{display:"flex",alignItems:"center",gap:4,marginBottom:2,flexWrap:"wrap"}}>
@@ -3210,8 +3492,11 @@ handleDrop(dragOver.drvId,dragOver.idx);
 <span style={{fontSize:12,flexShrink:0}}>📝</span>
 <div style={{flex:1}}><div style={{fontSize:10,fontWeight:700,color:"#7c3aed",textTransform:"uppercase"}}>Day Notes</div><div style={{fontSize:12,color:"#57534e",whiteSpace:"pre-wrap",lineHeight:1.3}}>{dispNotes[dk].length>120?dispNotes[dk].slice(0,120)+"…":dispNotes[dk]}</div></div>
 </div>}
-{drivers.map((drv,di)=>{const de=drvEntries(drv.id);return(
-<div key={drv.id} style={{background:"#fff",border:"1px solid #e7e5e4",borderRadius:14,padding:16,marginBottom:12}}>
+{drivers.map((drv,di)=>{const de=drvEntries(drv.id);const isDrvDropTarget=dragSrc&&dragSrc.drvId!==drv.id&&dragOver?.drvId===drv.id;return(
+<div key={drv.id}
+onDragOver={e=>{e.preventDefault();if(dragSrc&&dragSrc.drvId!==drv.id&&!de.length)setDragOver({drvId:drv.id,idx:0});}}
+onDrop={()=>{if(dragSrc&&!de.length)handleDrop(drv.id,0);}}
+style={{background:isDrvDropTarget&&!de.length?"#dcfce7":"#fff",border:isDrvDropTarget&&!de.length?`2px solid ${DCOL[di]}`:"1px solid #e7e5e4",borderRadius:14,padding:16,marginBottom:12,transition:"background 0.15s"}}>
 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:de.length?10:0}}>
 <div style={{display:"flex",alignItems:"center",gap:8}}><div style={{width:14,height:14,borderRadius:4,background:DCOL[di]}}/><span style={{fontSize:15,fontWeight:700}}>{drv.name}</span><span style={{fontSize:12,color:"#a8a29e"}}>({de.length})</span></div>
 <div style={{display:"flex",gap:4,flexWrap:"wrap",justifyContent:"flex-end"}}>
@@ -3222,22 +3507,34 @@ handleDrop(dragOver.drvId,dragOver.idx);
 <button onClick={()=>{setNotifyDriver(drv.id);setNotifyCustomMsg("");}} style={{background:"#fef3c7",border:"1px solid #fde68a",borderRadius:8,padding:"4px 8px",cursor:"pointer",fontSize:10,fontWeight:600,color:"#92400e"}}>Notify</button>
 </div>
 </div>
-{de.length===0&&<p style={{fontSize:13,color:"#a8a29e",margin:"8px 0 0"}}>No stops</p>}
-{de.length>0&&(()=>{const loads=getDriverLoads(drv.id);return loads.map(loadN=>{const w=getLoadWeight(drv.id,loadN);const pct=weightPct(w);const col=weightColor(w);const over=w>TRUCK_LIMITS.default;return w>0||loads.length>1?(<div key={loadN} style={{display:"flex",alignItems:"center",gap:8,padding:"4px 0",marginBottom:2}}>
+{de.length===0&&<p style={{fontSize:13,color:dragSrc?"#16a34a":"#a8a29e",margin:"8px 0 0",fontWeight:dragSrc?600:400}}>{dragSrc?"Drop here to assign":"No stops"}</p>}
+{de.length>0&&(()=>{const cap=getDriverCapacity(drv.id);const loads=getDriverLoads(drv.id);return(<>
+{loads.map(loadN=>{const w=getLoadWeight(drv.id,loadN);const pct=weightPct(w,cap);const col=weightColor(w,cap);const over=w>cap;return w>0||loads.length>1?(<div key={loadN} style={{display:"flex",alignItems:"center",gap:8,padding:"4px 0",marginBottom:2}}>
 <span style={{fontSize:10,fontWeight:700,color:"#78716c",flexShrink:0}}>Load {loadN}</span>
 <div style={{flex:1,height:8,background:"#e7e5e4",borderRadius:4,overflow:"hidden"}}>
 <div style={{height:"100%",width:pct+"%",background:col,borderRadius:4,transition:"width 0.3s"}}/>
 </div>
-<span style={{fontSize:10,fontWeight:700,color:col,fontVariantNumeric:"tabular-nums",flexShrink:0}}>{w.toLocaleString()}<span style={{fontSize:8,color:"#a8a29e"}}>/{(TRUCK_LIMITS.default/1000).toFixed(0)}k</span></span>
+<span style={{fontSize:10,fontWeight:700,color:col,fontVariantNumeric:"tabular-nums",flexShrink:0}}>{w.toLocaleString()}<span style={{fontSize:8,color:"#a8a29e"}}>/{(cap/1000).toFixed(0)}k</span></span>
 {over&&<span style={{fontSize:8,background:"#dc2626",color:"#fff",padding:"1px 4px",borderRadius:3,fontWeight:700}}>OVER</span>}
-</div>):null;});})()}
+</div>):null;})}
+<button onClick={()=>toggleDriverCapacity(drv.id)} style={{fontSize:9,color:cap===TRUCK_LIMITS.heavy?"#d97706":"#78716c",background:cap===TRUCK_LIMITS.heavy?"#fef3c7":"#f5f5f4",border:cap===TRUCK_LIMITS.heavy?"1px solid #fde68a":"1px solid #e7e5e4",borderRadius:6,padding:"2px 8px",cursor:"pointer",fontWeight:600,marginBottom:4}}>
+{cap===TRUCK_LIMITS.heavy?"🚛 14k Truck":"🚚 10k → tap for 14k"}
+</button>
+</>);})()}
 {de.map((entry,eIdx)=><div key={entry.id}>
 <ManifestStop entry={entry} eIdx={eIdx} total={de.length} drivers={drivers} onMove={dir=>moveInDriver(drv.id,eIdx,dir)} onReassign={did=>reassign(entry.id,did)} onRemove={()=>rmFromDriver(entry.id)} onUpdateInstructions={text=>updateInstructions(entry.id,text)} onShipPlan={val=>setShipPlan(entry.id,val)} onDueBy={time=>setDueBy(entry.id,time)} onWeight={w=>setWeight(entry.id,w)} onLoadNum={n=>setLoadNum(entry.id,n)} onRate={r=>updateRate(entry.id,r)} maxLoad={getMaxLoad(drv.id)}
 isDragging={dragSrc?.drvId===drv.id&&dragSrc?.idx===eIdx} isDragOver={dragOver?.drvId===drv.id&&dragOver?.idx===eIdx} onDragStart={()=>setDragSrc({drvId:drv.id,idx:eIdx})} onDragOver={()=>setDragOver({drvId:drv.id,idx:eIdx})} onDrop={()=>handleDrop(drv.id,eIdx)}/>
 <button onClick={()=>setInsertPickupFor({driverId:drv.id,afterIdx:eIdx})} style={{display:"block",width:"100%",background:"none",border:"1px dashed #bfdbfe",borderRadius:6,padding:"3px",cursor:"pointer",fontSize:10,color:"#93c5fd",marginBottom:4,textAlign:"center"}}>+ insert pickup here</button>
 </div>)}
 </div>);})}
-{(()=>{const ua=dl.filter(e=>e.driverId===0);if(!ua.length)return null;return(<div style={{background:"#fff",border:"2px dashed #d6d3d1",borderRadius:14,padding:16,marginBottom:12}}><div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}><div style={{width:14,height:14,borderRadius:4,background:"#a8a29e"}}/><span style={{fontSize:15,fontWeight:700,color:"#78716c"}}>Unassigned</span><span style={{fontSize:12,color:"#a8a29e"}}>({ua.length})</span></div>{ua.map((entry,eIdx)=><ManifestStop key={entry.id} entry={entry} eIdx={eIdx} total={ua.length} drivers={drivers} onMove={dir=>moveInDriver(0,eIdx,dir)} onReassign={did=>reassign(entry.id,did)} onRemove={()=>rmDel(entry.id)} onUpdateInstructions={text=>updateInstructions(entry.id,text)} onShipPlan={val=>setShipPlan(entry.id,val)} onDueBy={time=>setDueBy(entry.id,time)} onWeight={w=>setWeight(entry.id,w)} onLoadNum={n=>setLoadNum(entry.id,n)} onRate={r=>updateRate(entry.id,r)} maxLoad={1}/>)}</div>);})()}
+{(()=>{const ua=dl.filter(e=>e.driverId===0);if(!ua.length&&!dragSrc)return null;return(<div
+onDragOver={e=>{e.preventDefault();if(!ua.length)setDragOver({drvId:0,idx:0});}}
+onDrop={()=>{if(dragSrc){handleDrop(0,ua.length);}}}
+style={{background:dragOver?.drvId===0?"#dcfce7":"#fff",border:dragOver?.drvId===0?"2px dashed #16a34a":"2px dashed #d6d3d1",borderRadius:14,padding:16,marginBottom:12,transition:"background 0.15s"}}><div style={{display:"flex",alignItems:"center",gap:8,marginBottom:ua.length?10:0}}><div style={{width:14,height:14,borderRadius:4,background:"#a8a29e"}}/><span style={{fontSize:15,fontWeight:700,color:"#78716c"}}>Unassigned</span><span style={{fontSize:12,color:"#a8a29e"}}>({ua.length})</span></div>
+{ua.map((entry,eIdx)=><ManifestStop key={entry.id} entry={entry} eIdx={eIdx} total={ua.length} drivers={drivers} onMove={dir=>moveInDriver(0,eIdx,dir)} onReassign={did=>reassign(entry.id,did)} onRemove={()=>rmDel(entry.id)} onUpdateInstructions={text=>updateInstructions(entry.id,text)} onShipPlan={val=>setShipPlan(entry.id,val)} onDueBy={time=>setDueBy(entry.id,time)} onWeight={w=>setWeight(entry.id,w)} onLoadNum={n=>setLoadNum(entry.id,n)} onRate={r=>updateRate(entry.id,r)} maxLoad={1}
+isDragging={dragSrc?.drvId===0&&dragSrc?.idx===eIdx} isDragOver={dragOver?.drvId===0&&dragOver?.idx===eIdx} onDragStart={()=>setDragSrc({drvId:0,idx:eIdx})} onDragOver={()=>setDragOver({drvId:0,idx:eIdx})} onDrop={()=>handleDrop(0,eIdx)}/>)}
+{!ua.length&&dragSrc&&<div style={{padding:"20px",textAlign:"center",color:"#16a34a",fontSize:13,fontWeight:600}}>Drop here to unassign</div>}
+</div>);})()}
 </div>}
 
 {/* ═══ ROUTES ═══ */}
@@ -3295,7 +3592,7 @@ return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius
 <button onClick={()=>setShowCustomHrs(!showCustomHrs)} style={{height:30,borderRadius:8,border:"none",cursor:"pointer",fontSize:11,fontWeight:600,padding:"0 8px",background:showCustomHrs?"#2563eb":"#dbeafe",color:showCustomHrs?"#fff":"#2563eb"}}>Other</button>
 </div></div>
 {showCustomHrs&&<div style={{display:"flex",gap:6,alignItems:"center",marginTop:8}}><input value={customHrsInput} onChange={e=>setCustomHrsInput(e.target.value)} placeholder="e.g. 4.5" type="number" step="0.25" min="1" style={{width:80,border:"1px solid #bfdbfe",borderRadius:8,padding:"6px 10px",fontSize:14,fontWeight:700,outline:"none",textAlign:"center",background:"#fff"}}/><span style={{fontSize:12,color:"#64748b"}}>hrs</span><button onClick={()=>{const v=parseFloat(customHrsInput);if(v>0){setEmH(p=>({...p,[`${dk}-emser`]:v}));setShowCustomHrs(false);setCustomHrsInput("");}}} style={{background:"#2563eb",color:"#fff",border:"none",borderRadius:8,padding:"6px 14px",fontSize:12,fontWeight:600,cursor:"pointer"}}>Set</button></div>}
-<div style={{fontSize:11,color:"#64748b",marginTop:6}}>💡 Log shifts in History → ⏱ Emser Hrs for auto-calculation</div>
+<div style={{fontSize:11,color:"#64748b",marginTop:6}}>💡 Log shifts in History → ⏱ Emser Hours for auto-calculation</div>
 </>)}
 </div>);
 })()}
@@ -3401,7 +3698,7 @@ style={{width:80,border:"1px solid #e7e5e4",borderRadius:6,padding:"3px 6px",fon
 
 {/* Mode toggle - 4 options */}
 <div style={{display:"flex",gap:3,marginBottom:10,background:"#f5f5f4",borderRadius:10,padding:3}}>
-{[{k:"deliveries",l:"Deliveries"},{k:"photos",l:"📷 Photos"},{k:"emser",l:"⏱ Emser"},{k:"quotes",l:"💰 Quotes"}].map(m=>(
+{[{k:"deliveries",l:"Deliveries"},{k:"photos",l:"📷 Photos"},{k:"emser",l:"⏱ Emser Hours"},{k:"quotes",l:"💰 Quotes"}].map(m=>(
 <button key={m.k} onClick={()=>setHistMode(m.k)} style={{flex:1,padding:"8px 4px",borderRadius:8,border:"none",cursor:"pointer",fontSize:11,fontWeight:600,background:histMode===m.k?"#fff":"transparent",color:histMode===m.k?BRAND.main:"#78716c",boxShadow:histMode===m.k?"0 1px 3px rgba(0,0,0,0.08)":"none"}}>{m.l}</button>
 ))}
 </div>
