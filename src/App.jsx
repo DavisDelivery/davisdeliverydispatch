@@ -1563,7 +1563,15 @@ const addDel=(cust,stop,rate,drvId,ex={})=>{
 const cd=CUSTOMERS[cust];
 const instrForStop=customInstr[stop]!==undefined?customInstr[stop]:getDefaultInstr(stop);
 const entry={id:Date.now()+Math.random(),customer:cust,stop,baseRate:rate,fuelPct:ex.fuelPct||0,isHourly:ex.isHourly||false,note:ex.note||null,driverId:drvId,addr:ex.addr||getAddr(stop),stopType:ex.stopType||"delivery",priority:ex.priority||(cd?.priority)||false,instructions:ex.instructions!==undefined?ex.instructions:instrForStop,status:null,arrivedAt:null,departedAt:null,eta:null,photos:[],signature:null,dueBy:ex.dueBy||null,weight:ex.weight||0,loadNum:ex.loadNum||1};
-setLog(p=>({...p,[dk]:[...(p[dk]||[]),entry]}));showToast(`${stop} added`);if(quoteMode)setQuoteMode(null);
+setLog(p=>({...p,[dk]:[...(p[dk]||[]),entry]}));
+/* DCO Eatonton: auto-add 1 bonus hour to Emser billing (long-distance run) */
+if(stop==="DCO Eatonton"&&cust==="Emser Tile"){
+setEmH(p=>{const key=`${dk}-emser`;const cur=p[key]||4;return{...p,[key]:cur+1,[`${dk}-eatonton-bonus`]:true};});
+showToast("DCO Eatonton added — +1 bonus hr applied");
+}else{
+showToast(`${stop} added`);
+}
+if(quoteMode)setQuoteMode(null);
 };
 const addMulti=(cust,stops,drvId)=>{
 const cd=CUSTOMERS[cust];
@@ -1855,7 +1863,8 @@ return(
 </div>
 </div>
 <div style={{display:"flex",alignItems:"center",gap:10}}>
-{[{k:"daily",l:"Daily"},{k:"weekly",l:"Weekly"},{k:"history",l:"History"},{k:"routes",l:"Routes"},{k:"add",l:"+ Add"}].map(v=><button key={v.k} onClick={()=>{setView(v.k);setSelCust(null);setQuoteMode(null);}} style={{background:v.k==="add"?"#16a34a":v.k==="routes"?"#d97706":"#fff",border:v.k==="add"||v.k==="routes"?"none":"1px solid #e7e5e4",color:v.k==="add"||v.k==="routes"?"#fff":"#57534e",borderRadius:8,padding:"7px 14px",cursor:"pointer",fontSize:12,fontWeight:600}}>{v.l}</button>)}
+{view!=="manifest"&&<button onClick={()=>{setView("manifest");setSelCust(null);setQuoteMode(null);}} style={{background:BRAND.main,border:"none",color:"#fff",borderRadius:8,padding:"7px 16px",cursor:"pointer",fontSize:12,fontWeight:700}}>{"← Dashboard"}</button>}
+{[{k:"daily",l:"Daily"},{k:"weekly",l:"Weekly"},{k:"history",l:"History"},{k:"routes",l:"Routes"},{k:"add",l:"+ Add"}].map(v=><button key={v.k} onClick={()=>{setView(v.k);setSelCust(null);setQuoteMode(null);}} style={{background:view===v.k?(v.k==="add"?"#16a34a":v.k==="routes"?"#d97706":BRAND.main):v.k==="add"?"#f0fdf4":v.k==="routes"?"#fffbeb":"#fff",border:view===v.k?"none":v.k==="add"?"1px solid #bbf7d0":v.k==="routes"?"1px solid #fde68a":"1px solid #e7e5e4",color:view===v.k?"#fff":v.k==="add"?"#16a34a":v.k==="routes"?"#d97706":"#57534e",borderRadius:8,padding:"7px 14px",cursor:"pointer",fontSize:12,fontWeight:600}}>{v.l}</button>)}
 <button onClick={()=>setShowDatePicker(!showDatePicker)} style={{background:"#fff",border:"1px solid #e7e5e4",color:"#57534e",borderRadius:8,padding:"7px 10px",cursor:"pointer",fontSize:13}}>📅</button>
 {showDatePicker&&<div style={{position:"fixed",top:52,right:220,zIndex:200,background:"#fff",border:"1px solid #e7e5e4",borderRadius:12,padding:"10px 14px",boxShadow:"0 8px 32px rgba(0,0,0,0.12)",display:"flex",alignItems:"center",gap:8}}>
 <span style={{fontSize:12,color:"#78716c"}}>Jump to:</span>
@@ -1904,12 +1913,21 @@ return(
 </div>
 </div>}
 {/* Emser hours */}
-{dl.some(e=>e.isHourly)&&(()=>{const {byDriver,totalMins}=getShiftSummary(dk);const hoursUsed=totalMins>0?Math.round(totalMins/15)*15/60:(emH[`${dk}-emser`]||4);return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:12,padding:"14px 16px",marginBottom:16}}>
+{dl.some(e=>e.isHourly)&&(()=>{
+const {byDriver,totalMins}=getShiftSummary(dk);
+const hasEatontonBonus=!!emH[`${dk}-eatonton-bonus`];
+const hoursUsed=totalMins>0?Math.round(totalMins/15)*15/60:(emH[`${dk}-emser`]||4);
+/* Find which driver has DCO Eatonton */
+const eatontonEntry=dl.find(e=>e.stop==="DCO Eatonton"&&e.customer==="Emser Tile");
+const eatontonDrv=eatontonEntry?drivers.find(d=>d.id===eatontonEntry.driverId):null;
+const eatontonInitials=eatontonDrv?eatontonDrv.name.split(" ").map(n=>n[0]).join(""):"";
+const eatontonDi=eatontonDrv?drivers.findIndex(d=>d.id===eatontonDrv.id):-1;
+return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:12,padding:"14px 16px",marginBottom:16}}>
 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
 <span style={{fontSize:14,color:"#2563eb",fontWeight:600}}>Emser Hours</span>
 <span style={{fontSize:18,fontWeight:700,fontVariantNumeric:"tabular-nums"}}>{fmt(102.50*hoursUsed)}</span>
 </div>
-{/* Per-driver breakdown */}
+{/* Per-driver breakdown from shift tracker */}
 {totalMins>0&&<div style={{display:"flex",gap:6,marginBottom:8,flexWrap:"wrap"}}>
 {Object.entries(byDriver).map(([did,mins])=>{const drv=drivers.find(d=>d.id===Number(did));const di=drivers.findIndex(d=>d.id===Number(did));if(!drv)return null;const initials=drv.name.split(" ").map(n=>n[0]).join("");return(<div key={did} style={{display:"flex",alignItems:"center",gap:5,background:"#fff",border:`1px solid ${DCOL[di]||"#2563eb"}`,borderRadius:8,padding:"4px 10px"}}>
 <div style={{width:20,height:20,borderRadius:5,background:DCOL[di]||"#2563eb",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,color:"#fff",fontWeight:700}}>{initials}</div>
@@ -1918,6 +1936,12 @@ return(
 <div style={{display:"flex",alignItems:"center",gap:5,background:"#dbeafe",border:"1px solid #2563eb",borderRadius:8,padding:"4px 10px",marginLeft:"auto"}}>
 <span style={{fontSize:12,fontWeight:700,color:"#1e40af"}}>⏱ {formatMins(totalMins)} total</span>
 </div>
+</div>}
+{/* Eatonton bonus hour badge */}
+{hasEatontonBonus&&<div style={{display:"flex",alignItems:"center",gap:6,background:"#fef3c7",border:"1px solid #fde68a",borderRadius:8,padding:"5px 10px",marginBottom:8}}>
+{eatontonDi>=0&&<div style={{width:20,height:20,borderRadius:5,background:DCOL[eatontonDi],display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,color:"#fff",fontWeight:700}}>{eatontonInitials}</div>}
+<span style={{fontSize:11,fontWeight:700,color:"#92400e"}}>+1h Eatonton Bonus</span>
+<span style={{fontSize:10,color:"#78716c",marginLeft:"auto"}}>Long-distance run</span>
 </div>}
 {!totalMins&&<div style={{fontSize:11,color:"#64748b",marginBottom:8}}>💡 Log shifts in History → ⏱ Emser Hrs for auto-calculation</div>}
 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
