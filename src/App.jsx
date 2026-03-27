@@ -16,10 +16,10 @@ const _fbReady=new Promise((res,rej)=>{_fbResolve=res;_fbReject=rej;});
   s.type="module";
   s.textContent=`
     import{initializeApp}from"https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-    import{getFirestore,doc,setDoc,getDoc,onSnapshot,collection,addDoc,updateDoc,serverTimestamp,query,orderBy}from"https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+    import{getFirestore,doc,setDoc,getDoc,onSnapshot,collection,addDoc,updateDoc,deleteDoc,serverTimestamp,query,orderBy}from"https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
     const app=initializeApp(${JSON.stringify(_fbCfg)});
     const db=getFirestore(app);
-    window._fb={db,doc,setDoc,getDoc,onSnapshot,collection,addDoc,updateDoc,serverTimestamp,query,orderBy};
+    window._fb={db,doc,setDoc,getDoc,onSnapshot,collection,addDoc,updateDoc,deleteDoc,serverTimestamp,query,orderBy};
     window._fbLoaded=true;
     window.dispatchEvent(new Event("fb_ready"));
   `;
@@ -161,6 +161,34 @@ const markNotificationRead=async(driverId,notifId)=>{
   await _fbReady.catch(()=>{});
   if(!_db())return;
   await window._fb.updateDoc(window._fb.doc(_db(),"notifications",String(driverId),"items",notifId),{read:true});
+};
+
+/* ── Quotes ── */
+const saveQuoteToFB=async(quote)=>{
+  await _fbReady.catch(()=>{});
+  if(!_db())return;
+  await window._fb.setDoc(window._fb.doc(_db(),"quotes",String(quote.id)),{...quote,updatedAt:Date.now()});
+};
+const deleteQuoteFromFB=async(quoteId)=>{
+  await _fbReady.catch(()=>{});
+  if(!_db())return;
+  await window._fb.deleteDoc(window._fb.doc(_db(),"quotes",String(quoteId)));
+};
+const subscribeQuotes=(cb)=>{
+  const run=()=>{
+    const col=window._fb.collection(_db(),"quotes");
+    return window._fb.onSnapshot(col,snap=>{
+      const quotes=[];
+      snap.forEach(d=>{quotes.push({id:d.id,...d.data()});});
+      /* Sort by quote number descending (newest first) */
+      quotes.sort((a,b)=>(b.num||0)-(a.num||0));
+      cb(quotes);
+    });
+  };
+  if(window._fbLoaded)return run();
+  let unsub=()=>{};
+  window.addEventListener("fb_ready",()=>{unsub=run();},{once:true});
+  return()=>unsub();
 };
 
 const getDayKey=()=>{};const getWeekKey=()=>{};
@@ -1506,6 +1534,19 @@ const[showCustPickup,setShowCustPickup]=useState(false);
 const[custPUFrom,setCustPUFrom]=useState("");
 const[custPUAddr,setCustPUAddr]=useState("");
 const[custPUNote,setCustPUNote]=useState("");
+/* ── QUOTES ── */
+const[savedQuotes,setSavedQuotes]=useState(()=>lsGet("dd_quotes",[]));
+const[quoteFormOpen,setQuoteFormOpen]=useState(false);
+const[qCust,setQCust]=useState("");
+const[qStop,setQStop]=useState("");
+const[qAddr,setQAddr]=useState("");
+const[qRate,setQRate]=useState("");
+const[qNote,setQNote]=useState("");
+const[qMiles,setQMiles]=useState("");
+const[qLiftgate,setQLiftgate]=useState(false);
+const[qGravel,setQGravel]=useState(false);
+const[qExtraPallets,setQExtraPallets]=useState(false);
+const[qPushDay,setQPushDay]=useState(null); /* {quoteId, targetDk} */
 
 const wd=getWeekDates(wo);const dk=`${wo}-${sd}`;const dl=log[dk]||[];
 const showToast=useCallback(m=>{setToast(m);setTimeout(()=>setToast(null),2000);},[]);
@@ -1520,8 +1561,9 @@ useEffect(()=>{
   const unsubEmser=subscribeEmserHours((fbEmH)=>{setEmH(fbEmH);});
   const unsubNotes=subscribeDispatchNotes((fbNotes)=>{setDispNotes(p=>({...p,...fbNotes}));});
   const unsubShifts=subscribeEmserShifts((fbShifts)=>{setEmserShifts(p=>({...p,...fbShifts}));});
+  const unsubQuotes=subscribeQuotes((fbQuotes)=>{setSavedQuotes(fbQuotes);});
   firebaseReady.current=true;
-  return()=>{unsubDrivers();unsubEmser();unsubNotes();unsubShifts();};
+  return()=>{unsubDrivers();unsubEmser();unsubNotes();unsubShifts();unsubQuotes();};
 },[]);
 
 useEffect(()=>{
@@ -1603,13 +1645,53 @@ useEffect(()=>{
   },500);
   return()=>clearTimeout(timer);
 },[emserShifts]);
+useEffect(()=>{lsSet("dd_quotes",savedQuotes);},[savedQuotes]);
+
+/* ── QUOTE HELPERS ── */
+const calcQuoteRate=(miles,liftgate,gravel,extraPallets)=>{
+let base=getBaseTier(parseFloat(miles)||0);
+let fuel=0;
+if(liftgate){fuel=75;}else{fuel=Math.round(base*0.15);}
+if(gravel)base+=25;
+if(extraPallets)base+=25;
+return{base,fuel,total:base+fuel};
+};
+const saveQuote=()=>{
+const miles=parseFloat(qMiles)||0;
+const manualRate=parseFloat(qRate)||0;
+const calc=miles>0?calcQuoteRate(miles,qLiftgate,qGravel,qExtraPallets):null;
+const finalRate=manualRate||calc?.total||0;
+const q={id:Date.now()+Math.random(),num:savedQuotes.length+1,customer:qCust,stop:qStop,addr:qAddr,rate:finalRate,miles:miles||null,liftgate:qLiftgate,gravel:qGravel,extraPallets:qExtraPallets,note:qNote,calc,createdAt:new Date().toISOString(),status:"pending"};
+setSavedQuotes(p=>[q,...p]);
+saveQuoteToFB(q).catch(e=>console.error("Quote save:",e));
+setQCust("");setQStop("");setQAddr("");setQRate("");setQNote("");setQMiles("");setQLiftgate(false);setQGravel(false);setQExtraPallets(false);setQuoteFormOpen(false);
+showToast("Quote #"+q.num+" saved");
+};
+const pushQuoteToDay=(quoteId,targetDk)=>{
+const q=savedQuotes.find(x=>x.id===quoteId);
+if(!q)return;
+const cust=q.customer||"Quote Delivery";
+const entry={id:Date.now()+Math.random(),customer:cust,stop:q.stop||"Quote Delivery",baseRate:q.rate||0,fuelPct:0,isHourly:false,note:q.note||(q.miles?q.miles+"mi":""),driverId:0,addr:q.addr||"",stopType:"delivery",priority:false,instructions:"",status:null,arrivedAt:null,departedAt:null,eta:null,photos:[],signature:null,dueBy:null,weight:0,loadNum:1};
+setLog(p=>({...p,[targetDk]:[...(p[targetDk]||[]),entry]}));
+setSavedQuotes(p=>p.map(x=>x.id===quoteId?{...x,status:"accepted",pushedTo:targetDk}:x));
+const updated={...q,status:"accepted",pushedTo:targetDk};
+saveQuoteToFB(updated).catch(e=>console.error("Quote update:",e));
+showToast("Quote pushed to manifest");
+setQPushDay(null);
+};
 
 const addDel=(cust,stop,rate,drvId,ex={})=>{
 const cd=CUSTOMERS[cust];
 const instrForStop=customInstr[stop]!==undefined?customInstr[stop]:getDefaultInstr(stop);
 /* Auto time constraints for specific stops */
-const autoDueBy=ex.dueBy||(stop==="Atlanta Flooring - Suwanee"?"9:30–1:00 PM":null);
-const autoDeliverAfter=(cust==="Specialty"&&!ex.dueBy)?"Pickup 7:30 AM":null;
+const autoDueBy=ex.dueBy||(stop==="Atlanta Flooring - Suwanee"?"9:30–1:00 PM"
+:cust==="IMETCO"&&stop==="IMETCO to Finishing Dynamics"?"By 2:00 PM"
+:cust==="IMETCO"&&stop==="Perfect Edge to IMETCO"?"By 3:30 PM"
+:cust==="IMETCO"&&stop==="Southern Aluminum to IMETCO"?"By 3:30 PM"
+:cust==="IMETCO"&&stop==="Finishing Dynamics to IMETCO"?"By 3:30 PM"
+:cust==="IMETCO"&&stop==="Round Trip IMETCO & Finishing Dynamics"?"By 3:30 PM"
+:null);
+const autoDeliverAfter=(cust==="Specialty"&&!ex.dueBy)?"Pickup 7:30 AM — Specialty":null;
 const entry={id:Date.now()+Math.random(),customer:cust,stop,baseRate:rate,fuelPct:ex.fuelPct||0,isHourly:ex.isHourly||false,note:ex.note||null,driverId:drvId,addr:ex.addr||getAddr(stop),stopType:ex.stopType||"delivery",priority:ex.priority||(cd?.priority)||false,instructions:ex.instructions!==undefined?ex.instructions:instrForStop,status:null,arrivedAt:null,departedAt:null,eta:null,photos:[],signature:null,dueBy:autoDueBy||autoDeliverAfter||null,weight:ex.weight||0,loadNum:ex.loadNum||1};
 setLog(p=>({...p,[dk]:[...(p[dk]||[]),entry]}));
 /* DCO Eatonton: auto-add 1 bonus hour to Emser billing (long-distance run) */
@@ -1627,11 +1709,18 @@ const addMulti=(cust,stops,drvId)=>{
 const cd=CUSTOMERS[cust];
 const isSpecialty=cust==="Specialty";
 const newEntries=stops.map(s=>{const isStr=typeof s==="string";const stop=isStr?s:s.s;const rate=isStr?0:s.r;const instrForStop=customInstr[stop]!==undefined?customInstr[stop]:getDefaultInstr(stop);
-return{id:Date.now()+Math.random(),customer:cust,stop,baseRate:rate,fuelPct:(cd.fuel_surcharge&&!cd.fuel_included)?cd.fuel_surcharge:0,isHourly:cd.rate_type==="hourly",note:isStr?null:s.n||null,driverId:drvId,addr:getAddr(stop),stopType:"delivery",priority:cd.priority||false,instructions:instrForStop,status:null,arrivedAt:null,departedAt:null,eta:null,photos:[],signature:null,dueBy:isSpecialty?"Pickup 7:30 AM":null,weight:0,loadNum:1};
+const autoDue=isSpecialty?"Pickup 7:30 AM — Specialty"
+:cust==="IMETCO"&&(stop==="IMETCO to Finishing Dynamics"||stop==="Finishing Dynamics to IMETCO"||stop==="Round Trip IMETCO & Finishing Dynamics")?"By 2:00 PM"
+:cust==="IMETCO"&&(stop==="Perfect Edge to IMETCO"||stop==="Southern Aluminum to IMETCO")?"By 3:00 PM"
+:null;
+return{id:Date.now()+Math.random(),customer:cust,stop,baseRate:rate,fuelPct:(cd.fuel_surcharge&&!cd.fuel_included)?cd.fuel_surcharge:0,isHourly:cd.rate_type==="hourly",note:isStr?null:s.n||null,driverId:drvId,addr:getAddr(stop),stopType:"delivery",priority:cd.priority||false,instructions:instrForStop,status:null,arrivedAt:null,departedAt:null,eta:null,photos:[],signature:null,dueBy:autoDue,weight:0,loadNum:1};
 });
 setLog(p=>({...p,[dk]:[...(p[dk]||[]),...newEntries]}));showToast(`${stops.length} stops added`);setMultiSelect(false);setMultiChecked([]);
 };
 const rmDel=id=>setLog(p=>({...p,[dk]:(p[dk]||[]).filter(e=>e.id!==id)}));
+/* Remove from driver → unassign back to pool; remove from unassigned → delete entirely */
+const rmFromDriver=(id)=>{const entry=dl.find(e=>e.id===id);if(!entry)return;if(entry.driverId===0){rmDel(id);}else{reassign(id,0);showToast("Moved to Unassigned");}};
+
 const reassign=(eid,did)=>{
 const entry=dl.find(e=>e.id===eid);
 const oldDid=entry?.driverId;
@@ -1831,6 +1920,8 @@ ${timeConstraintLines}
 STANDING TIME RULES (always apply these when routing):
 - Specialty (ALL stops): Pickup at Specialty dock by 7:30 AM — must be FIRST stop of the day
 - Atlanta Flooring - Suwanee: Deliver between 9:30 AM and 1:00 PM only
+- IMETCO to Finishing Dynamics: Must be delivered by 2:00 PM
+- All deliveries TO IMETCO (Perfect Edge, Southern Aluminum, Finishing Dynamics, Round Trip): Must arrive by 3:30 PM
 - DCO Eatonton: Long-distance run — schedule early, allow 2+ hours travel
 - LaVista/Waffle House (Specialty): Must have appointment time, normally 10 AM
 - MM Systems - Pendergrass: Closed 11:45 AM–12:30 PM for lunch
@@ -1876,21 +1967,37 @@ setChatMessages(newMessages);
 setChatInput("");
 setChatLoading(true);
 try{
-const response=await fetch("/.netlify/functions/chat",{
-method:"POST",
-headers:{"Content-Type":"application/json"},
-body:JSON.stringify({
+const payload={
 model:"claude-haiku-4-5-20251001",
 max_tokens:1024,
 system:buildSystemPrompt(),
 messages:newMessages.map(m=>({role:m.role,content:m.content})),
-}),
-});
-const data=await response.json();
-const assistantText=data.content?.map(c=>c.type==="text"?c.text:"").join("")||"Sorry, I couldn't process that.";
+};
+let data=null;
+let errDetails="";
+/* Attempt 1: Netlify function */
+try{
+const r=await fetch("/.netlify/functions/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
+const txt=await r.text();
+if(r.ok){try{data=JSON.parse(txt);if(!data?.content)data=null;}catch(e){data=null;}}
+if(!data)errDetails="Netlify function returned: "+txt.slice(0,300);
+}catch(e){errDetails="Netlify function unreachable: "+e.message;}
+/* Attempt 2: Direct Anthropic API (works from deployed site with CORS header) */
+if(!data){
+try{
+const r2=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify(payload)});
+if(r2.ok){data=await r2.json();if(!data?.content)data=null;}
+else{const t2=await r2.text();errDetails+="\nDirect API: "+t2.slice(0,200);}
+}catch(e2){errDetails+="\nDirect API error: "+e2.message;}
+}
+if(data&&data.content){
+const assistantText=data.content.map(c=>c.type==="text"?c.text:"").join("")||"No response.";
 setChatMessages(prev=>[...prev,{role:"assistant",content:assistantText}]);
+}else{
+setChatMessages(prev=>[...prev,{role:"assistant",content:"AI unavailable.\n\n"+errDetails+"\n\nTo fix:\n1. Set ANTHROPIC_API_KEY in Netlify env vars\n2. Redeploy the site\n3. Ensure the API key has credits"}]);
+}
 }catch(err){
-setChatMessages(prev=>[...prev,{role:"assistant",content:"Connection error — check that the Netlify function is deployed and ANTHROPIC_API_KEY is set in environment variables."}]);
+setChatMessages(prev=>[...prev,{role:"assistant",content:"Connection error: "+err.message}]);
 }
 setChatLoading(false);
 };
@@ -2053,7 +2160,7 @@ return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius
 </div>
 <div style={{textAlign:"right",marginLeft:10,flexShrink:0}}>
 <div style={{fontSize:15,fontWeight:700,fontVariantNumeric:"tabular-nums"}}><InlineRate value={entry.baseRate} isHourly={entry.isHourly} onSave={r=>updateRate(entry.id,r)}/></div>
-<button onClick={()=>rmDel(entry.id)} style={{background:"none",border:"none",color:"#dc2626",fontSize:10,cursor:"pointer",padding:"4px 0 0",opacity:0.7}}>Remove</button>
+<button onClick={()=>rmFromDriver(entry.id)} style={{background:"none",border:"none",color:"#dc2626",fontSize:10,cursor:"pointer",padding:"4px 0 0",opacity:0.7}}>Remove</button>
 </div>
 </div>
 {isImetco&&<div style={{marginTop:8,display:"flex",alignItems:"center",gap:6}}>
@@ -2151,7 +2258,7 @@ return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius
 </div>
 {/* Mode toggle */}
 <div style={{display:"flex",gap:3,marginBottom:16,background:"#f5f5f4",borderRadius:10,padding:3,width:"fit-content"}}>
-{[{k:"deliveries",l:"Deliveries"},{k:"photos",l:"📷 Photos"},{k:"emser",l:"⏱ Emser Hrs"}].map(m=>(
+{[{k:"deliveries",l:"Deliveries"},{k:"photos",l:"📷 Photos"},{k:"emser",l:"⏱ Emser Hrs"},{k:"quotes",l:"💰 Quotes"}].map(m=>(
 <button key={m.k} onClick={()=>setHistMode(m.k)} style={{padding:"8px 16px",borderRadius:8,border:"none",cursor:"pointer",fontSize:12,fontWeight:600,background:histMode===m.k?"#fff":"transparent",color:histMode===m.k?BRAND.main:"#78716c",boxShadow:histMode===m.k?"0 1px 3px rgba(0,0,0,0.08)":"none"}}>{m.l}</button>
 ))}
 </div>
@@ -2277,6 +2384,105 @@ return(<div>
 </div>
 </div>);})}
 </div>}
+</div>);
+})()}
+
+{/* Quotes */}
+{histMode==="quotes"&&(()=>{
+const allCustNames=[...Object.keys(CUSTOMERS),...QUOTE_CUSTOMERS.map(q=>q.name),"One-Off Delivery"];
+const getDeliveries=(custName)=>{const cd=CUSTOMERS[custName];if(!cd)return[];return cd.deliveries.map(d=>typeof d==="string"?{s:d,r:0}:d);};
+return(<div>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+<div><span style={{fontSize:15,fontWeight:700}}>Saved Quotes</span><span style={{fontSize:12,color:"#a8a29e",marginLeft:8}}>{savedQuotes.length} total</span></div>
+<button onClick={()=>setQuoteFormOpen(!quoteFormOpen)} style={{background:"#16a34a",color:"#fff",border:"none",borderRadius:10,padding:"8px 18px",cursor:"pointer",fontSize:13,fontWeight:700}}>{quoteFormOpen?"Cancel":"+ New Quote"}</button>
+</div>
+{quoteFormOpen&&<div style={{background:"#fff",border:"2px solid #16a34a",borderRadius:16,padding:"18px 20px",marginBottom:20}}>
+<div style={{fontSize:14,fontWeight:700,color:"#16a34a",marginBottom:14}}>New Quote</div>
+<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
+<div>
+<label style={{fontSize:11,fontWeight:600,color:"#57534e",display:"block",marginBottom:4}}>Customer</label>
+<select value={qCust} onChange={e=>{setQCust(e.target.value);setQStop("");}} style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px",fontSize:13,outline:"none",background:"#fff"}}>
+<option value="">Select customer...</option>{allCustNames.map(c=><option key={c} value={c}>{c}</option>)}<option value="__manual">Manual Entry</option>
+</select>
+</div>
+<div>
+<label style={{fontSize:11,fontWeight:600,color:"#57534e",display:"block",marginBottom:4}}>Delivery To</label>
+{qCust&&qCust!=="__manual"&&getDeliveries(qCust).length>0?
+<select value={qStop} onChange={e=>setQStop(e.target.value)} style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px",fontSize:13,outline:"none",background:"#fff"}}>
+<option value="">Select stop...</option>{getDeliveries(qCust).map(d=><option key={d.s} value={d.s}>{d.s}{d.r?" — $"+d.r:""}</option>)}<option value="__custom">Custom location...</option>
+</select>
+:<input value={qStop} onChange={e=>setQStop(e.target.value)} placeholder="Delivery location" style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px",fontSize:13,outline:"none"}}/>}
+</div>
+</div>
+<div style={{marginBottom:12}}>
+<label style={{fontSize:11,fontWeight:600,color:"#57534e",display:"block",marginBottom:4}}>Address</label>
+<AddressInput value={qAddr} onChange={setQAddr} placeholder="Delivery address" style={{fontSize:13}}/>
+</div>
+<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
+<div>
+<label style={{fontSize:11,fontWeight:600,color:"#57534e",display:"block",marginBottom:4}}>Distance (miles)</label>
+<input type="number" value={qMiles} onChange={e=>setQMiles(e.target.value)} placeholder="e.g. 25" style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px",fontSize:13,fontWeight:700,outline:"none",textAlign:"center"}}/>
+{qMiles&&<div style={{fontSize:11,color:"#16a34a",fontWeight:700,marginTop:4}}>Auto: {fmt(calcQuoteRate(qMiles,qLiftgate,qGravel,qExtraPallets).total)}</div>}
+</div>
+<div>
+<label style={{fontSize:11,fontWeight:600,color:"#57534e",display:"block",marginBottom:4}}>Rate Override</label>
+<input type="number" value={qRate} onChange={e=>setQRate(e.target.value)} placeholder={qMiles?"Auto-calculated":"Manual rate"} style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px",fontSize:13,fontWeight:700,outline:"none",textAlign:"center"}}/>
+</div>
+</div>
+<div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}}>
+<label style={{display:"flex",alignItems:"center",gap:5,cursor:"pointer",fontSize:12,fontWeight:600,color:qLiftgate?"#d97706":"#78716c",background:qLiftgate?"#fef3c7":"#f5f5f4",padding:"6px 12px",borderRadius:8,border:qLiftgate?"1px solid #fde68a":"1px solid #e7e5e4"}}>
+<input type="checkbox" checked={qLiftgate} onChange={e=>setQLiftgate(e.target.checked)} style={{accentColor:"#d97706"}}/> Liftgate +$75</label>
+<label style={{display:"flex",alignItems:"center",gap:5,cursor:"pointer",fontSize:12,fontWeight:600,color:qGravel?"#d97706":"#78716c",background:qGravel?"#fef3c7":"#f5f5f4",padding:"6px 12px",borderRadius:8,border:qGravel?"1px solid #fde68a":"1px solid #e7e5e4"}}>
+<input type="checkbox" checked={qGravel} onChange={e=>setQGravel(e.target.checked)} style={{accentColor:"#d97706"}}/> Gravel +$25</label>
+<label style={{display:"flex",alignItems:"center",gap:5,cursor:"pointer",fontSize:12,fontWeight:600,color:qExtraPallets?"#d97706":"#78716c",background:qExtraPallets?"#fef3c7":"#f5f5f4",padding:"6px 12px",borderRadius:8,border:qExtraPallets?"1px solid #fde68a":"1px solid #e7e5e4"}}>
+<input type="checkbox" checked={qExtraPallets} onChange={e=>setQExtraPallets(e.target.checked)} style={{accentColor:"#d97706"}}/> 4-5 Pallets +$25</label>
+</div>
+<div style={{marginBottom:12}}>
+<label style={{fontSize:11,fontWeight:600,color:"#57534e",display:"block",marginBottom:4}}>Notes</label>
+<textarea value={qNote} onChange={e=>setQNote(e.target.value)} placeholder="Additional details..." rows={2} style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px",fontSize:13,outline:"none",resize:"vertical",fontFamily:"inherit"}}/>
+</div>
+<div style={{display:"flex",justifyContent:"flex-end",gap:8}}>
+<button onClick={()=>setQuoteFormOpen(false)} style={{background:"#e7e5e4",border:"none",borderRadius:8,padding:"8px 18px",cursor:"pointer",fontSize:12,fontWeight:600}}>Cancel</button>
+<button onClick={saveQuote} disabled={!qStop.trim()} style={{background:qStop.trim()?"#16a34a":"#a8a29e",color:"#fff",border:"none",borderRadius:8,padding:"8px 18px",cursor:"pointer",fontSize:12,fontWeight:700}}>Save Quote</button>
+</div>
+</div>}
+{savedQuotes.length===0&&!quoteFormOpen&&<div style={{textAlign:"center",padding:"60px 20px",color:"#a8a29e"}}><div style={{fontSize:40,marginBottom:12}}>💰</div><p style={{fontSize:14,fontWeight:600,margin:"0 0 4px"}}>No quotes yet</p><p style={{fontSize:12,margin:0}}>Create your first quote above</p></div>}
+{savedQuotes.map((q,qi)=>{const c=CC[q.customer]||CC["Quote Delivery"]||CC["One-Off Delivery"];const accepted=q.status==="accepted";return(
+<div key={q.id} style={{background:accepted?"#f0fdf4":"#fff",border:`1px solid ${accepted?"#bbf7d0":"#e7e5e4"}`,borderRadius:14,padding:"14px 18px",marginBottom:8,borderLeft:`4px solid ${accepted?"#16a34a":c.accent}`}}>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+<div style={{flex:1}}>
+<div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4,flexWrap:"wrap"}}>
+<span style={{fontSize:12,fontWeight:800,color:"#a8a29e",fontVariantNumeric:"tabular-nums"}}>#{q.num}</span>
+<span style={{fontSize:11,fontWeight:600,color:c.accent}}>{q.customer}</span>
+{accepted&&<span style={{fontSize:9,background:"#16a34a",color:"#fff",padding:"1px 6px",borderRadius:3,fontWeight:700}}>ACCEPTED</span>}
+{!accepted&&<span style={{fontSize:9,background:"#fef3c7",color:"#92400e",padding:"1px 6px",borderRadius:3,fontWeight:700}}>PENDING</span>}
+{q.miles&&<span style={{fontSize:10,color:"#78716c"}}>{q.miles}mi</span>}
+{q.liftgate&&<span style={{fontSize:9,background:"#fef3c7",color:"#92400e",padding:"1px 4px",borderRadius:3}}>LG</span>}
+{q.gravel&&<span style={{fontSize:9,background:"#fef3c7",color:"#92400e",padding:"1px 4px",borderRadius:3}}>GRV</span>}
+{q.extraPallets&&<span style={{fontSize:9,background:"#fef3c7",color:"#92400e",padding:"1px 4px",borderRadius:3}}>4-5P</span>}
+</div>
+<div style={{fontSize:15,fontWeight:700}}>{q.stop}</div>
+{q.addr&&<div style={{fontSize:11,color:"#78716c",marginTop:1}}>{q.addr}</div>}
+{q.note&&<div style={{fontSize:11,color:"#57534e",marginTop:2}}>{q.note}</div>}
+<div style={{fontSize:10,color:"#a8a29e",marginTop:4}}>{new Date(q.createdAt).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})} at {new Date(q.createdAt).toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"})}</div>
+</div>
+<div style={{textAlign:"right",marginLeft:14,flexShrink:0}}>
+<div style={{fontSize:20,fontWeight:800,color:accepted?"#16a34a":"#1c1917",fontVariantNumeric:"tabular-nums"}}>{fmt(q.rate)}</div>
+{q.calc&&<div style={{fontSize:10,color:"#78716c"}}>{fmt(q.calc.base)}+{fmt(q.calc.fuel)} fuel</div>}
+{!accepted&&<div style={{display:"flex",flexDirection:"column",gap:4,marginTop:8}}>
+{qPushDay&&qPushDay.quoteId===q.id?<div style={{display:"flex",flexDirection:"column",gap:4}}>
+<select onChange={e=>{if(e.target.value)pushQuoteToDay(q.id,e.target.value);}} defaultValue="" style={{border:"1px solid #16a34a",borderRadius:6,padding:"4px 6px",fontSize:10,outline:"none",background:"#f0fdf4"}}>
+<option value="">Pick day...</option>{DAYS.map((day,i)=><option key={i} value={`${wo}-${i}`}>{day} {wd[i].date}</option>)}<option value={`${wo+1}-0`}>Next Mon</option>
+</select>
+<button onClick={()=>setQPushDay(null)} style={{background:"none",border:"none",fontSize:9,color:"#78716c",cursor:"pointer"}}>Cancel</button>
+</div>
+:<button onClick={()=>setQPushDay({quoteId:q.id})} style={{background:"#16a34a",color:"#fff",border:"none",borderRadius:6,padding:"5px 10px",cursor:"pointer",fontSize:10,fontWeight:700}}>Push to Day</button>}
+<button onClick={()=>{setSavedQuotes(p=>p.filter(x=>x.id!==q.id));deleteQuoteFromFB(q.id).catch(e=>console.error("Quote del:",e));showToast("Quote deleted");}} style={{background:"none",border:"none",color:"#dc2626",fontSize:9,cursor:"pointer",padding:"2px 0"}}>Delete</button>
+</div>}
+{accepted&&q.pushedTo&&<div style={{fontSize:10,color:"#16a34a",fontWeight:600,marginTop:4}}>→ {DAYS[parseInt(q.pushedTo.split("-")[1])]||""}</div>}
+</div>
+</div>
+</div>);})}
 </div>);
 })()}
 
@@ -2420,7 +2626,7 @@ return(<div key={entry.id} style={{background:done?"#f0fdf4":onSite?"#fffbeb":ha
 <select value={entry.driverId} onChange={e=>{e.stopPropagation();reassign(entry.id,Number(e.target.value));}} style={{background:"#f5f5f4",border:"1px solid #e7e5e4",borderRadius:5,padding:"2px 4px",fontSize:9,color:"#57534e",cursor:"pointer",maxWidth:70}}><option value={0}>Assign</option>{drivers.map(dd=><option key={dd.id} value={dd.id}>{dd.name}</option>)}</select>
 <button onClick={()=>moveInDriver(drv.id,eIdx,-1)} style={{background:"#f5f5f4",border:"1px solid #e7e5e4",borderRadius:4,padding:"1px 5px",cursor:"pointer",fontSize:9,color:"#78716c"}} title="Move up">▲</button>
 <button onClick={()=>moveInDriver(drv.id,eIdx,1)} style={{background:"#f5f5f4",border:"1px solid #e7e5e4",borderRadius:4,padding:"1px 5px",cursor:"pointer",fontSize:9,color:"#78716c"}} title="Move down">▼</button>
-<button onClick={()=>rmDel(entry.id)} style={{background:"none",border:"none",color:"#dc2626",fontSize:9,cursor:"pointer",padding:"1px 4px"}}>✕</button>
+<button onClick={()=>rmFromDriver(entry.id)} style={{background:"none",border:"none",color:"#dc2626",fontSize:9,cursor:"pointer",padding:"1px 4px"}}>✕</button>
 </div>
 </div>);})}
 </div>
@@ -3026,7 +3232,7 @@ handleDrop(dragOver.drvId,dragOver.idx);
 {over&&<span style={{fontSize:8,background:"#dc2626",color:"#fff",padding:"1px 4px",borderRadius:3,fontWeight:700}}>OVER</span>}
 </div>):null;});})()}
 {de.map((entry,eIdx)=><div key={entry.id}>
-<ManifestStop entry={entry} eIdx={eIdx} total={de.length} drivers={drivers} onMove={dir=>moveInDriver(drv.id,eIdx,dir)} onReassign={did=>reassign(entry.id,did)} onRemove={()=>rmDel(entry.id)} onUpdateInstructions={text=>updateInstructions(entry.id,text)} onShipPlan={val=>setShipPlan(entry.id,val)} onDueBy={time=>setDueBy(entry.id,time)} onWeight={w=>setWeight(entry.id,w)} onLoadNum={n=>setLoadNum(entry.id,n)} onRate={r=>updateRate(entry.id,r)} maxLoad={getMaxLoad(drv.id)}
+<ManifestStop entry={entry} eIdx={eIdx} total={de.length} drivers={drivers} onMove={dir=>moveInDriver(drv.id,eIdx,dir)} onReassign={did=>reassign(entry.id,did)} onRemove={()=>rmFromDriver(entry.id)} onUpdateInstructions={text=>updateInstructions(entry.id,text)} onShipPlan={val=>setShipPlan(entry.id,val)} onDueBy={time=>setDueBy(entry.id,time)} onWeight={w=>setWeight(entry.id,w)} onLoadNum={n=>setLoadNum(entry.id,n)} onRate={r=>updateRate(entry.id,r)} maxLoad={getMaxLoad(drv.id)}
 isDragging={dragSrc?.drvId===drv.id&&dragSrc?.idx===eIdx} isDragOver={dragOver?.drvId===drv.id&&dragOver?.idx===eIdx} onDragStart={()=>setDragSrc({drvId:drv.id,idx:eIdx})} onDragOver={()=>setDragOver({drvId:drv.id,idx:eIdx})} onDrop={()=>handleDrop(drv.id,eIdx)}/>
 <button onClick={()=>setInsertPickupFor({driverId:drv.id,afterIdx:eIdx})} style={{display:"block",width:"100%",background:"none",border:"1px dashed #bfdbfe",borderRadius:6,padding:"3px",cursor:"pointer",fontSize:10,color:"#93c5fd",marginBottom:4,textAlign:"center"}}>+ insert pickup here</button>
 </div>)}
@@ -3111,7 +3317,7 @@ return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius
 </div>
 <div style={{textAlign:"right",marginLeft:12}}>
 <div style={{fontSize:16,fontWeight:700,fontVariantNumeric:"tabular-nums"}}><InlineRate value={entry.baseRate} isHourly={entry.isHourly} onSave={r=>updateRate(entry.id,r)}/></div>
-<button onClick={()=>rmDel(entry.id)} style={{background:"none",border:"none",color:"#dc2626",fontSize:11,cursor:"pointer",padding:"4px 0 0",opacity:0.7}}>Remove</button>
+<button onClick={()=>rmFromDriver(entry.id)} style={{background:"none",border:"none",color:"#dc2626",fontSize:11,cursor:"pointer",padding:"4px 0 0",opacity:0.7}}>Remove</button>
 </div>
 </div>
 {isImetco&&<div style={{marginTop:8,display:"flex",alignItems:"center",gap:6}}>
@@ -3193,9 +3399,9 @@ style={{width:80,border:"1px solid #e7e5e4",borderRadius:6,padding:"3px 6px",fon
 {view==="history"&&<div>
 <div style={{padding:"16px 4px 8px"}}><h2 style={{margin:0,fontSize:16,fontWeight:600}}>Delivery History</h2><p style={{margin:"4px 0 0",fontSize:12,color:"#78716c"}}>{histMode==="emser"?"Track Emser driver hours":"Search deliveries and proof of delivery photos"}</p></div>
 
-{/* Mode toggle - 3 options */}
+{/* Mode toggle - 4 options */}
 <div style={{display:"flex",gap:3,marginBottom:10,background:"#f5f5f4",borderRadius:10,padding:3}}>
-{[{k:"deliveries",l:"Deliveries"},{k:"photos",l:"📷 Photos"},{k:"emser",l:"⏱ Emser Hrs"}].map(m=>(
+{[{k:"deliveries",l:"Deliveries"},{k:"photos",l:"📷 Photos"},{k:"emser",l:"⏱ Emser"},{k:"quotes",l:"💰 Quotes"}].map(m=>(
 <button key={m.k} onClick={()=>setHistMode(m.k)} style={{flex:1,padding:"8px 4px",borderRadius:8,border:"none",cursor:"pointer",fontSize:11,fontWeight:600,background:histMode===m.k?"#fff":"transparent",color:histMode===m.k?BRAND.main:"#78716c",boxShadow:histMode===m.k?"0 1px 3px rgba(0,0,0,0.08)":"none"}}>{m.l}</button>
 ))}
 </div>
@@ -3358,6 +3564,86 @@ return(<div>
 </div>
 </div>);})}
 </div>}
+</div>);
+})()}
+
+{/* QUOTES MODE */}
+{histMode==="quotes"&&(()=>{
+const allCustNames=[...Object.keys(CUSTOMERS),...QUOTE_CUSTOMERS.map(q=>q.name),"One-Off Delivery"];
+const getDeliveries2=(custName)=>{const cd=CUSTOMERS[custName];if(!cd)return[];return cd.deliveries.map(d=>typeof d==="string"?{s:d,r:0}:d);};
+return(<div>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+<div><span style={{fontSize:14,fontWeight:700}}>Quotes</span><span style={{fontSize:11,color:"#a8a29e",marginLeft:6}}>{savedQuotes.length}</span></div>
+<button onClick={()=>setQuoteFormOpen(!quoteFormOpen)} style={{background:"#16a34a",color:"#fff",border:"none",borderRadius:8,padding:"7px 14px",cursor:"pointer",fontSize:12,fontWeight:700}}>{quoteFormOpen?"Cancel":"+ New Quote"}</button>
+</div>
+{quoteFormOpen&&<div style={{background:"#fff",border:"2px solid #16a34a",borderRadius:14,padding:"14px 16px",marginBottom:16}}>
+<div style={{fontSize:13,fontWeight:700,color:"#16a34a",marginBottom:12}}>New Quote</div>
+<label style={{fontSize:11,fontWeight:600,color:"#57534e",display:"block",marginBottom:4}}>Customer</label>
+<select value={qCust} onChange={e=>{setQCust(e.target.value);setQStop("");}} style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px",fontSize:13,outline:"none",background:"#fff",marginBottom:10}}>
+<option value="">Select customer...</option>{allCustNames.map(c=><option key={c} value={c}>{c}</option>)}<option value="__manual">Manual Entry</option>
+</select>
+<label style={{fontSize:11,fontWeight:600,color:"#57534e",display:"block",marginBottom:4}}>Delivery To</label>
+{qCust&&qCust!=="__manual"&&getDeliveries2(qCust).length>0?
+<select value={qStop} onChange={e=>setQStop(e.target.value)} style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px",fontSize:13,outline:"none",background:"#fff",marginBottom:10}}>
+<option value="">Select stop...</option>{getDeliveries2(qCust).map(d=><option key={d.s} value={d.s}>{d.s}{d.r?" — $"+d.r:""}</option>)}<option value="__custom">Custom location...</option>
+</select>
+:<input value={qStop} onChange={e=>setQStop(e.target.value)} placeholder="Delivery location" style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px",fontSize:13,outline:"none",marginBottom:10}}/>}
+<label style={{fontSize:11,fontWeight:600,color:"#57534e",display:"block",marginBottom:4}}>Address</label>
+<div style={{marginBottom:10}}><AddressInput value={qAddr} onChange={setQAddr} placeholder="Delivery address" style={{fontSize:13}}/></div>
+<div style={{display:"flex",gap:10,marginBottom:10}}>
+<div style={{flex:1}}><label style={{fontSize:11,fontWeight:600,color:"#57534e",display:"block",marginBottom:4}}>Miles</label><input type="number" value={qMiles} onChange={e=>setQMiles(e.target.value)} placeholder="e.g. 25" style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px",fontSize:13,fontWeight:700,outline:"none",textAlign:"center"}}/></div>
+<div style={{flex:1}}><label style={{fontSize:11,fontWeight:600,color:"#57534e",display:"block",marginBottom:4}}>Rate Override</label><input type="number" value={qRate} onChange={e=>setQRate(e.target.value)} placeholder={qMiles?"Auto":"$"} style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px",fontSize:13,fontWeight:700,outline:"none",textAlign:"center"}}/></div>
+</div>
+{qMiles&&<div style={{fontSize:12,color:"#16a34a",fontWeight:700,marginBottom:8}}>Auto: {fmt(calcQuoteRate(qMiles,qLiftgate,qGravel,qExtraPallets).total)}</div>}
+<div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap"}}>
+<label style={{display:"flex",alignItems:"center",gap:4,cursor:"pointer",fontSize:11,fontWeight:600,color:qLiftgate?"#92400e":"#78716c",background:qLiftgate?"#fef3c7":"#f5f5f4",padding:"5px 10px",borderRadius:7,border:qLiftgate?"1px solid #fde68a":"1px solid #e7e5e4"}}>
+<input type="checkbox" checked={qLiftgate} onChange={e=>setQLiftgate(e.target.checked)}/> Liftgate</label>
+<label style={{display:"flex",alignItems:"center",gap:4,cursor:"pointer",fontSize:11,fontWeight:600,color:qGravel?"#92400e":"#78716c",background:qGravel?"#fef3c7":"#f5f5f4",padding:"5px 10px",borderRadius:7,border:qGravel?"1px solid #fde68a":"1px solid #e7e5e4"}}>
+<input type="checkbox" checked={qGravel} onChange={e=>setQGravel(e.target.checked)}/> Gravel</label>
+<label style={{display:"flex",alignItems:"center",gap:4,cursor:"pointer",fontSize:11,fontWeight:600,color:qExtraPallets?"#92400e":"#78716c",background:qExtraPallets?"#fef3c7":"#f5f5f4",padding:"5px 10px",borderRadius:7,border:qExtraPallets?"1px solid #fde68a":"1px solid #e7e5e4"}}>
+<input type="checkbox" checked={qExtraPallets} onChange={e=>setQExtraPallets(e.target.checked)}/> 4-5 Pallets</label>
+</div>
+<label style={{fontSize:11,fontWeight:600,color:"#57534e",display:"block",marginBottom:4}}>Notes</label>
+<textarea value={qNote} onChange={e=>setQNote(e.target.value)} placeholder="Details..." rows={2} style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px",fontSize:12,outline:"none",resize:"vertical",fontFamily:"inherit",marginBottom:10}}/>
+<div style={{display:"flex",justifyContent:"flex-end",gap:6}}>
+<button onClick={()=>setQuoteFormOpen(false)} style={{background:"#e7e5e4",border:"none",borderRadius:8,padding:"7px 14px",cursor:"pointer",fontSize:11,fontWeight:600}}>Cancel</button>
+<button onClick={saveQuote} disabled={!qStop.trim()} style={{background:qStop.trim()?"#16a34a":"#a8a29e",color:"#fff",border:"none",borderRadius:8,padding:"7px 14px",cursor:"pointer",fontSize:11,fontWeight:700}}>Save</button>
+</div>
+</div>}
+{savedQuotes.length===0&&!quoteFormOpen&&<div style={{textAlign:"center",padding:"48px 20px",color:"#a8a29e"}}><div style={{fontSize:36,marginBottom:12}}>💰</div><p style={{fontSize:13,fontWeight:600,margin:"0 0 4px"}}>No quotes yet</p></div>}
+{savedQuotes.map(q=>{const c=CC[q.customer]||CC["Quote Delivery"]||CC["One-Off Delivery"];const accepted=q.status==="accepted";return(
+<div key={q.id} style={{background:accepted?"#f0fdf4":"#fff",border:`1px solid ${accepted?"#bbf7d0":"#e7e5e4"}`,borderRadius:12,padding:"12px 14px",marginBottom:8,borderLeft:`4px solid ${accepted?"#16a34a":c.accent}`}}>
+<div style={{display:"flex",alignItems:"center",gap:5,marginBottom:3,flexWrap:"wrap"}}>
+<span style={{fontSize:11,fontWeight:800,color:"#a8a29e"}}>#{q.num}</span>
+<span style={{fontSize:10,fontWeight:600,color:c.accent}}>{q.customer}</span>
+{accepted?<span style={{fontSize:8,background:"#16a34a",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700}}>ACCEPTED</span>:<span style={{fontSize:8,background:"#fef3c7",color:"#92400e",padding:"1px 5px",borderRadius:3,fontWeight:700}}>PENDING</span>}
+{q.miles&&<span style={{fontSize:9,color:"#78716c"}}>{q.miles}mi</span>}
+{q.liftgate&&<span style={{fontSize:8,background:"#fef3c7",color:"#92400e",padding:"1px 3px",borderRadius:2}}>LG</span>}
+</div>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+<div style={{flex:1}}>
+<div style={{fontSize:14,fontWeight:700}}>{q.stop}</div>
+{q.addr&&<div style={{fontSize:10,color:"#78716c",marginTop:1}}>{q.addr}</div>}
+{q.note&&<div style={{fontSize:10,color:"#57534e",marginTop:2}}>{q.note}</div>}
+<div style={{fontSize:9,color:"#a8a29e",marginTop:3}}>{new Date(q.createdAt).toLocaleDateString("en-US",{month:"short",day:"numeric"})} {new Date(q.createdAt).toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"})}</div>
+</div>
+<div style={{textAlign:"right",marginLeft:10,flexShrink:0}}>
+<div style={{fontSize:18,fontWeight:800,color:accepted?"#16a34a":"#1c1917",fontVariantNumeric:"tabular-nums"}}>{fmt(q.rate)}</div>
+{q.calc&&<div style={{fontSize:9,color:"#78716c"}}>{fmt(q.calc.base)}+{fmt(q.calc.fuel)}</div>}
+</div>
+</div>
+{!accepted&&<div style={{display:"flex",gap:6,marginTop:8}}>
+{qPushDay&&qPushDay.quoteId===q.id?<div style={{flex:1,display:"flex",gap:4}}>
+<select onChange={e=>{if(e.target.value)pushQuoteToDay(q.id,e.target.value);}} defaultValue="" style={{flex:1,border:"1px solid #16a34a",borderRadius:6,padding:"4px 6px",fontSize:10,outline:"none",background:"#f0fdf4"}}>
+<option value="">Pick day...</option>{DAYS.map((day,i)=><option key={i} value={`${wo}-${i}`}>{day} {wd[i].date}</option>)}<option value={`${wo+1}-0`}>Next Mon</option>
+</select>
+<button onClick={()=>setQPushDay(null)} style={{background:"#e7e5e4",border:"none",borderRadius:5,padding:"3px 8px",cursor:"pointer",fontSize:9}}>✕</button>
+</div>
+:<><button onClick={()=>setQPushDay({quoteId:q.id})} style={{flex:1,background:"#16a34a",color:"#fff",border:"none",borderRadius:8,padding:"7px",cursor:"pointer",fontSize:11,fontWeight:700}}>Push to Day</button>
+<button onClick={()=>{setSavedQuotes(p=>p.filter(x=>x.id!==q.id));deleteQuoteFromFB(q.id).catch(e=>console.error("Quote del:",e));showToast("Deleted");}} style={{background:"#fef2f2",border:"none",borderRadius:8,padding:"7px 10px",cursor:"pointer",fontSize:11,color:"#dc2626",fontWeight:600}}>Delete</button></>}
+</div>}
+{accepted&&q.pushedTo&&<div style={{fontSize:10,color:"#16a34a",fontWeight:600,marginTop:4}}>✓ Pushed to {DAYS[parseInt(q.pushedTo.split("-")[1])]||""}</div>}
+</div>);})}
 </div>);
 })()}
 
