@@ -180,7 +180,6 @@ const subscribeQuotes=(cb)=>{
     return window._fb.onSnapshot(col,snap=>{
       const quotes=[];
       snap.forEach(d=>{quotes.push({id:d.id,...d.data()});});
-      /* Sort by quote number descending (newest first) */
       quotes.sort((a,b)=>(b.num||0)-(a.num||0));
       cb(quotes);
     });
@@ -191,6 +190,32 @@ const subscribeQuotes=(cb)=>{
   return()=>unsub();
 };
 
+/* ── Messages (Firestore-backed 2-way messaging) ── */
+/* Channel keys: "group" for all-hands, "dm-{driverId}" for private */
+const saveMessage=async(channelKey,msg)=>{
+  await _fbReady.catch(()=>{});
+  if(!_db())return;
+  await window._fb.addDoc(window._fb.collection(_db(),"messages",channelKey,"items"),{...msg,timestamp:Date.now()});
+};
+const subscribeMessages=(channelKey,cb)=>{
+  const run=()=>{
+    const col=window._fb.collection(_db(),"messages",channelKey,"items");
+    const q=window._fb.query(col,window._fb.orderBy("timestamp","asc"));
+    return window._fb.onSnapshot(q,snap=>{
+      cb(snap.docs.map(d=>({id:d.id,...d.data()})));
+    });
+  };
+  if(window._fbLoaded)return run();
+  let unsub=()=>{};
+  window.addEventListener("fb_ready",()=>{unsub=run();},{once:true});
+  return()=>unsub();
+};
+const markMessageRead=async(channelKey,msgId)=>{
+  await _fbReady.catch(()=>{});
+  if(!_db())return;
+  await window._fb.updateDoc(window._fb.doc(_db(),"messages",channelKey,"items",msgId),{read:true});
+};
+
 const getDayKey=()=>{};const getWeekKey=()=>{};
 const requestPushPermission=async()=>null;const onPushMessage=()=>{};const saveDriverToken=async()=>{};
 
@@ -198,6 +223,7 @@ const DAYS = ["Monday","Tuesday","Wednesday","Thursday","Friday"];
 
 /* -- BRAND COLORS -- */
 const BRAND={main:"#1e5b92",dark:"#134b7f",light:"#357bb7",pale:"#e8f0f8",bg:"#f0f5fa"};
+const APP_VERSION="2.7.0";
 const LOGO_URI="data:image/png;base64,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";
 const LOGO_WHITE="data:image/png;base64,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";
 
@@ -650,7 +676,8 @@ const hasActive=!!activeDriverRef.current;
 const isAssigned=s.driverId>0;
 const isActiveDriverStop=activeDriverRef.current&&s.driverId===activeDriverRef.current;
 
-const scale=done?5:onSite?11:isActiveDriverStop?11:8;
+const hasRouteNum=s.routeOrder>0&&!done;
+const scale=done?5:onSite?11:hasRouteNum?13:isActiveDriverStop?11:8;
 const fillColor=done?"#a8a29e":col;
 const strokeColor=onSite?"#f59e0b":isActiveDriverStop?"#1c1917":isP?"#f59e0b":"#fff";
 const strokeWeight=onSite?3:isActiveDriverStop?3:2;
@@ -665,6 +692,7 @@ scale,fillColor,fillOpacity,strokeColor,strokeWeight,
 zIndex:done?1:onSite?10:isActiveDriverStop?9:isP?8:5,
 title:s.stop,
 cursor:onAssignStop?"pointer":"default",
+label:s.routeOrder>0&&!done?{text:String(s.routeOrder),color:"#fff",fontSize:"10px",fontWeight:"800",fontFamily:"DM Sans,system-ui,sans-serif"}:undefined,
 });
 
 /* dueBy label above marker */
@@ -830,9 +858,10 @@ return(
 }
 
 /* ── DRIVER VIEW ── */
-function DriverView({driver,entries,dayLabel,onStatusUpdate,onPhotoUpload,onSignature,onEta,onShipPlan}){
+function DriverView({driver,entries,dayLabel,onStatusUpdate,onPhotoUpload,onSignature,onEta,onShipPlan,onLiftgate}){
 const [sigStop,setSigStop]=useState(null);
 const [shipPlanInputs,setShipPlanInputs]=useState({});
+const [liftgateRequested,setLiftgateRequested]=useState({});
 const completed=entries.filter(e=>e.status==="departed").length;
 const total=entries.length;
 const isImetcoReturn=(e)=>e.customer==="IMETCO"&&(e.stop.includes("to IMETCO")||e.stop.includes("Round Trip"));
@@ -951,6 +980,16 @@ onChange={e=>{if(e.target.files[0]){const r=new FileReader();r.onload=ev=>onPhot
 </label>
 <button onClick={()=>setSigStop(entry.id)} style={{background:"#f3e8f9",border:"1px solid #d8b4fe",borderRadius:8,padding:"8px 12px",cursor:"pointer",fontSize:12,fontWeight:600,color:"#7c3aed",flex:1}}>{"✍"} Sign</button>
 </div>
+{/* Liftgate request */}
+{!entry.liftgateApplied&&!liftgateRequested[entry.id]&&<button onClick={()=>{setLiftgateRequested(p=>({...p,[entry.id]:true}));if(onLiftgate)onLiftgate(entry.id,entry.stop);}} style={{width:"100%",marginTop:6,background:"#fff7ed",border:"2px solid #fed7aa",borderRadius:8,padding:"8px 12px",cursor:"pointer",fontSize:12,fontWeight:700,color:"#ea580c",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+🔄 Liftgate Required (+$75)
+</button>}
+{liftgateRequested[entry.id]&&!entry.liftgateApplied&&<div style={{width:"100%",marginTop:6,background:"#fef3c7",border:"1px solid #fde68a",borderRadius:8,padding:"8px 12px",textAlign:"center",fontSize:11,fontWeight:600,color:"#92400e"}}>
+⏳ Liftgate request sent — awaiting dispatch approval
+</div>}
+{entry.liftgateApplied&&<div style={{width:"100%",marginTop:6,background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:8,padding:"8px 12px",textAlign:"center",fontSize:11,fontWeight:600,color:"#16a34a"}}>
+✓ Liftgate charge approved (+$75)
+</div>}
 </div>
 )}
 </div>
@@ -1511,6 +1550,7 @@ const[rpDragSrc,setRpDragSrc]=useState(null);
 const[rpDragOver,setRpDragOver]=useState(null);
 const[rpShowUnassigned,setRpShowUnassigned]=useState(true);
 const[rpInited,setRpInited]=useState(false);
+const[rpOptMenu,setRpOptMenu]=useState(null); /* driverId when open */
 const[customDelName,setCustomDelName]=useState("");
 const[customDelAddr,setCustomDelAddr]=useState("");
 const[customDelRate,setCustomDelRate]=useState("");
@@ -1717,8 +1757,8 @@ const cd=CUSTOMERS[cust];
 const isSpecialty=cust==="Specialty";
 const newEntries=stops.map(s=>{const isStr=typeof s==="string";const stop=isStr?s:s.s;const rate=isStr?0:s.r;const instrForStop=customInstr[stop]!==undefined?customInstr[stop]:getDefaultInstr(stop);
 const autoDue=isSpecialty?"Pickup 7:30 AM — Specialty"
-:cust==="IMETCO"&&(stop==="IMETCO to Finishing Dynamics"||stop==="Finishing Dynamics to IMETCO"||stop==="Round Trip IMETCO & Finishing Dynamics")?"By 2:00 PM"
-:cust==="IMETCO"&&(stop==="Perfect Edge to IMETCO"||stop==="Southern Aluminum to IMETCO")?"By 3:00 PM"
+:cust==="IMETCO"&&stop==="IMETCO to Finishing Dynamics"?"By 2:00 PM"
+:cust==="IMETCO"&&(stop==="Perfect Edge to IMETCO"||stop==="Southern Aluminum to IMETCO"||stop==="Finishing Dynamics to IMETCO"||stop==="Round Trip IMETCO & Finishing Dynamics")?"By 3:30 PM"
 :null;
 return{id:Date.now()+Math.random(),customer:cust,stop,baseRate:rate,fuelPct:(cd.fuel_surcharge&&!cd.fuel_included)?cd.fuel_surcharge:0,isHourly:cd.rate_type==="hourly",note:isStr?null:s.n||null,driverId:drvId,addr:getAddr(stop),stopType:"delivery",priority:cd.priority||false,instructions:instrForStop,status:null,arrivedAt:null,departedAt:null,eta:null,photos:[],signature:null,dueBy:autoDue,weight:0,loadNum:1};
 });
@@ -1741,6 +1781,30 @@ if(oldDrv&&oldDid>0)sendNotificationToDriver(oldDid,"🔄 ROUTE CHANGED\nStop re
 };
 const updateInstructions=(eid,text)=>setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,instructions:text}:e)}));
 const updateRate=(eid,rate)=>setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,baseRate:parseFloat(rate)||0}:e)}));
+/* ── LIFTGATE ── */
+const[liftgateRequests,setLiftgateRequests]=useState([]);/* [{id,entryId,stop,driverId,driverName,time,status}] */
+const requestLiftgate=(entryId,stopName)=>{
+const entry=dl.find(e=>e.id===entryId);
+const drv=entry?drivers.find(d=>d.id===entry.driverId):null;
+const req={id:Date.now()+Math.random(),entryId,stop:stopName,driverId:entry?.driverId,driverName:drv?.name||"Driver",time:new Date().toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"}),status:"pending"};
+setLiftgateRequests(p=>[req,...p]);
+showToast("Liftgate request sent");
+};
+const approveLiftgate=(reqId)=>{
+const req=liftgateRequests.find(r=>r.id===reqId);
+if(!req)return;
+setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===req.entryId?{...e,baseRate:(e.baseRate||0)+75,liftgateApplied:true}:e)}));
+setLiftgateRequests(p=>p.map(r=>r.id===reqId?{...r,status:"approved"}:r));
+showToast("Liftgate +$75 applied to "+req.stop);
+};
+const denyLiftgate=(reqId)=>{
+setLiftgateRequests(p=>p.map(r=>r.id===reqId?{...r,status:"denied"}:r));
+showToast("Liftgate denied");
+};
+const manualLiftgate=(entryId)=>{
+setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===entryId?{...e,baseRate:(e.baseRate||0)+75,liftgateApplied:true}:e)}));
+showToast("Liftgate +$75 added");
+};
 const updateStatus=(eid,status)=>{const now=new Date().toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,status,arrivedAt:status==="arrived"?now:e.arrivedAt,departedAt:status==="departed"?now:e.departedAt}:e)}));};
 const addPhoto=(eid,dataUrl)=>setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,photos:[...(e.photos||[]),dataUrl]}:e)}));
 const addSignature=(eid,dataUrl)=>setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,signature:dataUrl}:e)}));
@@ -1808,21 +1872,44 @@ useEffect(()=>{
   }
 },[emserShifts,dk]);
 
-/* ── 2-WAY MESSAGING ── */
+/* ── 2-WAY MESSAGING (Firestore real-time) ── */
 const getMsgKey=(ch)=>ch?"dm-"+ch:"group";
 const getMessages=(ch)=>allMessages[getMsgKey(ch)]||[];
 const sendMsg=(ch)=>{
 if(!msgInput.trim())return;
 const key=getMsgKey(ch);
 const now=new Date().toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});
-const msg={id:Date.now()+Math.random(),from:"dispatch",fromName:"Dispatch",text:msgInput.trim(),time:now,read:false};
-setAllMessages(p=>({...p,[key]:[...(p[key]||[]),msg]}));
+const msg={from:"dispatch",fromName:"Dispatch",text:msgInput.trim(),time:now,read:false};
+saveMessage(key,msg).catch(e=>console.error("Msg send:",e));
 setMsgInput("");
-/* In production, save to Firestore for real-time sync */
 };
 const getUnreadCount=(ch)=>{const msgs=getMessages(ch);return msgs.filter(m=>m.from!=="dispatch"&&!m.read).length;};
 const getTotalUnread=()=>{let c=getUnreadCount(null);drivers.forEach(d=>{c+=getUnreadCount(d.id);});return c;};
-const markMsgsRead=(ch)=>{const key=getMsgKey(ch);setAllMessages(p=>({...p,[key]:(p[key]||[]).map(m=>m.from!=="dispatch"?{...m,read:true}:m)}));};
+const markMsgsRead=(ch)=>{const key=getMsgKey(ch);const msgs=getMessages(ch);msgs.forEach(m=>{if(m.from!=="dispatch"&&!m.read)markMessageRead(key,m.id).catch(()=>{});});};
+const[msgPopup,setMsgPopup]=useState(null); /* {from,text,time,channelKey} */
+const prevMsgCountRef=useRef({});
+
+/* Subscribe to all message channels */
+useEffect(()=>{
+  const unsubs=[];
+  /* Group channel */
+  unsubs.push(subscribeMessages("group",(msgs)=>{
+    setAllMessages(p=>{const prev=p["group"]||[];
+    /* Detect new incoming messages for popup */
+    if(msgs.length>prev.length){const newest=msgs[msgs.length-1];if(newest&&newest.from!=="dispatch"&&!showMsgPanel){setMsgPopup({from:newest.fromName||"Driver",text:newest.text,time:newest.time,channelKey:"group"});setTimeout(()=>setMsgPopup(null),8000);}}
+    return{...p,"group":msgs};});
+  }));
+  /* Per-driver channels */
+  drivers.forEach(d=>{
+    const key="dm-"+d.id;
+    unsubs.push(subscribeMessages(key,(msgs)=>{
+      setAllMessages(p=>{const prev=p[key]||[];
+      if(msgs.length>prev.length){const newest=msgs[msgs.length-1];if(newest&&newest.from!=="dispatch"&&!showMsgPanel){setMsgPopup({from:newest.fromName||d.name,text:newest.text,time:newest.time,channelKey:key});setTimeout(()=>setMsgPopup(null),8000);}}
+      return{...p,[key]:msgs};});
+    }));
+  });
+  return()=>unsubs.forEach(u=>u());
+},[drivers.length]);
 
 const moveInDriver=(drvId,fromIdx,dir)=>{const toIdx=fromIdx+dir;setLog(p=>{const all=[...(p[dk]||[])];const de=all.filter(e=>e.driverId===drvId);const rest=all.filter(e=>e.driverId!==drvId);if(toIdx<0||toIdx>=de.length)return p;[de[fromIdx],de[toIdx]]=[de[toIdx],de[fromIdx]];return{...p,[dk]:[...rest,...de]};});};
 const insertPickup=(drvId,afterIdx)=>{if(!pickupStop)return;const forLabel=pickupForDel?` → ${pickupForDel}`:"";const entry={id:Date.now()+Math.random(),customer:pickupCustomer||"Pickup",stop:`${pickupCustomer||"Pickup"}${forLabel}`,baseRate:0,fuelPct:0,isHourly:false,note:pickupNote||(pickupForDel?`Picking up for ${pickupForDel}`:null),driverId:drvId,addr:pickupAddr||"",stopType:"pickup",priority:false,pickupFrom:pickupStop,pickupFor:pickupForDel,instructions:"",status:null,arrivedAt:null,departedAt:null,eta:null,photos:[],signature:null};setLog(p=>{const all=[...(p[dk]||[])];const de=all.filter(e=>e.driverId===drvId);const rest=all.filter(e=>e.driverId!==drvId);de.splice(afterIdx+1,0,entry);return{...p,[dk]:[...rest,...de]};});setInsertPickupFor(null);setPickupCustomer("");setPickupStop("");setPickupAddr("");setPickupForDel("");setPickupNote("");showToast(`Pickup added`);};
@@ -2022,7 +2109,7 @@ return(
 <div>
 <button onClick={()=>setDriverViewId(null)} style={{position:"fixed",top:12,right:12,zIndex:50,background:"#1c1917",color:"#fff",border:"none",borderRadius:8,padding:"8px 14px",cursor:"pointer",fontSize:12,fontWeight:600}}>← Dispatch View</button>
 <DriverView driver={drv} entries={de} dayLabel={`${wd[sd].name} — ${wd[sd].date}`}
-onStatusUpdate={updateStatus} onPhotoUpload={addPhoto} onSignature={addSignature} onEta={setEta} onShipPlan={setShipPlan}/>
+onStatusUpdate={updateStatus} onPhotoUpload={addPhoto} onSignature={addSignature} onEta={setEta} onShipPlan={setShipPlan} onLiftgate={requestLiftgate}/>
 </div>
 );
 }
@@ -2045,10 +2132,47 @@ return(
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
 {toast&&<div style={{position:"fixed",top:20,left:"50%",transform:"translateX(-50%)",background:"#16a34a",color:"#fff",padding:"10px 24px",borderRadius:12,fontWeight:600,fontSize:14,zIndex:1000,boxShadow:"0 8px 32px rgba(22,163,74,0.3)",animation:"slideDown 0.3s ease"}}>{"\u2713 "+toast}</div>}
 
+{/* Message popup notification */}
+{msgPopup&&<div style={{position:"fixed",top:20,right:20,zIndex:1001,background:"#fff",border:"2px solid "+BRAND.main,borderRadius:16,padding:"14px 18px",boxShadow:"0 12px 40px rgba(30,91,146,0.25)",maxWidth:340,cursor:"pointer",animation:"slideDown 0.3s ease"}} onClick={()=>{setShowMsgPanel(true);setMsgPopup(null);}}>
+<div style={{display:"flex",alignItems:"center",gap:10}}>
+<div style={{width:36,height:36,borderRadius:10,background:BRAND.main,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,color:"#fff",flexShrink:0}}>💬</div>
+<div style={{flex:1,minWidth:0}}>
+<div style={{fontSize:12,fontWeight:700,color:BRAND.main}}>{msgPopup.from}</div>
+<div style={{fontSize:13,color:"#1c1917",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{msgPopup.text}</div>
+<div style={{fontSize:10,color:"#a8a29e",marginTop:2}}>{msgPopup.time} · Tap to reply</div>
+</div>
+<button onClick={e=>{e.stopPropagation();setMsgPopup(null);}} style={{background:"none",border:"none",color:"#a8a29e",fontSize:16,cursor:"pointer",padding:"0 4px",flexShrink:0}}>✕</button>
+</div>
+</div>}
+
+{/* Liftgate request notifications */}
+{liftgateRequests.filter(r=>r.status==="pending").length>0&&<div style={{position:"fixed",top:60,right:20,zIndex:999,display:"flex",flexDirection:"column",gap:6,maxWidth:360}}>
+{liftgateRequests.filter(r=>r.status==="pending").map(req=>(
+<div key={req.id} style={{background:"#fff",border:"2px solid #ea580c",borderRadius:14,padding:"14px 16px",boxShadow:"0 8px 32px rgba(234,88,12,0.2)",animation:"slideDown 0.3s ease"}}>
+<div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+<span style={{fontSize:20}}>🔄</span>
+<div style={{flex:1}}>
+<div style={{fontSize:13,fontWeight:700,color:"#ea580c"}}>Liftgate Request</div>
+<div style={{fontSize:12,color:"#1c1917",fontWeight:600}}>{req.stop}</div>
+<div style={{fontSize:10,color:"#78716c"}}>From {req.driverName} at {req.time}</div>
+</div>
+</div>
+<div style={{fontSize:12,color:"#57534e",marginBottom:10}}>Apply $75 liftgate charge to this delivery?</div>
+<div style={{display:"flex",gap:6}}>
+<button onClick={()=>approveLiftgate(req.id)} style={{flex:1,background:"#16a34a",color:"#fff",border:"none",borderRadius:8,padding:"8px",cursor:"pointer",fontSize:12,fontWeight:700}}>✓ Approve +$75</button>
+<button onClick={()=>denyLiftgate(req.id)} style={{flex:1,background:"#fef2f2",color:"#dc2626",border:"1px solid #fca5a5",borderRadius:8,padding:"8px",cursor:"pointer",fontSize:12,fontWeight:600}}>Deny</button>
+</div>
+</div>
+))}
+</div>}
+
 {/* \u2500\u2500 TOP BAR \u2500\u2500 */}
 <div style={{background:"#f7f7f6",borderBottom:"1px solid #e7e5e4",padding:"8px 28px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
 <div style={{display:"flex",alignItems:"center",gap:24}}>
+<div style={{display:"flex",alignItems:"center",gap:8}}>
 <img src={LOGO_URI} alt="Davis Delivery Service" style={{height:38,objectFit:"contain"}}/>
+<span style={{fontSize:9,color:"#a8a29e",fontWeight:600,letterSpacing:"0.02em"}}>v{APP_VERSION}</span>
+</div>
 <div style={{display:"flex",gap:3,background:"#fff",borderRadius:10,padding:3,border:"1px solid #e7e5e4"}}>
 <button onClick={()=>setWo(w=>w-1)} style={{background:"transparent",border:"none",color:"#78716c",borderRadius:7,padding:"4px 10px",cursor:"pointer",fontSize:12}}>{"\u25C0"}</button>
 {wd.map((d,i)=>{const cnt=(log[`${wo}-${i}`]||[]).length;return(<button key={i} onClick={()=>setSd(i)} style={{border:"none",borderRadius:7,padding:"6px 14px",cursor:"pointer",background:sd===i?BRAND.main:"transparent",color:sd===i?"#fff":"#78716c",fontSize:12,fontWeight:sd===i?700:500,position:"relative"}}>
@@ -2076,201 +2200,223 @@ return(
 </div>
 </div>
 
-{/* ── ROUTES — Advanced Route Planner ── */}
+{/* ══════ ADVANCED ROUTE PLANNER ══════ */}
 {view==="routes"&&(dl.length===0
 ?<div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",background:"#f8f7f5"}}><div style={{textAlign:"center",color:"#a8a29e"}}><div style={{fontSize:48,marginBottom:12}}>🗺️</div><p style={{fontSize:16,fontWeight:600,margin:"0 0 8px"}}>No stops to route</p><p style={{fontSize:13,margin:0}}>Add deliveries via + Add, then build routes here.</p></div></div>
 :(()=>{
-if(!rpInited){
-const o={};drivers.forEach(d=>{o[d.id]=dl.filter(e=>e.driverId===d.id).map(e=>e.id);});
-setRpOrders(o);setRpInited(true);
-}
+/* ── Init from manifest on first open ── */
+if(!rpInited){const o={};drivers.forEach(d=>{o[d.id]=dl.filter(e=>e.driverId===d.id).map(e=>e.id);});setRpOrders(o);setRpInited(true);}
 
+/* ── Core data ── */
 const rpUnassigned=dl.filter(e=>!Object.values(rpOrders).flat().includes(e.id));
-const rpGetEntry=(id)=>dl.find(e=>e.id===id);
-const rpTotalAssigned=Object.values(rpOrders).reduce((s,ids)=>s+ids.length,0);
+const rpE=(id)=>dl.find(e=>e.id===id);
+const rpTotal=Object.values(rpOrders).reduce((s,ids)=>s+ids.length,0);
 
-const rpHandleMapClick=(entryId)=>{
-if(!rpActive)return;
-const ids=rpOrders[rpActive]||[];
-if(ids.includes(entryId)){
-setRpOrders(p=>({...p,[rpActive]:ids.filter(x=>x!==entryId)}));
-}else{
-const cleaned={};Object.entries(rpOrders).forEach(([did,arr])=>{cleaned[did]=arr.filter(x=>x!==entryId);});
-cleaned[rpActive]=[...(cleaned[rpActive]||[]),entryId];
-setRpOrders(cleaned);
-}
+/* ── Shared geo helpers ── */
+const rpC=(e)=>{if(!e)return null;const addr=e.addr||getAddr(e.stop);return getCoords(addr);};
+const rpO={lat:33.93,lng:-84.21};
+const rpD=(a,b)=>Math.sqrt(Math.pow(a.lat-b.lat,2)+Math.pow(a.lng-b.lng,2));
+const rpDO=(e)=>{const c=rpC(e);return c?rpD(rpO,c):0;};
+/* Approximate miles from lat/lng delta (Atlanta area ~1deg lat≈69mi, 1deg lng≈59mi) */
+const rpMiles=(a,b)=>{if(!a||!b)return 0;return Math.sqrt(Math.pow((a.lat-b.lat)*69,2)+Math.pow((a.lng-b.lng)*59,2));};
+const rpSplit=(entries)=>{
+const pu=entries.filter(e=>e.stopType==="pickup"||e.dueBy?.startsWith("Pickup"));
+const tm=entries.filter(e=>e.dueBy&&!e.dueBy.startsWith("Pickup")&&!pu.includes(e));
+const rg=entries.filter(e=>!pu.includes(e)&&!tm.includes(e));
+return{pu,tm,rg};
 };
+const rpSet=(drvId,sorted,msg)=>{setRpOrders(p=>({...p,[drvId]:sorted.map(e=>e.id)}));setRpOptMenu(null);showToast(msg);};
 
-const rpApply=()=>{
-Object.entries(rpOrders).forEach(([did,ids])=>{
-ids.forEach(id=>reassign(id,Number(did)));
-if(ids.length>0)reorderDriver(Number(did),ids);
-});
-rpUnassigned.forEach(e=>{if(e.driverId!==0)reassign(e.id,0);});
-showToast("Routes applied to manifests");
-setView("manifest");
-};
+/* ── Parse dueBy time to minutes ── */
+const rpParseTime=(db)=>{if(!db)return 9999;const m=db.match(/(\d{1,2})(?::(\d{2}))?\s*(AM|PM)/i);if(!m)return 9999;let h=parseInt(m[1]);const min=parseInt(m[2]||"0");const ap=(m[3]||"").toUpperCase();if(ap==="PM"&&h!==12)h+=12;if(ap==="AM"&&h===12)h=0;return h*60+min;};
 
-const rpDrop=(drvId,toIdx)=>{
-if(!rpDragSrc)return;
-if(rpDragSrc.drvId===drvId){
-setRpOrders(p=>{const ids=[...(p[drvId]||[])];const[moved]=ids.splice(rpDragSrc.idx,1);ids.splice(toIdx,0,moved);return{...p,[drvId]:ids};});
-}else if(rpDragSrc.drvId==="pool"){
-/* Drag from unassigned pool */
-const entryId=rpDragSrc.idx;
-setRpOrders(p=>({...p,[drvId]:[...(p[drvId]||[]),entryId]}));
-}else{
-const entryId=(rpOrders[rpDragSrc.drvId]||[])[rpDragSrc.idx];
-if(entryId){
-setRpOrders(p=>{const src=[...(p[rpDragSrc.drvId]||[])].filter(x=>x!==entryId);const dest=[...(p[drvId]||[])];dest.splice(toIdx,0,entryId);return{...p,[rpDragSrc.drvId]:src,[drvId]:dest};});
-}
-}
-setRpDragSrc(null);setRpDragOver(null);
-};
+/* ══ 5 ROUTING ALGORITHMS ══ */
 
-const rpAssignUnassigned=(entryId,drvId)=>{
-setRpOrders(p=>({...p,[drvId]:[...(p[drvId]||[]),entryId]}));
-};
+/* 1. Closest → Furthest */
+const rpOptClose=(did)=>{const ids=rpOrders[did]||[];if(ids.length<2)return;const es=ids.map(id=>rpE(id)).filter(Boolean);const{pu,tm,rg}=rpSplit(es);
+rg.sort((a,b)=>rpDO(a)-rpDO(b));tm.sort((a,b)=>rpDO(a)-rpDO(b));
+rpSet(did,[...pu,...tm,...rg],"📍 Closest → Furthest");};
 
-const rpUnassignStop=(entryId,drvId)=>{
-setRpOrders(p=>({...p,[drvId]:(p[drvId]||[]).filter(x=>x!==entryId)}));
-};
+/* 2. Furthest → Closest */
+const rpOptFar=(did)=>{const ids=rpOrders[did]||[];if(ids.length<2)return;const es=ids.map(id=>rpE(id)).filter(Boolean);const{pu,tm,rg}=rpSplit(es);
+rg.sort((a,b)=>rpDO(b)-rpDO(a));tm.sort((a,b)=>rpDO(b)-rpDO(a));
+rpSet(did,[...pu,...tm,...rg],"🏁 Furthest → Closest");};
 
-/* Auto-optimize: nearest-neighbor with pickups first, then timed stops, then geographic sort */
-const rpAutoOptimize=(drvId)=>{
-const ids=rpOrders[drvId]||[];
-if(ids.length<2)return;
-const entries=ids.map(id=>rpGetEntry(id)).filter(Boolean);
-const getC=(e)=>{const addr=e.addr||getAddr(e.stop);return getCoords(addr);};
-const pickups=entries.filter(e=>e.stopType==="pickup"||e.dueBy?.startsWith("Pickup"));
-const withTime=entries.filter(e=>e.dueBy&&!e.dueBy.startsWith("Pickup")&&!pickups.includes(e));
-const regular=entries.filter(e=>!pickups.includes(e)&&!withTime.includes(e));
-const sorted=[];
-const remaining=[...regular];
-let current=pickups.length?getC(pickups[pickups.length-1]):{lat:33.93,lng:-84.21};
-while(remaining.length){
-let bestIdx=0,bestDist=Infinity;
-remaining.forEach((e,i)=>{const c=getC(e);if(!c)return;const d=Math.sqrt(Math.pow(c.lat-current.lat,2)+Math.pow(c.lng-current.lng,2));if(d<bestDist){bestDist=d;bestIdx=i;}});
-const next=remaining.splice(bestIdx,1)[0];
-const nc=getC(next);if(nc)current=nc;
-sorted.push(next);
-}
-withTime.sort((a,b)=>{const tA=(a.dueBy||"").replace(/[^0-9:]/g,"");const tB=(b.dueBy||"").replace(/[^0-9:]/g,"");return tA.localeCompare(tB);});
-const finalOrder=[...pickups,...withTime,...sorted];
-setRpOrders(p=>({...p,[drvId]:finalOrder.map(e=>e.id)}));
-showToast("Route optimized");
-};
+/* 3. By Time Constraint */
+const rpOptTime=(did)=>{const ids=rpOrders[did]||[];if(ids.length<2)return;const es=ids.map(id=>rpE(id)).filter(Boolean);const{pu,tm,rg}=rpSplit(es);
+tm.sort((a,b)=>rpParseTime(a.dueBy)-rpParseTime(b.dueBy));rg.sort((a,b)=>rpDO(a)-rpDO(b));
+rpSet(did,[...pu,...tm,...rg],"⏰ By Time Constraint");};
 
-/* Auto-fill: distribute unassigned to nearest driver's last stop */
-const rpAutoFill=()=>{
-if(!rpUnassigned.length)return;
-const getC2=(e)=>{const addr=e.addr||getAddr(e.stop);return getCoords(addr);};
-const newOrders={...rpOrders};
-rpUnassigned.forEach(e=>{
-const ec=getC2(e);
-if(!ec){let minDrv=drivers[0]?.id;let minCount=Infinity;drivers.forEach(d=>{const c=(newOrders[d.id]||[]).length;if(c<minCount){minCount=c;minDrv=d.id;}});newOrders[minDrv]=[...(newOrders[minDrv]||[]),e.id];return;}
-let bestDrv=drivers[0]?.id;let bestDist=Infinity;
-drivers.forEach(d=>{const ids=newOrders[d.id]||[];let lastCoord={lat:33.93,lng:-84.21};if(ids.length){const last=rpGetEntry(ids[ids.length-1]);if(last){const lc=getC2(last);if(lc)lastCoord=lc;}}const dist=Math.sqrt(Math.pow(ec.lat-lastCoord.lat,2)+Math.pow(ec.lng-lastCoord.lng,2));if(dist<bestDist){bestDist=dist;bestDrv=d.id;}});
-newOrders[bestDrv]=[...(newOrders[bestDrv]||[]),e.id];
-});
-setRpOrders(newOrders);
-showToast("Auto-filled "+rpUnassigned.length+" stops");
-};
+/* 4. Shortest Distance (nearest-neighbor) */
+const rpOptShort=(did)=>{const ids=rpOrders[did]||[];if(ids.length<2)return;const es=ids.map(id=>rpE(id)).filter(Boolean);const{pu}=rpSplit(es);
+const all=es.filter(e=>!pu.includes(e));const sorted=[];const rem=[...all];
+let cur=pu.length?(rpC(pu[pu.length-1])||rpO):rpO;
+while(rem.length){let bi=0,bd=Infinity;rem.forEach((e,i)=>{const c=rpC(e);if(!c)return;const d=rpD(cur,c);if(d<bd){bd=d;bi=i;}});const nx=rem.splice(bi,1)[0];const nc=rpC(nx);if(nc)cur=nc;sorted.push(nx);}
+rpSet(did,[...pu,...sorted],"🧭 Shortest Distance");};
 
-/* Time conflict detection */
-const rpGetConflicts=(drvId)=>{
-const ids=rpOrders[drvId]||[];
-const conflicts=[];
-const timed=ids.map((id,i)=>{const e=rpGetEntry(id);return e?.dueBy?{stop:e.stop,dueBy:e.dueBy,idx:i}:null;}).filter(Boolean);
-for(let i=0;i<timed.length;i++){for(let j=i+1;j<timed.length;j++){
-const a=timed[i],b=timed[j];
-if(a.dueBy.includes("By")&&b.dueBy.includes("By")){
-const tA=a.dueBy.replace(/^By\s*/,""),tB=b.dueBy.replace(/^By\s*/,"");
-if(tA<tB&&a.idx>b.idx)conflicts.push(`${a.stop} (${a.dueBy}) is after ${b.stop} (${b.dueBy})`);
-if(tB<tA&&b.idx>a.idx)conflicts.push(`${b.stop} (${b.dueBy}) is after ${a.stop} (${a.dueBy})`);
-}}}
-return conflicts;
-};
+/* 5. Reverse */
+const rpOptRev=(did)=>{const ids=rpOrders[did]||[];if(ids.length<2)return;const es=ids.map(id=>rpE(id)).filter(Boolean);const{pu}=rpSplit(es);
+const np=es.filter(e=>!pu.includes(e));np.reverse();
+rpSet(did,[...pu,...np],"🔄 Route Reversed");};
 
-const rpDriverStats=(drvId)=>{
-const ids=rpOrders[drvId]||[];
-const cap=getDriverCapacity(drvId);
-const totalWeight=ids.reduce((s,id)=>{const e=rpGetEntry(id);return s+(e?.weight||0);},0);
-const pickupCount=ids.filter(id=>{const e=rpGetEntry(id);return e?.stopType==="pickup";}).length;
-const deliveryCount=ids.length-pickupCount;
-const timedCount=ids.filter(id=>{const e=rpGetEntry(id);return!!e?.dueBy;}).length;
-const rev=ids.reduce((s,id)=>{const e=rpGetEntry(id);return s+(e?.isHourly?0:(e?.baseRate||0));},0);
-return{totalWeight,cap,pickupCount,deliveryCount,timedCount,rev};
-};
+/* ── Route Planner actions ── */
+const rpClick=(entryId)=>{if(!rpActive)return;const ids=rpOrders[rpActive]||[];
+if(ids.includes(entryId)){setRpOrders(p=>({...p,[rpActive]:ids.filter(x=>x!==entryId)}));}
+else{const cl={};Object.entries(rpOrders).forEach(([d,a])=>{cl[d]=a.filter(x=>x!==entryId);});cl[rpActive]=[...(cl[rpActive]||[]),entryId];setRpOrders(cl);}};
 
-const mapStops=dl.map(e=>{
-const addr=e.addr||getAddr(e.stop);const coords=getCoords(addr);if(!coords)return null;
-let assignedDrv=0;Object.entries(rpOrders).forEach(([did,ids])=>{if(ids.includes(e.id))assignedDrv=Number(did);});
-return{...e,coords,driverId:assignedDrv};
-}).filter(Boolean);
+const rpApply=()=>{Object.entries(rpOrders).forEach(([did,ids])=>{ids.forEach(id=>reassign(id,Number(did)));if(ids.length>0)reorderDriver(Number(did),ids);});rpUnassigned.forEach(e=>{if(e.driverId!==0)reassign(e.id,0);});showToast("Routes applied");setView("manifest");};
 
+const rpDr=(drvId,toIdx)=>{if(!rpDragSrc)return;
+if(rpDragSrc.drvId===drvId){setRpOrders(p=>{const ids=[...(p[drvId]||[])];const[mv]=ids.splice(rpDragSrc.idx,1);ids.splice(toIdx,0,mv);return{...p,[drvId]:ids};});}
+else if(rpDragSrc.drvId==="pool"){const eid=rpDragSrc.idx;setRpOrders(p=>({...p,[drvId]:[...(p[drvId]||[]),eid]}));}
+else{const eid=(rpOrders[rpDragSrc.drvId]||[])[rpDragSrc.idx];if(eid){setRpOrders(p=>{const s=[...(p[rpDragSrc.drvId]||[])].filter(x=>x!==eid);const d=[...(p[drvId]||[])];d.splice(toIdx,0,eid);return{...p,[rpDragSrc.drvId]:s,[drvId]:d};});}}
+setRpDragSrc(null);setRpDragOver(null);};
+
+const rpAddUA=(eid,did)=>{setRpOrders(p=>({...p,[did]:[...(p[did]||[]),eid]}));};
+const rpRemove=(eid,did)=>{setRpOrders(p=>({...p,[did]:(p[did]||[]).filter(x=>x!==eid)}));};
+
+/* Auto-fill unassigned by nearest driver */
+const rpFill=()=>{if(!rpUnassigned.length)return;const nw={...rpOrders};
+rpUnassigned.forEach(e=>{const ec=rpC(e);let bd=drivers[0]?.id,bv=Infinity;
+drivers.forEach(d=>{const ids=nw[d.id]||[];let lc=rpO;if(ids.length){const l=rpE(ids[ids.length-1]);const lcc=rpC(l);if(lcc)lc=lcc;}const dist=ec?rpD(ec,lc):ids.length;if(dist<bv){bv=dist;bd=d.id;}});
+nw[bd]=[...(nw[bd]||[]),e.id];});
+setRpOrders(nw);showToast("Auto-filled "+rpUnassigned.length+" stops");};
+
+/* Conflict detection */
+const rpConf=(did)=>{const ids=rpOrders[did]||[];const cf=[];
+const td=ids.map((id,i)=>{const e=rpE(id);return e?.dueBy?{s:e.stop,t:rpParseTime(e.dueBy),i,db:e.dueBy}:null;}).filter(Boolean);
+for(let i=0;i<td.length;i++){for(let j=i+1;j<td.length;j++){if(td[i].t!==9999&&td[j].t!==9999&&td[i].t>td[j].t&&td[i].i<td[j].i)cf.push(`${td[j].s} due earlier but later in route`);}}
+return cf;};
+
+/* Driver stats */
+const rpSt=(did)=>{const ids=rpOrders[did]||[];const cap=getDriverCapacity(did);const tw=ids.reduce((s,id)=>{const e=rpE(id);return s+(e?.weight||0);},0);
+const pus=ids.filter(id=>{const e=rpE(id);return e?.stopType==="pickup";}).length;
+const dels=ids.length-pus;const timed=ids.filter(id=>{const e=rpE(id);return!!e?.dueBy;}).length;
+const rev=ids.reduce((s,id)=>{const e=rpE(id);return s+(e?.isHourly?0:(e?.baseRate||0));},0);
+/* Estimate total route miles */
+let miles=0;const pts=[rpO];ids.forEach(id=>{const e=rpE(id);const c=rpC(e);if(c)pts.push(c);});
+for(let i=1;i<pts.length;i++)miles+=rpMiles(pts[i-1],pts[i]);
+return{tw,cap,pus,dels,timed,rev,miles:Math.round(miles)};};
+
+/* Map stops with route order */
+const mapS=dl.map(e=>{const addr=e.addr||getAddr(e.stop);const coords=getCoords(addr);if(!coords)return null;
+let ad=0,ro=0;Object.entries(rpOrders).forEach(([did,ids])=>{const idx=ids.indexOf(e.id);if(idx>=0){ad=Number(did);ro=idx+1;}});
+return{...e,coords,driverId:ad,routeOrder:ro};}).filter(Boolean);
+
+const actColor=rpActive?DCOL[drivers.findIndex(d=>d.id===rpActive)]||BRAND.main:BRAND.main;
+
+/* ══ RENDER ══ */
 return(
-<div style={{display:"grid",gridTemplateColumns:"340px 1fr",gap:0,height:"calc(100vh - 60px)",overflow:"hidden"}}>
+<div style={{display:"grid",gridTemplateColumns:"360px 1fr",gap:0,height:"calc(100vh - 60px)",overflow:"hidden"}}>
 
-{/* LEFT — Command Panel */}
+{/* ═══ LEFT PANEL ═══ */}
 <div style={{background:"#fff",borderRight:"1px solid #e7e5e4",display:"flex",flexDirection:"column",overflow:"hidden"}}>
-<div style={{padding:"14px 16px 10px",borderBottom:"1px solid #e7e5e4",flexShrink:0}}>
-<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+
+{/* Header */}
+<div style={{padding:"14px 16px 12px",background:"linear-gradient(135deg, #1c1917 0%, #292524 100%)",color:"#fff",flexShrink:0}}>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12}}>
 <div>
-<h2 style={{margin:0,fontSize:17,fontWeight:800,color:"#1c1917"}}>Route Planner</h2>
-<p style={{margin:"2px 0 0",fontSize:11,color:"#78716c"}}>{wd[sd].name} — {wd[sd].date}</p>
+<h2 style={{margin:0,fontSize:18,fontWeight:800,letterSpacing:"-0.02em"}}>Route Planner</h2>
+<p style={{margin:"3px 0 0",fontSize:11,color:"#a8a29e"}}>{wd[sd].name} — {wd[sd].date} · {dl.length} stops</p>
 </div>
 <div style={{display:"flex",gap:4}}>
-<button onClick={()=>{setView("manifest");setRpInited(false);}} style={{background:"#f5f5f4",border:"1px solid #e7e5e4",borderRadius:8,padding:"5px 10px",cursor:"pointer",fontSize:11,fontWeight:600,color:"#57534e"}}>← Back</button>
-{rpTotalAssigned>0&&<button onClick={rpApply} style={{background:"#16a34a",border:"none",borderRadius:8,padding:"5px 12px",cursor:"pointer",fontSize:11,fontWeight:700,color:"#fff"}}>✓ Apply</button>}
+<button onClick={()=>{setView("manifest");setRpInited(false);}} style={{background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.15)",borderRadius:8,padding:"5px 10px",cursor:"pointer",fontSize:11,fontWeight:600,color:"#d6d3d1"}}>← Back</button>
 </div>
 </div>
-<div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:6}}>
-<div style={{background:"#f0fdf4",borderRadius:8,padding:"6px 4px",textAlign:"center",border:"1px solid #bbf7d0"}}><div style={{fontSize:16,fontWeight:800,color:"#16a34a"}}>{rpTotalAssigned}</div><div style={{fontSize:8,color:"#16a34a",fontWeight:600}}>ROUTED</div></div>
-<div style={{background:rpUnassigned.length?"#fef2f2":"#f5f5f4",borderRadius:8,padding:"6px 4px",textAlign:"center",border:rpUnassigned.length?"1px solid #fca5a5":"1px solid #e7e5e4"}}><div style={{fontSize:16,fontWeight:800,color:rpUnassigned.length?"#dc2626":"#a8a29e"}}>{rpUnassigned.length}</div><div style={{fontSize:8,color:rpUnassigned.length?"#dc2626":"#a8a29e",fontWeight:600}}>POOL</div></div>
-<div style={{background:"#f5f5f4",borderRadius:8,padding:"6px 4px",textAlign:"center",border:"1px solid #e7e5e4"}}><div style={{fontSize:16,fontWeight:800,color:"#57534e"}}>{dl.length}</div><div style={{fontSize:8,color:"#78716c",fontWeight:600}}>TOTAL</div></div>
-<div style={{borderRadius:8,padding:"6px 4px",textAlign:"center"}}>{rpUnassigned.length>0?<button onClick={rpAutoFill} style={{background:"#d97706",color:"#fff",border:"none",borderRadius:6,padding:"4px 8px",cursor:"pointer",fontSize:9,fontWeight:700,width:"100%"}}>Auto Fill</button>:<div style={{fontSize:12,color:"#16a34a",fontWeight:700}}>✓</div>}</div>
+{/* Stats bar */}
+<div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6}}>
+<div style={{background:"rgba(22,163,74,0.15)",borderRadius:8,padding:"8px 6px",textAlign:"center",border:"1px solid rgba(22,163,74,0.3)"}}>
+<div style={{fontSize:20,fontWeight:800,color:"#4ade80"}}>{rpTotal}</div>
+<div style={{fontSize:8,color:"#86efac",fontWeight:600,letterSpacing:"0.05em"}}>ROUTED</div>
+</div>
+<div style={{background:rpUnassigned.length?"rgba(220,38,38,0.15)":"rgba(255,255,255,0.05)",borderRadius:8,padding:"8px 6px",textAlign:"center",border:rpUnassigned.length?"1px solid rgba(220,38,38,0.3)":"1px solid rgba(255,255,255,0.1)"}}>
+<div style={{fontSize:20,fontWeight:800,color:rpUnassigned.length?"#fca5a5":"#57534e"}}>{rpUnassigned.length}</div>
+<div style={{fontSize:8,color:rpUnassigned.length?"#fca5a5":"#78716c",fontWeight:600,letterSpacing:"0.05em"}}>POOL</div>
+</div>
+<div style={{borderRadius:8,padding:"8px 6px",textAlign:"center"}}>
+{rpUnassigned.length>0?<button onClick={rpFill} style={{background:"#d97706",color:"#fff",border:"none",borderRadius:6,padding:"6px 10px",cursor:"pointer",fontSize:10,fontWeight:700,width:"100%"}}>⚡ Auto Fill</button>
+:<div style={{color:"#4ade80",fontSize:14,fontWeight:800,marginTop:2}}>✓ All set</div>}
+</div>
 </div>
 </div>
 
-<div style={{flex:1,overflowY:"auto",padding:"8px 10px"}}>
+{/* Driver Panels */}
+<div style={{flex:1,overflowY:"auto",padding:"8px 10px 80px"}}>
 {drivers.map((drv,di)=>{
-const ids=rpOrders[drv.id]||[];const isActive=rpActive===drv.id;const stats=rpDriverStats(drv.id);const conflicts=rpGetConflicts(drv.id);
+const ids=rpOrders[drv.id]||[];const isAct=rpActive===drv.id;const st=rpSt(drv.id);const cf=rpConf(drv.id);
 return(
-<div key={drv.id} onDragOver={e=>{e.preventDefault();if(!ids.length)setRpDragOver({drvId:drv.id,idx:0});}} onDrop={()=>{if(!ids.length)rpDrop(drv.id,0);}}
-style={{marginBottom:8,borderRadius:12,border:isActive?`2px solid ${DCOL[di]}`:"1px solid #e7e5e4",overflow:"hidden",transition:"all 0.15s",boxShadow:isActive?"0 4px 16px "+DCOL[di]+"22":"none"}}>
-<div onClick={()=>setRpActive(isActive?null:drv.id)}
-style={{display:"flex",alignItems:"center",gap:8,padding:"10px 12px",cursor:"pointer",background:isActive?DCOL[di]+"0D":"#fafaf9",borderBottom:ids.length||isActive?"1px solid #e7e5e4":"none"}}>
-<div style={{width:32,height:32,borderRadius:9,background:DCOL[di],display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,color:"#fff",fontWeight:800,flexShrink:0,boxShadow:isActive?"0 2px 8px "+DCOL[di]+"44":"none"}}>{drv.name.charAt(0)}</div>
+<div key={drv.id}
+onDragOver={e=>{e.preventDefault();if(!ids.length)setRpDragOver({drvId:drv.id,idx:0});}}
+onDrop={()=>{if(!ids.length)rpDr(drv.id,0);}}
+style={{marginBottom:8,borderRadius:14,border:isAct?`2px solid ${DCOL[di]}`:"1px solid #e7e5e4",overflow:"hidden",transition:"all 0.2s",boxShadow:isAct?`0 4px 20px ${DCOL[di]}22`:"0 1px 3px rgba(0,0,0,0.04)"}}>
+
+{/* Driver Header */}
+<div onClick={()=>{setRpActive(isAct?null:drv.id);setRpOptMenu(null);}}
+style={{padding:"12px 14px",cursor:"pointer",background:isAct?`linear-gradient(135deg, ${DCOL[di]}08, ${DCOL[di]}15)`:"#fafaf9",borderBottom:ids.length||isAct?"1px solid #e7e5e4":"none",transition:"background 0.15s"}}>
+<div style={{display:"flex",alignItems:"center",gap:10}}>
+<div style={{width:36,height:36,borderRadius:10,background:`linear-gradient(135deg, ${DCOL[di]}, ${DCOL[di]}cc)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,color:"#fff",fontWeight:800,flexShrink:0,boxShadow:isAct?`0 3px 10px ${DCOL[di]}44`:"none"}}>{drv.name.charAt(0)}</div>
 <div style={{flex:1,minWidth:0}}>
 <div style={{display:"flex",alignItems:"center",gap:6}}>
-<span style={{fontSize:14,fontWeight:700,color:isActive?DCOL[di]:"#1c1917"}}>{drv.name}</span>
-{ids.length>0&&<span style={{fontSize:10,background:DCOL[di]+"18",color:DCOL[di],padding:"1px 7px",borderRadius:10,fontWeight:700}}>{ids.length}</span>}
+<span style={{fontSize:15,fontWeight:700,color:isAct?DCOL[di]:"#1c1917"}}>{drv.name}</span>
+{ids.length>0&&<span style={{fontSize:10,background:DCOL[di]+"18",color:DCOL[di],padding:"2px 8px",borderRadius:10,fontWeight:700}}>{ids.length}</span>}
+{isAct&&<span style={{fontSize:8,background:DCOL[di],color:"#fff",padding:"2px 7px",borderRadius:5,fontWeight:700,marginLeft:"auto"}}>ACTIVE</span>}
 </div>
-{ids.length>0&&<div style={{display:"flex",alignItems:"center",gap:8,marginTop:3}}>
-{stats.pickupCount>0&&<span style={{fontSize:9,color:"#2563eb",fontWeight:600}}>{stats.pickupCount} PU</span>}
-<span style={{fontSize:9,color:"#57534e"}}>{stats.deliveryCount} del</span>
-{stats.timedCount>0&&<span style={{fontSize:9,color:"#dc2626",fontWeight:600}}>⏰{stats.timedCount}</span>}
-{stats.rev>0&&<span style={{fontSize:9,color:"#16a34a",fontWeight:700,fontVariantNumeric:"tabular-nums"}}>{fmt(stats.rev)}</span>}
+{/* Rich stats row */}
+{ids.length>0&&<div style={{display:"flex",alignItems:"center",gap:6,marginTop:4,flexWrap:"wrap"}}>
+{st.pus>0&&<span style={{fontSize:9,color:"#2563eb",fontWeight:700,background:"#eff6ff",padding:"1px 6px",borderRadius:4}}>{st.pus} PU</span>}
+<span style={{fontSize:9,color:"#57534e",background:"#f5f5f4",padding:"1px 6px",borderRadius:4}}>{st.dels} del</span>
+{st.timed>0&&<span style={{fontSize:9,color:"#dc2626",fontWeight:700,background:"#fef2f2",padding:"1px 6px",borderRadius:4}}>⏰ {st.timed}</span>}
+{st.miles>0&&<span style={{fontSize:9,color:"#78716c",fontVariantNumeric:"tabular-nums"}}>~{st.miles}mi</span>}
+{st.rev>0&&<span style={{fontSize:9,color:"#16a34a",fontWeight:700,fontVariantNumeric:"tabular-nums",marginLeft:"auto"}}>{fmt(st.rev)}</span>}
 </div>}
-{stats.totalWeight>0&&<div style={{display:"flex",alignItems:"center",gap:5,marginTop:3}}>
-<div style={{flex:1,maxWidth:100,height:4,background:"#e7e5e4",borderRadius:2,overflow:"hidden"}}><div style={{height:"100%",width:weightPct(stats.totalWeight,stats.cap)+"%",background:weightColor(stats.totalWeight,stats.cap),borderRadius:2}}/></div>
-<span style={{fontSize:8,fontWeight:700,color:weightColor(stats.totalWeight,stats.cap)}}>{stats.totalWeight.toLocaleString()}/{(stats.cap/1000).toFixed(0)}k</span>
+{/* Weight bar */}
+{st.tw>0&&<div style={{display:"flex",alignItems:"center",gap:6,marginTop:4}}>
+<div style={{flex:1,maxWidth:120,height:5,background:"#e7e5e4",borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",width:weightPct(st.tw,st.cap)+"%",background:weightColor(st.tw,st.cap),borderRadius:3,transition:"width 0.3s"}}/></div>
+<span style={{fontSize:8,fontWeight:700,color:weightColor(st.tw,st.cap)}}>{st.tw.toLocaleString()}/{(st.cap/1000).toFixed(0)}k</span>
 </div>}
 </div>
-<div style={{display:"flex",gap:3,flexShrink:0}}>
-{isActive&&ids.length>=2&&<button onClick={e=>{e.stopPropagation();rpAutoOptimize(drv.id);}} style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:6,padding:"3px 7px",cursor:"pointer",fontSize:9,fontWeight:700,color:"#2563eb"}}>⚡ Optimize</button>}
-{isActive&&ids.length>0&&<button onClick={e=>{e.stopPropagation();setRpOrders(p=>({...p,[drv.id]:[]}));}} style={{background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:6,padding:"3px 7px",cursor:"pointer",fontSize:9,fontWeight:700,color:"#dc2626"}}>Clear</button>}
-{isActive&&<div style={{fontSize:9,background:DCOL[di],color:"#fff",padding:"3px 8px",borderRadius:6,fontWeight:700,display:"flex",alignItems:"center"}}>ACTIVE</div>}
 </div>
+
+{/* Action buttons — only when active */}
+{isAct&&ids.length>=2&&<div style={{display:"flex",gap:4,marginTop:8}}>
+<div style={{position:"relative",flex:1}}>
+<button onClick={e=>{e.stopPropagation();setRpOptMenu(rpOptMenu===drv.id?null:drv.id);}}
+style={{width:"100%",background:"linear-gradient(135deg, #2563eb, #1d4ed8)",color:"#fff",border:"none",borderRadius:8,padding:"7px 10px",cursor:"pointer",fontSize:11,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",gap:4}}>
+⚡ Route Order ▾
+</button>
+{rpOptMenu===drv.id&&<div onClick={e=>e.stopPropagation()} style={{position:"absolute",top:"100%",left:0,right:0,zIndex:50,background:"#fff",border:"1px solid #e7e5e4",borderRadius:12,padding:"4px",marginTop:4,boxShadow:"0 12px 40px rgba(0,0,0,0.18)"}}>
+{[
+{icon:"📍",label:"Closest → Furthest",desc:"Nearest stops first",fn:rpOptClose},
+{icon:"🏁",label:"Furthest → Closest",desc:"Furthest stops first",fn:rpOptFar},
+{icon:"⏰",label:"By Time Constraint",desc:"Deadlines first",fn:rpOptTime},
+{icon:"🧭",label:"Shortest Distance",desc:"Best path between all",fn:rpOptShort},
+{icon:"🔄",label:"Reverse Route",desc:"Flip current order",fn:rpOptRev},
+].map((opt,oi)=><button key={oi} onClick={()=>opt.fn(drv.id)}
+style={{display:"flex",alignItems:"center",gap:8,width:"100%",textAlign:"left",background:"none",border:"none",padding:"9px 10px",cursor:"pointer",borderRadius:8,fontSize:11,fontWeight:600,color:"#1c1917"}}
+onMouseEnter={e=>{e.currentTarget.style.background="#eff6ff";}} onMouseLeave={e=>{e.currentTarget.style.background="none";}}>
+<span style={{fontSize:15,flexShrink:0}}>{opt.icon}</span>
+<div><div>{opt.label}</div><div style={{fontSize:9,color:"#a8a29e",fontWeight:400}}>{opt.desc}</div></div>
+</button>)}
+</div>}
 </div>
-{conflicts.length>0&&<div style={{padding:"6px 12px",background:"#fef2f2",borderBottom:"1px solid #fca5a5"}}>{conflicts.map((c2,ci)=><div key={ci} style={{fontSize:10,color:"#dc2626",fontWeight:600}}>⚠ {c2}</div>)}</div>}
-{ids.length>0&&<div style={{padding:"4px 6px 6px",maxHeight:isActive?400:160,overflowY:"auto",transition:"max-height 0.2s"}}>
-{ids.map((id,oi)=>{const e=rpGetEntry(id);if(!e)return null;const c=CC[e.customer]||CC["One-Off Delivery"];const isPU=e.stopType==="pickup";const isDrgSrc=rpDragSrc?.drvId===drv.id&&rpDragSrc?.idx===oi;const isDrgOver=rpDragOver?.drvId===drv.id&&rpDragOver?.idx===oi;
-return(<div key={id} draggable onDragStart={()=>setRpDragSrc({drvId:drv.id,idx:oi})} onDragOver={ev=>{ev.preventDefault();setRpDragOver({drvId:drv.id,idx:oi});}} onDrop={()=>rpDrop(drv.id,oi)}
-style={{display:"flex",alignItems:"center",gap:6,padding:"5px 8px",marginBottom:2,borderRadius:8,background:isDrgOver?"#dcfce7":isDrgSrc?"#fef9c3":"#fff",border:isDrgOver?"1px dashed #16a34a":"1px solid #f5f5f4",opacity:isDrgSrc?0.4:1,cursor:"grab"}}>
-<div style={{width:20,height:20,borderRadius:6,background:DCOL[di],display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,color:"#fff",fontWeight:800,flexShrink:0}}>{oi+1}</div>
-<div style={{width:3,height:18,borderRadius:2,background:isPU?"#2563eb":c.accent,flexShrink:0}}/>
+<button onClick={e=>{e.stopPropagation();setRpOrders(p=>({...p,[drv.id]:[]}));}}
+style={{background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:8,padding:"7px 10px",cursor:"pointer",fontSize:10,fontWeight:700,color:"#dc2626",flexShrink:0}}>Clear</button>
+</div>}
+</div>
+
+{/* Conflict warnings */}
+{cf.length>0&&<div style={{padding:"6px 14px",background:"linear-gradient(90deg, #fef2f2, #fff1f2)",borderBottom:"1px solid #fca5a5"}}>
+{cf.map((c2,ci)=><div key={ci} style={{fontSize:10,color:"#dc2626",fontWeight:600,display:"flex",alignItems:"center",gap:4}}>⚠ {c2}</div>)}
+</div>}
+
+{/* Stop list — draggable */}
+{ids.length>0&&<div style={{padding:"4px 6px 6px",maxHeight:isAct?440:140,overflowY:"auto",transition:"max-height 0.3s"}}>
+{ids.map((id,oi)=>{const e=rpE(id);if(!e)return null;const c=CC[e.customer]||CC["One-Off Delivery"];const isPU=e.stopType==="pickup";
+const isDSrc=rpDragSrc?.drvId===drv.id&&rpDragSrc?.idx===oi;const isDOvr=rpDragOver?.drvId===drv.id&&rpDragOver?.idx===oi;
+return(<div key={id} draggable onDragStart={()=>setRpDragSrc({drvId:drv.id,idx:oi})} onDragOver={ev=>{ev.preventDefault();setRpDragOver({drvId:drv.id,idx:oi});}} onDrop={()=>rpDr(drv.id,oi)}
+style={{display:"flex",alignItems:"center",gap:6,padding:"6px 8px",marginBottom:2,borderRadius:9,background:isDOvr?"#dcfce7":isDSrc?"#fef9c3":"#fff",border:isDOvr?"2px dashed #16a34a":`1px solid ${isPU?"#bfdbfe":"#f5f5f4"}`,opacity:isDSrc?0.35:1,cursor:"grab",transition:"all 0.1s"}}>
+<div style={{width:22,height:22,borderRadius:7,background:`linear-gradient(135deg, ${DCOL[di]}, ${DCOL[di]}bb)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,color:"#fff",fontWeight:800,flexShrink:0}}>{oi+1}</div>
+<div style={{width:3,height:20,borderRadius:2,background:isPU?"#2563eb":c.accent,flexShrink:0}}/>
 <div style={{flex:1,minWidth:0}}>
 <div style={{fontSize:11,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.stop}</div>
 <div style={{display:"flex",alignItems:"center",gap:3,flexWrap:"wrap"}}>
@@ -2281,66 +2427,93 @@ style={{display:"flex",alignItems:"center",gap:6,padding:"5px 8px",marginBottom:
 {e.weight>0&&<span style={{fontSize:8,color:BRAND.main,fontWeight:700}}>{e.weight.toLocaleString()}lb</span>}
 </div>
 </div>
-<button onClick={ev=>{ev.stopPropagation();rpUnassignStop(id,drv.id);}} style={{background:"none",border:"none",color:"#dc2626",fontSize:10,cursor:"pointer",padding:"2px 4px",flexShrink:0,opacity:0.5}}>✕</button>
+<button onClick={ev=>{ev.stopPropagation();rpRemove(id,drv.id);}} style={{background:"none",border:"none",color:"#dc2626",fontSize:10,cursor:"pointer",padding:"2px 4px",flexShrink:0,opacity:0.4}}>✕</button>
 </div>);})}
 </div>}
-{ids.length===0&&isActive&&<div onDragOver={ev=>{ev.preventDefault();setRpDragOver({drvId:drv.id,idx:0});}} onDrop={()=>rpDrop(drv.id,0)} style={{padding:"14px",textAlign:"center",color:DCOL[di],fontSize:11,fontWeight:600,background:DCOL[di]+"08"}}>Click stops on the map to build route</div>}
+
+{/* Empty drop zone */}
+{ids.length===0&&isAct&&<div onDragOver={ev=>{ev.preventDefault();setRpDragOver({drvId:drv.id,idx:0});}} onDrop={()=>rpDr(drv.id,0)}
+style={{padding:"20px 16px",textAlign:"center",color:DCOL[di],fontSize:12,fontWeight:600,background:`${DCOL[di]}06`,borderTop:"1px dashed "+DCOL[di]+"44"}}>
+Click stops on the map to build this route
+</div>}
 </div>);})}
 
-{/* Unassigned Pool — also a drop target */}
-<div style={{marginTop:4,borderRadius:12,border:rpUnassigned.length?"2px dashed #d97706":"1px solid #e7e5e4",overflow:"hidden"}}
+{/* ═ Unassigned Pool ═ */}
+<div style={{marginTop:4,borderRadius:14,border:rpUnassigned.length?"2px dashed #d97706":"1px solid #e7e5e4",overflow:"hidden"}}
 onDragOver={e=>e.preventDefault()}
-onDrop={()=>{if(rpDragSrc&&rpDragSrc.drvId!=="pool"){const entryId=(rpOrders[rpDragSrc.drvId]||[])[rpDragSrc.idx];if(entryId)rpUnassignStop(entryId,rpDragSrc.drvId);setRpDragSrc(null);setRpDragOver(null);}}}>
-<div onClick={()=>setRpShowUnassigned(!rpShowUnassigned)} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 14px",cursor:"pointer",background:rpUnassigned.length?"#fffbeb":"#fafaf9"}}>
+onDrop={()=>{if(rpDragSrc&&rpDragSrc.drvId!=="pool"){const eid=(rpOrders[rpDragSrc.drvId]||[])[rpDragSrc.idx];if(eid)rpRemove(eid,rpDragSrc.drvId);setRpDragSrc(null);setRpDragOver(null);}}}>
+<div onClick={()=>setRpShowUnassigned(!rpShowUnassigned)}
+style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 14px",cursor:"pointer",background:rpUnassigned.length?"linear-gradient(90deg, #fffbeb, #fef3c7)":"#fafaf9"}}>
 <div style={{display:"flex",alignItems:"center",gap:8}}>
-<div style={{width:28,height:28,borderRadius:8,background:"#d97706",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,color:"#fff",fontWeight:800}}>!</div>
+<div style={{width:30,height:30,borderRadius:9,background:rpUnassigned.length?"linear-gradient(135deg, #d97706, #f59e0b)":"#a8a29e",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,color:"#fff",fontWeight:800}}>!</div>
+<div>
 <span style={{fontSize:13,fontWeight:700,color:rpUnassigned.length?"#92400e":"#78716c"}}>Unassigned Pool</span>
-<span style={{fontSize:11,color:rpUnassigned.length?"#dc2626":"#a8a29e",fontWeight:700}}>{rpUnassigned.length}</span>
+{rpUnassigned.length>0&&<span style={{fontSize:11,color:"#dc2626",fontWeight:700,marginLeft:6}}>{rpUnassigned.length}</span>}
 </div>
-<span style={{fontSize:12,color:"#a8a29e"}}>{rpShowUnassigned?"▾":"▸"}</span>
 </div>
-{rpShowUnassigned&&rpUnassigned.length>0&&<div style={{padding:"6px 8px",maxHeight:220,overflowY:"auto"}}>
+<span style={{fontSize:12,color:"#a8a29e",transition:"transform 0.2s",transform:rpShowUnassigned?"rotate(0deg)":"rotate(-90deg)"}}>▾</span>
+</div>
+{rpShowUnassigned&&rpUnassigned.length>0&&<div style={{padding:"6px 8px",maxHeight:240,overflowY:"auto"}}>
 {rpUnassigned.map(e=>{const c=CC[e.customer]||CC["One-Off Delivery"];return(
 <div key={e.id} draggable onDragStart={()=>setRpDragSrc({drvId:"pool",idx:e.id})}
-style={{display:"flex",alignItems:"center",gap:6,padding:"5px 8px",marginBottom:2,borderRadius:8,background:"#fff",border:"1px solid #f5f5f4",cursor:"grab"}}>
-<div style={{width:3,height:18,borderRadius:2,background:c.accent,flexShrink:0}}/>
+style={{display:"flex",alignItems:"center",gap:6,padding:"6px 8px",marginBottom:2,borderRadius:9,background:"#fff",border:"1px solid #f5f5f4",cursor:"grab"}}>
+<div style={{width:3,height:20,borderRadius:2,background:c.accent,flexShrink:0}}/>
 <div style={{flex:1,minWidth:0}}>
 <div style={{fontSize:11,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.stop}</div>
-<div style={{display:"flex",alignItems:"center",gap:3}}><span style={{fontSize:9,color:c.accent}}>{e.customer}</span>
-{e.dueBy&&<span style={{fontSize:7,background:"#dc2626",color:"#fff",padding:"0 3px",borderRadius:2,fontWeight:700}}>⏰{e.dueBy}</span>}</div>
+<div style={{display:"flex",alignItems:"center",gap:3}}>
+<span style={{fontSize:9,color:c.accent}}>{e.customer}</span>
+{e.dueBy&&<span style={{fontSize:7,background:"#dc2626",color:"#fff",padding:"0 3px",borderRadius:2,fontWeight:700}}>⏰{e.dueBy}</span>}
 </div>
-{rpActive&&<button onClick={()=>rpAssignUnassigned(e.id,rpActive)} style={{background:DCOL[drivers.findIndex(d=>d.id===rpActive)]||BRAND.main,color:"#fff",border:"none",borderRadius:6,padding:"3px 10px",cursor:"pointer",fontSize:9,fontWeight:700,flexShrink:0}}>+ {drivers.find(d=>d.id===rpActive)?.name?.split(" ")[0]}</button>}
+</div>
+{rpActive&&<button onClick={()=>rpAddUA(e.id,rpActive)}
+style={{background:`linear-gradient(135deg, ${DCOL[drivers.findIndex(d=>d.id===rpActive)]}, ${DCOL[drivers.findIndex(d=>d.id===rpActive)]}cc)`,color:"#fff",border:"none",borderRadius:7,padding:"4px 10px",cursor:"pointer",fontSize:9,fontWeight:700,flexShrink:0}}>
++ {drivers.find(d=>d.id===rpActive)?.name?.split(" ")[0]}
+</button>}
 </div>);})}
 </div>}
 </div>
 </div>
 
-<div style={{padding:"10px 12px",borderTop:"1px solid #e7e5e4",flexShrink:0}}>
-<button onClick={rpApply} disabled={!rpTotalAssigned} style={{width:"100%",background:rpTotalAssigned?"#16a34a":"#e7e5e4",color:rpTotalAssigned?"#fff":"#a8a29e",border:"none",borderRadius:10,padding:"12px",cursor:rpTotalAssigned?"pointer":"default",fontSize:14,fontWeight:700}}>✓ Apply Routes to Manifests ({rpTotalAssigned} stops)</button>
+{/* Apply footer */}
+<div style={{padding:"10px 14px",borderTop:"1px solid #e7e5e4",flexShrink:0,background:"#fafaf9"}}>
+<button onClick={rpApply} disabled={!rpTotal}
+style={{width:"100%",background:rpTotal?"linear-gradient(135deg, #16a34a, #15803d)":"#e7e5e4",color:rpTotal?"#fff":"#a8a29e",border:"none",borderRadius:12,padding:"14px",cursor:rpTotal?"pointer":"default",fontSize:14,fontWeight:800,boxShadow:rpTotal?"0 4px 16px rgba(22,163,74,0.3)":"none",transition:"all 0.2s"}}>
+✓ Apply Routes to Manifests
+</button>
 </div>
 </div>
 
-{/* RIGHT — Full Google Map */}
+{/* ═══ RIGHT — GOOGLE MAP ═══ */}
 <div style={{position:"relative",background:"#e8e4df",overflow:"hidden"}}>
-{rpActive&&(()=>{const di=drivers.findIndex(d=>d.id===rpActive);const drv=drivers.find(d=>d.id===rpActive);const ids=rpOrders[rpActive]||[];
-return(<div style={{position:"absolute",top:12,left:12,right:60,zIndex:5,display:"flex",gap:8,alignItems:"center"}}>
-<div style={{background:DCOL[di],color:"#fff",borderRadius:12,padding:"10px 18px",fontSize:13,fontWeight:700,boxShadow:"0 4px 20px "+DCOL[di]+"44",display:"flex",alignItems:"center",gap:10,flex:1}}>
-<div style={{width:28,height:28,borderRadius:8,background:"rgba(255,255,255,0.25)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:800}}>{drv?.name?.charAt(0)}</div>
-<div><div>Building route for {drv?.name}</div><div style={{fontSize:10,opacity:0.8}}>{ids.length} stop{ids.length!==1?"s":""} — click map to add in order</div></div>
+{/* Active driver HUD */}
+{rpActive&&(()=>{const di2=drivers.findIndex(d=>d.id===rpActive);const dv=drivers.find(d=>d.id===rpActive);const ct=(rpOrders[rpActive]||[]).length;const st2=rpSt(rpActive);
+return(<div style={{position:"absolute",top:12,left:12,right:60,zIndex:5}}>
+<div style={{background:`linear-gradient(135deg, ${DCOL[di2]}, ${DCOL[di2]}dd)`,color:"#fff",borderRadius:14,padding:"12px 18px",boxShadow:`0 8px 32px ${DCOL[di2]}44`,display:"flex",alignItems:"center",gap:12}}>
+<div style={{width:34,height:34,borderRadius:10,background:"rgba(255,255,255,0.2)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,fontWeight:800,flexShrink:0}}>{dv?.name?.charAt(0)}</div>
+<div style={{flex:1}}>
+<div style={{fontSize:14,fontWeight:700}}>{dv?.name}'s Route</div>
+<div style={{fontSize:11,opacity:0.85}}>{ct} stop{ct!==1?"s":""}{st2.miles>0?` · ~${st2.miles}mi`:""}{st2.rev>0?" · "+fmt(st2.rev):""} — click map to add</div>
+</div>
 </div>
 </div>);})()}
-{!rpActive&&<div style={{position:"absolute",top:12,left:12,right:60,zIndex:5,background:"#fff",borderRadius:12,padding:"10px 18px",fontSize:12,fontWeight:600,color:"#78716c",boxShadow:"0 4px 20px rgba(0,0,0,0.1)",display:"flex",alignItems:"center",gap:8}}>
-<span style={{fontSize:18}}>👈</span><span>Select a driver on the left panel, then click stops on the map in delivery order</span>
+{!rpActive&&<div style={{position:"absolute",top:12,left:12,right:60,zIndex:5,background:"#fff",borderRadius:14,padding:"12px 18px",fontSize:13,fontWeight:600,color:"#78716c",boxShadow:"0 8px 32px rgba(0,0,0,0.1)",display:"flex",alignItems:"center",gap:10}}>
+<span style={{fontSize:22}}>👈</span>
+<div><div style={{fontWeight:700,color:"#1c1917"}}>Select a driver</div><div style={{fontSize:11,marginTop:2}}>Then click stops on the map in delivery order</div></div>
 </div>}
-<div style={{position:"absolute",bottom:12,left:12,zIndex:5,background:"#fff",borderRadius:12,padding:"8px 14px",boxShadow:"0 4px 20px rgba(0,0,0,0.1)",display:"flex",gap:10,flexWrap:"wrap"}}>
-{drivers.map((d,di)=>{const count=(rpOrders[d.id]||[]).length;const isAct=rpActive===d.id;return(
-<div key={d.id} onClick={()=>setRpActive(rpActive===d.id?null:d.id)} style={{display:"flex",alignItems:"center",gap:5,cursor:"pointer",padding:isAct?"3px 10px":"3px 6px",borderRadius:8,background:isAct?DCOL[di]:"transparent",transition:"all 0.15s"}}>
-<div style={{width:10,height:10,borderRadius:4,background:isAct?"#fff":DCOL[di]}}/><span style={{fontSize:11,fontWeight:700,color:isAct?"#fff":"#57534e"}}>{d.name.split(" ")[0]}</span>
-{count>0&&<span style={{fontSize:10,color:isAct?"rgba(255,255,255,0.8)":"#a8a29e",fontWeight:600}}>{count}</span>}
+
+{/* Driver legend */}
+<div style={{position:"absolute",bottom:14,left:14,zIndex:5,background:"#fff",borderRadius:14,padding:"10px 16px",boxShadow:"0 8px 32px rgba(0,0,0,0.12)",display:"flex",gap:8,flexWrap:"wrap"}}>
+{drivers.map((d,di2)=>{const ct=(rpOrders[d.id]||[]).length;const isA=rpActive===d.id;return(
+<div key={d.id} onClick={()=>{setRpActive(rpActive===d.id?null:d.id);setRpOptMenu(null);}}
+style={{display:"flex",alignItems:"center",gap:5,cursor:"pointer",padding:isA?"4px 12px":"4px 8px",borderRadius:9,background:isA?DCOL[di2]:"transparent",transition:"all 0.15s",border:isA?"none":"1px solid transparent"}}>
+<div style={{width:10,height:10,borderRadius:4,background:isA?"#fff":DCOL[di2]}}/>
+<span style={{fontSize:11,fontWeight:700,color:isA?"#fff":"#57534e"}}>{d.name.split(" ")[0]}</span>
+{ct>0&&<span style={{fontSize:10,color:isA?"rgba(255,255,255,0.8)":"#a8a29e",fontWeight:600}}>{ct}</span>}
 </div>);})}
 </div>
-<GoogleMapView stops={mapStops} drivers={drivers} height={"100%"} showSearch={true} searchLabel="Search address…"
-activeDriver={rpActive} onStopClick={rpHandleMapClick} onAssignStop={rpActive?(stopId)=>rpHandleMapClick(stopId):null}/>
+
+<GoogleMapView stops={mapS} drivers={drivers} height={"100%"} showSearch={true} searchLabel="Search address…"
+activeDriver={rpActive} onStopClick={rpClick} onAssignStop={rpActive?(sid)=>rpClick(sid):null}/>
 </div>
 
 </div>);
@@ -2437,7 +2610,9 @@ return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius
 </div>
 <div style={{textAlign:"right",marginLeft:10,flexShrink:0}}>
 <div style={{fontSize:15,fontWeight:700,fontVariantNumeric:"tabular-nums"}}><InlineRate value={entry.baseRate} isHourly={entry.isHourly} onSave={r=>updateRate(entry.id,r)}/></div>
-<button onClick={()=>rmFromDriver(entry.id)} style={{background:"none",border:"none",color:"#dc2626",fontSize:10,cursor:"pointer",padding:"4px 0 0",opacity:0.7}}>Remove</button>
+{!entry.liftgateApplied&&!entry.isHourly&&<button onClick={()=>manualLiftgate(entry.id)} style={{background:"none",border:"none",color:"#ea580c",fontSize:9,cursor:"pointer",padding:"2px 0",opacity:0.7}}>+LG $75</button>}
+{entry.liftgateApplied&&<div style={{fontSize:8,color:"#16a34a",fontWeight:700}}>✓ LG</div>}
+<button onClick={()=>rmFromDriver(entry.id)} style={{background:"none",border:"none",color:"#dc2626",fontSize:10,cursor:"pointer",padding:"2px 0 0",opacity:0.7}}>Remove</button>
 </div>
 </div>
 {isImetco&&<div style={{marginTop:8,display:"flex",alignItems:"center",gap:6}}>
@@ -2879,7 +3054,13 @@ style={{width:"100%",border:"1px solid #d8b4fe",borderRadius:8,padding:"8px 10px
 </button>
 </>);})()}
 {de.map((entry,eIdx)=>{const c=CC[entry.customer]||CC["One-Off Delivery"];const isPU=entry.stopType==="pickup";const done=entry.status==="departed";const onSite=entry.status==="arrived";const hasDue=!!entry.dueBy;const addr=entry.addr||getAddr(entry.stop);const isP=entry.priority;const hasInstr=entry.instructions?.trim();const isImetco=entry.customer==="IMETCO";
-return(<div key={entry.id} style={{background:done?"#f0fdf4":onSite?"#fffbeb":hasDue?"#fef2f2":isP?"#fef3c7":isPU?"#eff6ff":"#fff",border:`1px solid ${done?"#bbf7d0":onSite?"#fde68a":hasDue?"#fca5a5":"#e7e5e4"}`,borderRadius:8,padding:"8px 10px",marginBottom:4,borderLeft:`3px solid ${isPU?"#2563eb":isP?"#f59e0b":c.accent}`,opacity:done?0.6:1}}>
+const isDrgSrc=dragSrc?.drvId===drv.id&&dragSrc?.idx===eIdx;
+const isDrgOver=dragOver?.drvId===drv.id&&dragOver?.idx===eIdx;
+return(<div key={entry.id}>
+<div draggable onDragStart={()=>setDragSrc({drvId:drv.id,idx:eIdx})}
+onDragOver={ev=>{ev.preventDefault();setDragOver({drvId:drv.id,idx:eIdx});}}
+onDrop={()=>handleDrop(drv.id,eIdx)}
+style={{background:isDrgOver?"#dcfce7":isDrgSrc?"#fef9c3":done?"#f0fdf4":onSite?"#fffbeb":hasDue?"#fef2f2":isP?"#fef3c7":isPU?"#eff6ff":"#fff",border:isDrgOver?"2px dashed #16a34a":`1px solid ${done?"#bbf7d0":onSite?"#fde68a":hasDue?"#fca5a5":"#e7e5e4"}`,borderRadius:8,padding:"8px 10px",marginBottom:0,borderLeft:`3px solid ${isPU?"#2563eb":isP?"#f59e0b":c.accent}`,opacity:isDrgSrc?0.4:done?0.6:1,cursor:"grab",transition:"background 0.1s"}}>
 <div style={{display:"flex",alignItems:"center",gap:4,marginBottom:2,flexWrap:"wrap"}}>
 <span style={{fontSize:10,color:"#a8a29e",fontVariantNumeric:"tabular-nums"}}>{eIdx+1}.</span>
 {isPU&&<span style={{fontSize:8,background:"#2563eb",color:"#fff",padding:"1px 4px",borderRadius:2,fontWeight:700}}>PU</span>}
@@ -2910,6 +3091,8 @@ return(<div key={entry.id} style={{background:done?"#f0fdf4":onSite?"#fffbeb":ha
 <button onClick={()=>moveInDriver(drv.id,eIdx,1)} style={{background:"#f5f5f4",border:"1px solid #e7e5e4",borderRadius:4,padding:"1px 5px",cursor:"pointer",fontSize:9,color:"#78716c"}} title="Move down">▼</button>
 <button onClick={()=>rmFromDriver(entry.id)} style={{background:"none",border:"none",color:"#dc2626",fontSize:9,cursor:"pointer",padding:"1px 4px"}}>✕</button>
 </div>
+</div>
+<button onClick={()=>setInsertPickupFor({driverId:drv.id,afterIdx:eIdx})} style={{display:"block",width:"100%",background:"none",border:"none",borderRadius:0,padding:"2px 0",cursor:"pointer",fontSize:8,color:"#bfdbfe",textAlign:"center",opacity:0.6}}>+ pickup</button>
 </div>);})}
 </div>
 </div>
@@ -2959,7 +3142,11 @@ return(<div key={entry.id} style={{background:done?"#f0fdf4":onSite?"#fffbeb":ha
 </div>
 </div>
 {(()=>{
-const stopsWithCoords2=dl.map(e=>{const addr=e.addr||getAddr(e.stop);const coords=getCoords(addr);return coords?{...e,coords}:null;}).filter(Boolean);
+const stopsWithCoords2=dl.map(e=>{const addr=e.addr||getAddr(e.stop);const coords=getCoords(addr);if(!coords)return null;
+/* Compute route order: position within this driver's stops */
+const drvStopsArr=dl.filter(x=>x.driverId===e.driverId);
+const routeOrder=e.driverId>0?drvStopsArr.indexOf(e)+1:0;
+return{...e,coords,routeOrder};}).filter(Boolean);
 return(
 <div style={{margin:"0 20px"}}>
 {/* Driver selector for click-to-assign */}
@@ -3254,7 +3441,10 @@ return(
 {/* HEADER */}
 <div style={{background:BRAND.dark,color:"#fff",padding:"16px 20px 12px"}}>
 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+<div style={{display:"flex",alignItems:"center",gap:6}}>
 <img src={LOGO_WHITE} alt="Davis Delivery" style={{height:28,objectFit:"contain"}}/>
+<span style={{fontSize:8,color:"#93c5fd",fontWeight:600,opacity:0.7}}>v{APP_VERSION}</span>
+</div>
 <div style={{display:"flex",gap:8,alignItems:"center"}}>
 <button onClick={()=>{setShowMsgPanel(true);setMsgChannel(null);markMsgsRead(null);}} style={{background:"#292524",border:"1px solid #44403c",color:"#d6d3d1",borderRadius:8,padding:"6px 10px",cursor:"pointer",fontSize:12,fontWeight:600,position:"relative"}}>{"💬"}{getTotalUnread()>0&&<span style={{position:"absolute",top:-4,right:-4,background:"#dc2626",color:"#fff",fontSize:9,fontWeight:700,padding:"1px 5px",borderRadius:8,minWidth:14,textAlign:"center"}}>{getTotalUnread()}</span>}</button>
 <button onClick={()=>setShowChat(true)} style={{background:"#d97706",border:"none",color:"#fff",borderRadius:8,padding:"6px 10px",cursor:"pointer",fontSize:12,fontWeight:600}}>AI</button>
@@ -3614,7 +3804,9 @@ return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius
 </div>
 <div style={{textAlign:"right",marginLeft:12}}>
 <div style={{fontSize:16,fontWeight:700,fontVariantNumeric:"tabular-nums"}}><InlineRate value={entry.baseRate} isHourly={entry.isHourly} onSave={r=>updateRate(entry.id,r)}/></div>
-<button onClick={()=>rmFromDriver(entry.id)} style={{background:"none",border:"none",color:"#dc2626",fontSize:11,cursor:"pointer",padding:"4px 0 0",opacity:0.7}}>Remove</button>
+{!entry.liftgateApplied&&!entry.isHourly&&<button onClick={()=>manualLiftgate(entry.id)} style={{background:"none",border:"none",color:"#ea580c",fontSize:10,cursor:"pointer",padding:"2px 0"}}>+LG $75</button>}
+{entry.liftgateApplied&&<div style={{fontSize:9,color:"#16a34a",fontWeight:700}}>✓ LG</div>}
+<button onClick={()=>rmFromDriver(entry.id)} style={{background:"none",border:"none",color:"#dc2626",fontSize:11,cursor:"pointer",padding:"2px 0 0",opacity:0.7}}>Remove</button>
 </div>
 </div>
 {isImetco&&<div style={{marginTop:8,display:"flex",alignItems:"center",gap:6}}>
@@ -4284,6 +4476,15 @@ useEffect(()=>{
   return()=>unsub();
 },[driverId]);
 
+/* Subscribe to messages for this driver */
+useEffect(()=>{
+  if(!driverId)return;
+  const unsubs=[];
+  unsubs.push(subscribeMessages("dm-"+driverId,(msgs)=>{setDriverMessages(msgs);}));
+  unsubs.push(subscribeMessages("group",(msgs)=>{setGroupMessages(msgs);}));
+  return()=>unsubs.forEach(u=>u());
+},[driverId]);
+
 /* Request push permission after auth */
 useEffect(()=>{
   if(authenticated&&driverId){
@@ -4309,11 +4510,10 @@ const setEtaD=(eid,mins,dest)=>setLog(p=>{const n={...p,[dk]:(p[dk]||[]).map(e=>
 const sendDriverMsg=()=>{
 if(!driverMsgInput.trim()||!driver)return;
 const now=new Date().toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});
-const msg={id:Date.now()+Math.random(),from:"driver-"+driverId,fromName:driver.name,text:driverMsgInput.trim(),time:now,read:false};
-if(driverMsgTab==="private")setDriverMessages(p=>[...p,msg]);
-else setGroupMessages(p=>[...p,msg]);
+const channelKey=driverMsgTab==="private"?"dm-"+driverId:"group";
+const msg={from:"driver-"+driverId,fromName:driver.name,text:driverMsgInput.trim(),time:now,read:false};
+saveMessage(channelKey,msg).catch(e=>console.error("Msg send:",e));
 setDriverMsgInput("");
-/* In production, save to Firestore for dispatch to see in real-time */
 };
 
 if(!driver){
@@ -4516,6 +4716,14 @@ onChange={e=>{if(e.target.files[0]){const r=new FileReader();r.onload=ev=>addPho
 </label>
 <button onClick={()=>setSigStop(entry.id)} style={{background:"#f3e8f9",border:"1px solid #d8b4fe",borderRadius:8,padding:"8px 12px",cursor:"pointer",fontSize:12,fontWeight:600,color:"#7c3aed",flex:1}}>{"✍"} Sign</button>
 </div>
+{/* Liftgate request */}
+{arrived&&!departed&&!entry.liftgateApplied&&<button onClick={()=>{
+sendNotificationToDriver(0,"🔄 LIFTGATE REQUEST from "+(driver?.name||"driver")+"\nStop: "+entry.stop+"\nApply $75 liftgate charge?","liftgate_request").catch(()=>{});
+showToast("Liftgate request sent to dispatch");
+}} style={{width:"100%",marginTop:6,background:"#fff7ed",border:"2px solid #fed7aa",borderRadius:8,padding:"8px 12px",cursor:"pointer",fontSize:12,fontWeight:700,color:"#ea580c",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+🔄 Liftgate Required (+$75)
+</button>}
+{entry.liftgateApplied&&<div style={{width:"100%",marginTop:6,background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:8,padding:"8px 12px",textAlign:"center",fontSize:11,fontWeight:600,color:"#16a34a"}}>✓ Liftgate charge approved (+$75)</div>}
 </div>
 )}
 </div>
