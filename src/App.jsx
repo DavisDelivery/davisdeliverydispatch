@@ -2514,14 +2514,18 @@ const hasImage=!!chatImage;
 let userContent;
 if(hasImage){
   const parts=[];
-  parts.push({type:"image",source:{type:"base64",media_type:"image/jpeg",data:chatImage.base64}});
+  if(chatImage.mediaType==="application/pdf"){
+    parts.push({type:"document",source:{type:"base64",media_type:"application/pdf",data:chatImage.base64}});
+  }else{
+    parts.push({type:"image",source:{type:"base64",media_type:chatImage.mediaType||"image/jpeg",data:chatImage.base64}});
+  }
   parts.push({type:"text",text:chatInput.trim()||"Parse this dispatch email and extract all delivery stops as JSON."});
   userContent=parts;
 }else{
   userContent=chatInput.trim();
 }
-const userMsg={role:"user",content:userContent,_preview:hasImage?chatImage.preview:null,_text:chatInput.trim()||(hasImage?"📷 Dispatch photo":"")};
-const newMessages=[...chatMessages,userMsg];
+const fileLabel=chatImage?.fileName||"📷 Dispatch photo";
+const userMsg={role:"user",content:userContent,_preview:hasImage?chatImage.preview:null,_text:chatInput.trim()||(hasImage?fileLabel:"")};const newMessages=[...chatMessages,userMsg];
 setChatMessages(newMessages);
 setChatInput("");
 setChatImage(null);
@@ -3883,13 +3887,17 @@ showToast(selected.length+" Emser stops added");
 </div>}
 </div>
 {chatImage&&<div style={{padding:"8px 16px 0",display:"flex",alignItems:"center",gap:8}}>
-<div style={{position:"relative"}}><img src={chatImage.preview} alt="" style={{height:50,borderRadius:8}}/><button onClick={()=>setChatImage(null)} style={{position:"absolute",top:-4,right:-4,background:"#dc2626",color:"#fff",border:"none",borderRadius:10,width:18,height:18,fontSize:9,cursor:"pointer",fontWeight:700}}>✕</button></div>
-<span style={{fontSize:11,color:"#16a34a",fontWeight:600}}>📷 Ready</span>
+<div style={{position:"relative"}}>{chatImage.mediaType==="application/pdf"?<div style={{width:50,height:50,borderRadius:8,background:"#fef2f2",border:"1px solid #fca5a5",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column"}}><span style={{fontSize:18}}>📄</span><span style={{fontSize:7,color:"#dc2626",fontWeight:600}}>PDF</span></div>:<img src={chatImage.preview} alt="" style={{height:50,borderRadius:8}}/>}<button onClick={()=>setChatImage(null)} style={{position:"absolute",top:-4,right:-4,background:"#dc2626",color:"#fff",border:"none",borderRadius:10,width:18,height:18,fontSize:9,cursor:"pointer",fontWeight:700}}>✕</button></div>
+<div><div style={{fontSize:11,color:"#16a34a",fontWeight:600}}>Ready</div>{chatImage.fileName&&<div style={{fontSize:9,color:"#78716c"}}>{chatImage.fileName}</div>}</div>
 </div>}
-<div style={{padding:"8px 16px 16px",borderTop:"1px solid #e7e5e4",display:"flex",gap:6,flexShrink:0,alignItems:"center"}}>
-<label style={{display:"flex",alignItems:"center",justifyContent:"center",width:40,height:40,background:"#f5f5f4",border:"1px solid #e7e5e4",borderRadius:10,cursor:"pointer",flexShrink:0}}>
-<span style={{fontSize:16}}>📷</span>
-<input type="file" accept="image/*" style={{display:"none"}} onChange={e=>{if(e.target.files[0]){const r=new FileReader();r.onload=ev=>{setChatImage({base64:ev.target.result.split(",")[1],preview:ev.target.result});};r.readAsDataURL(e.target.files[0]);}e.target.value="";}}/>
+<div style={{padding:"8px 16px 16px",borderTop:"1px solid #e7e5e4",display:"flex",gap:4,flexShrink:0,alignItems:"center"}}>
+<label style={{display:"flex",alignItems:"center",justifyContent:"center",width:36,height:36,background:"#f5f5f4",border:"1px solid #e7e5e4",borderRadius:8,cursor:"pointer",flexShrink:0}} title="Take photo">
+<span style={{fontSize:14}}>📷</span>
+<input type="file" accept="image/*" capture="environment" style={{display:"none"}} onChange={e=>{if(e.target.files[0]){const f=e.target.files[0];const r=new FileReader();r.onload=ev=>{setChatImage({base64:ev.target.result.split(",")[1],preview:ev.target.result,mediaType:f.type||"image/jpeg",fileName:f.name});};r.readAsDataURL(f);}e.target.value="";}}/>
+</label>
+<label style={{display:"flex",alignItems:"center",justifyContent:"center",width:36,height:36,background:"#f5f5f4",border:"1px solid #e7e5e4",borderRadius:8,cursor:"pointer",flexShrink:0}} title="Upload file">
+<span style={{fontSize:14}}>📎</span>
+<input type="file" accept="image/*,.pdf" style={{display:"none"}} onChange={e=>{if(e.target.files[0]){const f=e.target.files[0];const r=new FileReader();r.onload=ev=>{const isPdf=f.type==="application/pdf";setChatImage({base64:ev.target.result.split(",")[1],preview:isPdf?null:ev.target.result,mediaType:f.type||"image/jpeg",fileName:f.name});};r.readAsDataURL(f);}e.target.value="";}}/>
 </label>
 <input value={chatInput} onChange={e=>setChatInput(e.target.value)}
 onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendChat();}}}
@@ -4942,32 +4950,34 @@ showToast(selected.length+" Emser stops added");
 {/* Chat input */}
 {chatImage&&<div style={{padding:"8px 16px 0",display:"flex",alignItems:"center",gap:8}}>
 <div style={{position:"relative",display:"inline-block"}}>
-<img src={chatImage.preview} alt="upload" style={{height:60,borderRadius:8,objectFit:"cover"}}/>
+{chatImage.mediaType==="application/pdf"?<div style={{width:60,height:60,borderRadius:8,background:"#fef2f2",border:"1px solid #fca5a5",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column"}}><span style={{fontSize:20}}>📄</span><span style={{fontSize:8,color:"#dc2626",fontWeight:600}}>PDF</span></div>
+:<img src={chatImage.preview} alt="upload" style={{height:60,borderRadius:8,objectFit:"cover"}}/>}
 <button onClick={()=>setChatImage(null)} style={{position:"absolute",top:-4,right:-4,background:"#dc2626",color:"#fff",border:"none",borderRadius:10,width:20,height:20,fontSize:10,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700}}>✕</button>
 </div>
-<span style={{fontSize:11,color:"#16a34a",fontWeight:600}}>📷 Ready to parse</span>
+<div><div style={{fontSize:11,color:"#16a34a",fontWeight:600}}>Ready to parse</div>{chatImage.fileName&&<div style={{fontSize:9,color:"#78716c",maxWidth:180,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{chatImage.fileName}</div>}</div>
 </div>}
-<div style={{padding:"8px 16px 20px",borderTop:"1px solid #e7e5e4",display:"flex",gap:6,flexShrink:0,alignItems:"center"}}>
-<label style={{display:"flex",alignItems:"center",justifyContent:"center",width:44,height:44,background:chatImage?"#f0fdf4":"#f5f5f4",border:chatImage?"2px solid #16a34a":"1px solid #e7e5e4",borderRadius:12,cursor:"pointer",flexShrink:0}}>
-<span style={{fontSize:18}}>📷</span>
+<div style={{padding:"8px 16px 20px",borderTop:"1px solid #e7e5e4",display:"flex",gap:4,flexShrink:0,alignItems:"center"}}>
+<label style={{display:"flex",alignItems:"center",justifyContent:"center",width:40,height:40,background:"#f5f5f4",border:"1px solid #e7e5e4",borderRadius:10,cursor:"pointer",flexShrink:0}} title="Take photo">
+<span style={{fontSize:16}}>📷</span>
 <input type="file" accept="image/*" capture="environment" style={{display:"none"}} onChange={e=>{
-if(e.target.files[0]){
-const r=new FileReader();
-r.onload=ev=>{
-const base64=ev.target.result.split(",")[1];
-setChatImage({base64,preview:ev.target.result});
-};
-r.readAsDataURL(e.target.files[0]);
-}
-e.target.value="";
+if(e.target.files[0]){const f=e.target.files[0];const r=new FileReader();r.onload=ev=>{setChatImage({base64:ev.target.result.split(",")[1],preview:ev.target.result,mediaType:f.type||"image/jpeg",fileName:f.name});};r.readAsDataURL(f);}e.target.value="";
+}}/>
+</label>
+<label style={{display:"flex",alignItems:"center",justifyContent:"center",width:40,height:40,background:"#f5f5f4",border:"1px solid #e7e5e4",borderRadius:10,cursor:"pointer",flexShrink:0}} title="Upload file">
+<span style={{fontSize:16}}>📎</span>
+<input type="file" accept="image/*,.pdf" style={{display:"none"}} onChange={e=>{
+if(e.target.files[0]){const f=e.target.files[0];const r=new FileReader();r.onload=ev=>{
+const isPdf=f.type==="application/pdf";
+setChatImage({base64:ev.target.result.split(",")[1],preview:isPdf?null:ev.target.result,mediaType:f.type||"image/jpeg",fileName:f.name});
+};r.readAsDataURL(f);}e.target.value="";
 }}/>
 </label>
 <input value={chatInput} onChange={e=>setChatInput(e.target.value)}
 onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendChat();}}}
-placeholder={chatImage?"Add note or send photo…":"Ask about routes, quotes, revenue…"}
-style={{flex:1,border:"1px solid #d6d3d1",borderRadius:12,padding:"12px 14px",fontSize:14,outline:"none",background:"#fafaf9",fontFamily:"inherit"}}/>
+placeholder={chatImage?"Add note or send…":"Ask about routes, quotes…"}
+style={{flex:1,border:"1px solid #d6d3d1",borderRadius:12,padding:"12px 12px",fontSize:14,outline:"none",background:"#fafaf9",fontFamily:"inherit"}}/>
 <button onClick={sendChat} disabled={(!chatInput.trim()&&!chatImage)||chatLoading}
-style={{background:(chatInput.trim()||chatImage)&&!chatLoading?"#d97706":"#e7e5e4",color:(chatInput.trim()||chatImage)&&!chatLoading?"#fff":"#a8a29e",border:"none",borderRadius:12,padding:"12px 16px",cursor:(chatInput.trim()||chatImage)&&!chatLoading?"pointer":"default",fontSize:14,fontWeight:700,flexShrink:0}}>
+style={{background:(chatInput.trim()||chatImage)&&!chatLoading?"#d97706":"#e7e5e4",color:(chatInput.trim()||chatImage)&&!chatLoading?"#fff":"#a8a29e",border:"none",borderRadius:12,padding:"12px 14px",cursor:(chatInput.trim()||chatImage)&&!chatLoading?"pointer":"default",fontSize:14,fontWeight:700,flexShrink:0}}>
 {chatLoading?"…":"↑"}
 </button>
 </div>
