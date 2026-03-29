@@ -194,7 +194,8 @@ const subscribeQuotes=(cb)=>{
 /* Channel keys: "group" for all-hands, "dm-{driverId}" for private */
 const saveMessage=async(channelKey,msg)=>{
   await _fbReady.catch(()=>{});
-  if(!_db())return;
+  if(!_db()){console.error("[MSG] No Firebase DB available");return;}
+  console.log("[MSG] Writing to messages/"+channelKey+"/items");
   await window._fb.addDoc(window._fb.collection(_db(),"messages",channelKey,"items"),{...msg,timestamp:Date.now()});
 };
 const subscribeMessages=(channelKey,cb)=>{
@@ -1732,6 +1733,7 @@ const[sd,setSd]=useState(()=>{const d=new Date().getDay();return d>=1&&d<=5?d-1:
 const[log,setLog]=useState(()=>lsGet(LS_LOG,{}));
 const[view,setView]=useState("manifest");
 const[selCust,setSelCust]=useState(null);
+const[selPickup,setSelPickup]=useState("Norcross"); /* default pickup location for customers with multiple */
 const[selStop,setSelStop]=useState(null);
 const[emH,setEmH]=useState(()=>lsGet(LS_EMH,{}));
 const[toast,setToast]=useState(null);
@@ -1921,6 +1923,7 @@ useEffect(()=>{
         const weekOff=parseInt(parts[0]);
         const dayIdx=parseInt(parts[1]);
         if(!isNaN(weekOff)&&dayIdx>=0&&dayIdx<=4){
+          console.log("[SAVE]",dayKey,"entries:",(log[dayKey]||[]).length);
           saveManifestDay(weekOff,dayIdx,log[dayKey]||[]).catch(e=>console.error("Save "+dayKey+":",e));
           saved=true;
         }
@@ -2041,7 +2044,7 @@ const autoDueBy=ex.dueBy||(stop==="Atlanta Flooring - Suwanee"?"9:30–1:00 PM"
 :cust==="IMETCO"&&stop==="Round Trip IMETCO & Finishing Dynamics"?"By 3:30 PM"
 :null);
 const autoDeliverAfter=(cust==="Specialty"&&!ex.dueBy)?"Pickup 7:30 AM — Specialty":null;
-const entry={id:Date.now()+Math.random(),customer:cust,stop,baseRate:rate,fuelPct:ex.fuelPct||0,isHourly:ex.isHourly||false,note:ex.note||null,driverId:drvId,addr:ex.addr||getAddr(stop),stopType:ex.stopType||"delivery",priority:ex.priority||(cd?.priority)||false,instructions:ex.instructions!==undefined?ex.instructions:instrForStop,status:null,arrivedAt:null,departedAt:null,eta:null,photos:[],signature:null,dueBy:autoDueBy||autoDeliverAfter||null,weight:ex.weight||0,loadNum:ex.loadNum||1};
+const entry={id:Date.now()+Math.random(),customer:cust,stop,baseRate:rate,fuelPct:ex.fuelPct||0,isHourly:ex.isHourly||false,note:ex.note||null,driverId:drvId,addr:ex.addr||getAddr(stop),stopType:ex.stopType||"delivery",priority:ex.priority||(cd?.priority)||false,instructions:ex.instructions!==undefined?ex.instructions:instrForStop,status:null,arrivedAt:null,departedAt:null,eta:null,photos:[],signature:null,dueBy:autoDueBy||autoDeliverAfter||null,weight:ex.weight||0,loadNum:ex.loadNum||1,pickupFrom:ex.pickupFrom||selPickup||null};
 
 setLog(p=>({...p,[dk]:[...(p[dk]||[]),entry]}));
 if(stop==="DCO Eatonton"&&cust==="Emser Tile"){
@@ -2071,7 +2074,9 @@ showToast(`${stops.length} stops added`);setMultiSelect(false);setMultiChecked([
 /* ── Shared: rebuild pickup cards for a customer. Pickups ONLY exist on assigned drivers, NEVER in unassigned. ── */
 const rebuildPickupsFor=(all,cust)=>{
 const makeNote=(dels)=>{if(!dels.length)return"";const names=dels.map(e=>e.stop);if(names.length<=3)return names.join(", ");return names.slice(0,2).join(", ")+" +"+(names.length-2)+" more";};
-const puSrc=PICKUP_SOURCES.find(s=>s.customer===cust);
+const puSrc=PICKUP_SOURCES.filter(s=>s.customer===cust).length>1
+?PICKUP_SOURCES.find(s=>s.customer===cust&&s.label.includes(selPickup))||PICKUP_SOURCES.find(s=>s.customer===cust)
+:PICKUP_SOURCES.find(s=>s.customer===cust);
 if(!puSrc)return all;
 const existing=all.find(e=>e.customer===cust&&e.stopType==="pickup");
 all=all.filter(e=>!(e.customer===cust&&e.stopType==="pickup"));
@@ -2082,14 +2087,16 @@ const cd=CUSTOMERS[cust];
 const puDueBy=(cust==="Specialty")?"Pickup 7:30 AM — Specialty":null;
 Object.entries(byDriver).forEach(([drvIdStr,dels])=>{
 const dId=Number(drvIdStr);
-if(existing){
-all.push({...existing,id:Date.now()+Math.random()+Math.random(),driverId:dId,note:makeNote(dels),instructions:""});
-}else{
-all.push({id:Date.now()+Math.random()+Math.random(),customer:cust,stop:puSrc.label,baseRate:0,fuelPct:0,isHourly:false,
+const puEntry=existing
+?{...existing,id:Date.now()+Math.random()+Math.random(),driverId:dId,note:makeNote(dels),instructions:""}
+:{id:Date.now()+Math.random()+Math.random(),customer:cust,stop:puSrc.label,baseRate:0,fuelPct:0,isHourly:false,
 note:makeNote(dels),driverId:dId,addr:puSrc.addr,stopType:"pickup",priority:cd?.priority||false,
 instructions:"",status:null,arrivedAt:null,departedAt:null,eta:null,photos:[],signature:null,
-dueBy:puDueBy,weight:0,loadNum:1});
-}
+dueBy:puDueBy,weight:0,loadNum:1};
+/* Insert pickup BEFORE the first delivery for this customer+driver */
+const firstDelIdx=all.findIndex(e=>e.customer===cust&&e.stopType==="delivery"&&e.driverId===dId);
+if(firstDelIdx>=0){all.splice(firstDelIdx,0,puEntry);}
+else{all.push(puEntry);}
 });
 return all;
 };
@@ -4778,6 +4785,17 @@ else{showToast("Pick a weekday (Mon-Fri)");}
 {CUSTOMERS[selCust].priority&&<p style={{margin:"0 0 4px",fontSize:12,color:"#f59e0b",fontWeight:600}}>⚡ {CUSTOMERS[selCust].priorityNote||"Priority"}</p>}
 </div>
 {CUSTOMERS[selCust].fuel_surcharge&&!CUSTOMERS[selCust].fuel_included&&<p style={{fontSize:12,color:"#d97706",margin:"0 4px 8px",padding:"8px 12px",background:"#fffbeb",borderRadius:8,borderLeft:"3px solid #d97706"}}>⛽ {Math.round(CUSTOMERS[selCust].fuel_surcharge*100)}% fuel added separately</p>}
+{/* Pickup location selector for customers with multiple pickups */}
+{(()=>{const puSrcs=PICKUP_SOURCES.filter(s=>s.customer===selCust);if(puSrcs.length<=1)return null;return(
+<div style={{margin:"0 4px 10px",padding:"10px 14px",background:"#eff6ff",border:"2px solid #2563eb",borderRadius:12}}>
+<div style={{fontSize:11,fontWeight:700,color:"#2563eb",marginBottom:6}}>Pickup Location</div>
+<div style={{display:"flex",gap:6}}>
+{puSrcs.map(ps=>{const loc=ps.label.split(" - ").pop();return(
+<button key={ps.label} onClick={()=>setSelPickup(loc)} style={{flex:1,padding:"10px 8px",borderRadius:8,border:selPickup===loc?"2px solid #2563eb":"2px solid #e7e5e4",cursor:"pointer",fontSize:13,fontWeight:700,background:selPickup===loc?"#2563eb":"#fff",color:selPickup===loc?"#fff":"#57534e",textAlign:"center"}}>{loc}</button>
+);})}
+</div>
+<div style={{fontSize:10,color:"#64748b",marginTop:4}}>{puSrcs.find(ps=>ps.label.includes(selPickup))?.addr||""}</div>
+</div>);})()}
 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"0 4px",marginBottom:8}}>
 <button onClick={()=>{setMultiSelect(!multiSelect);setMultiChecked([]);}} style={{background:multiSelect?"#2563eb":"#e7e5e4",color:multiSelect?"#fff":"#57534e",border:"none",borderRadius:8,padding:"6px 12px",cursor:"pointer",fontSize:12,fontWeight:600}}>
 {multiSelect?"Cancel Multi-Select":"Select Multiple"}
@@ -5017,8 +5035,8 @@ style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,width:"
 /* ══════════════ STANDALONE DRIVER PAGE ══════════════ */
 /* No pricing. No other drivers. No dispatch controls. Just their stops. */
 function DriverPage({driverSlug}){
-const[wo]=useState(0);
-const[sd]=useState(()=>{const d=new Date().getDay();return d>=1&&d<=5?d-1:0;});
+const[wo,setWo]=useState(0);
+const[sd,setSd]=useState(()=>{const d=new Date().getDay();return d>=1&&d<=5?d-1:0;});
 const[log,setLog]=useState(()=>lsGet(LS_LOG,{}));
 const[toast,setToast]=useState(null);
 const[pinEntry,setPinEntry]=useState("");
@@ -5141,7 +5159,8 @@ if(!driverMsgInput.trim()||!driver)return;
 const now=new Date().toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});
 const channelKey=driverMsgTab==="private"?"dm-"+driverId:"group";
 const msg={from:"driver-"+driverId,fromName:driver.name,text:driverMsgInput.trim(),time:now,read:false};
-saveMessage(channelKey,msg).catch(e=>console.error("Msg send:",e));
+console.log("[MSG] Sending to channel:",channelKey,"driverId:",driverId);
+saveMessage(channelKey,msg).then(()=>console.log("[MSG] Sent OK")).catch(e=>console.error("Msg send FAILED:",e));
 setDriverMsgInput("");
 };
 
@@ -5237,6 +5256,21 @@ return(
 <div style={{fontSize:22,fontWeight:700,color:"#16a34a"}}>{completed}/{total}</div>
 <div style={{fontSize:11,color:"#78716c"}}>completed</div>
 </div>
+</div>
+{/* Day picker */}
+<div style={{display:"flex",gap:4,marginBottom:12}}>
+{["Mon","Tue","Wed","Thu","Fri"].map((day,i)=>{const isToday=wo===0&&i===(new Date().getDay()>=1&&new Date().getDay()<=5?new Date().getDay()-1:0);const isSelected=sd===i;const dayEntries=(log[`${wo}-${i}`]||[]).filter(e=>e.driverId===driverId);return(
+<button key={i} onClick={()=>setSd(i)} style={{flex:1,padding:"8px 2px",borderRadius:8,border:isSelected?"2px solid "+BRAND.main:isToday?"2px solid #d97706":"1px solid #d6d3d1",background:isSelected?BRAND.main:"#fff",cursor:"pointer",textAlign:"center"}}>
+<div style={{fontSize:11,fontWeight:700,color:isSelected?"#fff":isToday?"#d97706":"#57534e"}}>{day}</div>
+<div style={{fontSize:9,color:isSelected?"#93c5fd":"#a8a29e"}}>{dayEntries.length>0?dayEntries.length+" stops":"—"}</div>
+</button>
+);})}
+</div>
+{/* Week nav */}
+<div style={{display:"flex",justifyContent:"center",gap:12,marginBottom:12}}>
+<button onClick={()=>setWo(wo-1)} style={{background:"#f5f5f4",border:"1px solid #e7e5e4",borderRadius:8,padding:"4px 12px",cursor:"pointer",fontSize:11,fontWeight:600,color:"#57534e"}}>← Prev Week</button>
+{wo!==0&&<button onClick={()=>setWo(0)} style={{background:"#f5f5f4",border:"1px solid #e7e5e4",borderRadius:8,padding:"4px 12px",cursor:"pointer",fontSize:11,fontWeight:600,color:"#2563eb"}}>This Week</button>}
+<button onClick={()=>setWo(wo+1)} style={{background:"#f5f5f4",border:"1px solid #e7e5e4",borderRadius:8,padding:"4px 12px",cursor:"pointer",fontSize:11,fontWeight:600,color:"#57534e"}}>Next Week →</button>
 </div>
 <div style={{height:6,background:"#e7e5e4",borderRadius:3,marginBottom:16,overflow:"hidden"}}>
 <div style={{height:"100%",background:"#16a34a",borderRadius:3,width:`${total?completed/total*100:0}%`,transition:"width 0.3s"}}/>
