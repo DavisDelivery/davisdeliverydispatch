@@ -254,6 +254,24 @@ const subscribeInvoices=(cb)=>{
   return()=>unsub();
 };
 
+/* ── Custom Delivery Stops (persisted per customer) ── */
+const saveCustomStops=async(data)=>{
+  await _fbReady.catch(()=>{});
+  if(!_db())return;
+  await window._fb.setDoc(window._fb.doc(_db(),"config","customStops"),{data,updatedAt:Date.now()});
+};
+const subscribeCustomStops=(cb)=>{
+  const run=()=>{
+    return window._fb.onSnapshot(window._fb.doc(_db(),"config","customStops"),snap=>{
+      if(snap.exists()&&snap.data().data)cb(snap.data().data);
+    });
+  };
+  if(window._fbLoaded)return run();
+  let unsub=()=>{};
+  window.addEventListener("fb_ready",()=>{unsub=run();},{once:true});
+  return()=>unsub();
+};
+
 /* ── Mileage helper (shared) ── */
 const calcRouteMiles=(entries)=>{
   const origin={lat:33.93,lng:-84.21};
@@ -417,7 +435,8 @@ const ADDR={
   "Southern Flooring":"Lawrenceville, GA",
   "Specialty - Norcross":"1275 Oakbrook Drive, Suite D, Norcross, GA 30093",
 };
-const getAddr=(s)=>ADDR[s]||"";
+const _customAddrCache={};
+const getAddr=(s)=>ADDR[s]||_customAddrCache[s]||"";
 
 /* ── DEFAULT INSTRUCTIONS (from spreadsheet, editable per-stop) ── */
 const DEFAULT_INSTRUCTIONS={
@@ -554,6 +573,34 @@ style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"10px 12p
 <button onClick={()=>{if(name.trim())onSave(name.trim());}} disabled={!name.trim()}
 style={{background:name.trim()?"#1c1917":"#e7e5e4",color:name.trim()?"#fff":"#a8a29e",border:"none",borderRadius:6,padding:"6px 12px",cursor:"pointer",fontSize:12,fontWeight:600}}>Confirm</button>
 </div>
+</div>
+);
+}
+
+/* ── PARSED STOPS CARD (from AI photo parsing) ── */
+function ParsedStopsCard({stops,onAddSelected}){
+const[checked,setChecked]=useState(()=>stops.map((_,i)=>i));
+const toggle=(idx)=>setChecked(p=>p.includes(idx)?p.filter(x=>x!==idx):[...p,idx]);
+const toggleAll=()=>setChecked(p=>p.length===stops.length?[]:stops.map((_,i)=>i));
+const selected=stops.filter((_,i)=>checked.includes(i));
+return(
+<div style={{marginTop:6,background:"#f0fdf4",border:"2px solid #16a34a",borderRadius:12,padding:"10px 12px"}}>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+<span style={{fontSize:11,fontWeight:700,color:"#16a34a"}}>{stops.length} stops found</span>
+<button onClick={toggleAll} style={{background:"none",border:"none",fontSize:10,color:"#2563eb",cursor:"pointer",fontWeight:600}}>{checked.length===stops.length?"Deselect All":"Select All"}</button>
+</div>
+{stops.map((s,si)=>{const isChecked=checked.includes(si);return(
+<div key={si} onClick={()=>toggle(si)} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 4px",borderBottom:si<stops.length-1?"1px solid #dcfce7":"none",cursor:"pointer"}}>
+<div style={{width:20,height:20,borderRadius:5,border:`2px solid ${isChecked?"#16a34a":"#d6d3d1"}`,background:isChecked?"#16a34a":"#fff",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:12,fontWeight:700,flexShrink:0}}>{isChecked?"✓":""}</div>
+<div style={{flex:1,minWidth:0}}>
+<div style={{fontSize:12,fontWeight:600,color:"#1c1917"}}>{s.stop}</div>
+{(s.weight||s.note)&&<div style={{fontSize:10,color:"#78716c"}}>{s.weight?Math.round(s.weight/1000)+"K lbs":""}{s.weight&&s.note?" · ":""}{s.note||""}</div>}
+</div>
+</div>);})}
+{selected.length>0&&<button onClick={()=>onAddSelected(selected)} style={{display:"block",width:"100%",marginTop:8,background:"#16a34a",color:"#fff",border:"none",borderRadius:10,padding:"12px",cursor:"pointer",fontSize:14,fontWeight:700}}>
++ Add {selected.length} Stop{selected.length!==1?"s":""} to Manifest
+</button>}
+{selected.length===0&&<div style={{textAlign:"center",padding:"8px",fontSize:12,color:"#a8a29e"}}>Select stops to add</div>}
 </div>
 );
 }
@@ -740,8 +787,8 @@ const fillOpacity=done?0.4:hasActive&&!isActiveDriverStop&&isAssigned?0.5:1;
 const marker=new window.google.maps.Marker({
 position:pos,map,
 icon:{
-path:isPU?'M -5,-5 L 0,-9 L 5,-5 L 5,5 L -5,5 Z':window.google.maps.SymbolPath.CIRCLE,
-scale,fillColor,fillOpacity,strokeColor,strokeWeight,
+path:isPU?'M -2,-2 L 0,-4 L 2,-2 L 2,2 L -2,2 Z':window.google.maps.SymbolPath.CIRCLE,
+scale:isPU?Math.min(scale,6):scale,fillColor,fillOpacity,strokeColor,strokeWeight,
 },
 zIndex:done?1:onSite?10:isActiveDriverStop?9:isP?8:5,
 title:s.stop,
@@ -1064,7 +1111,8 @@ onChange={e=>{if(e.target.files[0]){const r=new FileReader();r.onload=ev=>onPhot
 
 /* ── QUOTE BUILDER ── */
 function QuoteBuilder({customerName,pickupOptions,onAdd,onBack,drivers,drvEntries}){
-const[miles,setMiles]=useState("");const[liftgate,setLiftgate]=useState(false);const[gravel,setGravel]=useState(false);const[extraPallets,setExtraPallets]=useState(false);const[customStop,setCustomStop]=useState("");const[originAddr,setOriginAddr]=useState(pickupOptions?.[0]?.addr||"");const[selectedPickup,setSelectedPickup]=useState(pickupOptions?.[0]?.label||"custom");const[destAddr,setDestAddr]=useState("");const[calcLoading,setCalcLoading]=useState(false);const[calcError,setCalcError]=useState("");const[apiKey,setApiKey]=useState(()=>{try{return window.__gbApiKey||"AIzaSyB29mVeZXedDhLVT3eMVgl07EsOneWCUu4";}catch{return"AIzaSyB29mVeZXedDhLVT3eMVgl07EsOneWCUu4";}});const[showApiInput,setShowApiInput]=useState(false);
+const hasMultiPickup=pickupOptions&&pickupOptions.length>1;
+const[miles,setMiles]=useState("");const[liftgate,setLiftgate]=useState(false);const[gravel,setGravel]=useState(false);const[extraPallets,setExtraPallets]=useState(false);const[customStop,setCustomStop]=useState("");const[originAddr,setOriginAddr]=useState(hasMultiPickup?"":pickupOptions?.[0]?.addr||"");const[selectedPickup,setSelectedPickup]=useState(hasMultiPickup?null:pickupOptions?.[0]?.label||"custom");const[destAddr,setDestAddr]=useState("");const[calcLoading,setCalcLoading]=useState(false);const[calcError,setCalcError]=useState("");const[apiKey,setApiKey]=useState(()=>{try{return window.__gbApiKey||"AIzaSyB29mVeZXedDhLVT3eMVgl07EsOneWCUu4";}catch{return"AIzaSyB29mVeZXedDhLVT3eMVgl07EsOneWCUu4";}});const[showApiInput,setShowApiInput]=useState(false);
 const mi=parseFloat(miles)||0;const baseTier=getBaseTier(mi);const fuelAmt=liftgate?0:baseTier*0.15;const total=baseTier+fuelAmt+(liftgate?75:0)+(gravel?25:0)+(extraPallets?25:0);const isOneOff=customerName==="One-Off Delivery";
 const calcDistance=async()=>{if(!originAddr||!destAddr){setCalcError("Enter both addresses");return;}if(!apiKey){setShowApiInput(true);setCalcError("Set API key first");return;}setCalcLoading(true);setCalcError("");try{const svc=new window.google.maps.DistanceMatrixService();svc.getDistanceMatrix({origins:[originAddr],destinations:[destAddr],travelMode:window.google.maps.TravelMode.DRIVING,unitSystem:window.google.maps.UnitSystem.IMPERIAL},(resp,status)=>{setCalcLoading(false);if(status==="OK"&&resp.rows[0]?.elements[0]?.status==="OK")setMiles(parseFloat(resp.rows[0].elements[0].distance.text.replace(/,/g,"")).toFixed(1));else setCalcError("Could not calculate");});}catch{setCalcLoading(false);setCalcError("Maps API error");}};
 const loadMaps=k=>{if(window.google?.maps?.DistanceMatrixService)return;const s=document.createElement("script");s.src=`https://maps.googleapis.com/maps/api/js?key=${k}&libraries=places`;s.async=true;document.head.appendChild(s);};
@@ -1078,7 +1126,14 @@ return(
 <div style={{background:"#fff",border:"1px solid #e7e5e4",borderRadius:14,padding:16,margin:"0 4px 12px"}}>
 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}><span style={{fontSize:13,fontWeight:700}}>Distance</span><button onClick={()=>setShowApiInput(!showApiInput)} style={{background:"#f5f5f4",border:"none",borderRadius:6,padding:"4px 8px",fontSize:10,color:"#78716c",cursor:"pointer"}}>{apiKey?"API Key Set":"Set API Key"}</button></div>
 {showApiInput&&<div style={{marginBottom:10}}><input value={apiKey} onChange={e=>setApiKey(e.target.value)} placeholder="Google Maps API key" style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px",fontSize:12,outline:"none",marginBottom:6}}/><button onClick={()=>saveKey(apiKey)} style={{background:"#1c1917",color:"#fff",border:"none",borderRadius:8,padding:"6px 14px",fontSize:12,fontWeight:600,cursor:"pointer"}}>Save</button></div>}
-{pickupOptions&&pickupOptions.length>0&&<div style={{marginBottom:8}}><label style={{fontSize:12,fontWeight:600,color:"#57534e",display:"block",marginBottom:4}}>Pickup From</label><div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:4}}>{pickupOptions.map(po=><button key={po.label} onClick={()=>{setSelectedPickup(po.label);setOriginAddr(po.addr);}} style={{padding:"6px 12px",borderRadius:8,border:"none",cursor:"pointer",fontSize:12,fontWeight:600,background:selectedPickup===po.label?"#2563eb":"#e7e5e4",color:selectedPickup===po.label?"#fff":"#57534e"}}>{po.label}</button>)}<button onClick={()=>{setSelectedPickup("custom");setOriginAddr("");}} style={{padding:"6px 12px",borderRadius:8,border:"none",cursor:"pointer",fontSize:12,fontWeight:600,background:selectedPickup==="custom"?"#2563eb":"#e7e5e4",color:selectedPickup==="custom"?"#fff":"#57534e"}}>Manual</button></div>{selectedPickup!=="custom"&&<div style={{fontSize:11,color:"#78716c"}}>{originAddr}</div>}</div>}
+{pickupOptions&&pickupOptions.length>0&&<div style={{marginBottom:10}}>
+<label style={{fontSize:12,fontWeight:600,color:hasMultiPickup&&!selectedPickup?"#dc2626":"#57534e",display:"block",marginBottom:6}}>{hasMultiPickup?"⚠ Select Pickup Location":"Pickup From"}</label>
+<div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:4}}>
+{pickupOptions.map(po=><button key={po.label} onClick={()=>{setSelectedPickup(po.label);setOriginAddr(po.addr);}} style={{padding:hasMultiPickup?"10px 16px":"6px 12px",borderRadius:10,border:selectedPickup===po.label?`2px solid #2563eb`:"2px solid #e7e5e4",cursor:"pointer",fontSize:hasMultiPickup?14:12,fontWeight:700,background:selectedPickup===po.label?"#2563eb":"#fff",color:selectedPickup===po.label?"#fff":"#57534e"}}>{po.label}</button>)}
+<button onClick={()=>{setSelectedPickup("custom");setOriginAddr("");}} style={{padding:hasMultiPickup?"10px 16px":"6px 12px",borderRadius:10,border:selectedPickup==="custom"?"2px solid #2563eb":"2px solid #e7e5e4",cursor:"pointer",fontSize:hasMultiPickup?14:12,fontWeight:700,background:selectedPickup==="custom"?"#2563eb":"#fff",color:selectedPickup==="custom"?"#fff":"#57534e"}}>Manual</button>
+</div>
+{selectedPickup&&selectedPickup!=="custom"&&<div style={{fontSize:11,color:"#78716c"}}>{originAddr}</div>}
+</div>}
 <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:10}}>{(selectedPickup==="custom"||!pickupOptions?.length)&&<AddressInput value={originAddr} onChange={setOriginAddr} placeholder="Pickup address"/>}<AddressInput value={destAddr} onChange={setDestAddr} placeholder="Delivery address"/><button onClick={calcDistance} disabled={calcLoading} style={{background:"#1c1917",color:"#fff",border:"none",borderRadius:8,padding:"10px",fontSize:13,fontWeight:600,cursor:"pointer",opacity:calcLoading?0.6:1}}>{calcLoading?"Calculating…":"Calculate Distance"}</button></div>
 {calcError&&<p style={{fontSize:12,color:"#dc2626",margin:"0 0 8px"}}>{calcError}</p>}
 <div style={{display:"flex",alignItems:"center",gap:8}}><label style={{fontSize:13,fontWeight:600,color:"#57534e"}}>Miles:</label><input value={miles} onChange={e=>setMiles(e.target.value)} placeholder="0" type="number" step="0.1" style={{width:80,border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 12px",fontSize:15,fontWeight:700,outline:"none",textAlign:"center"}}/>{mi>0&&<span style={{fontSize:13,fontVariantNumeric:"tabular-nums",color:"#57534e"}}>Base: {fmt(baseTier)}</span>}</div>
@@ -1315,23 +1370,52 @@ const COORDS={
 "11 Perimeter Center East, Atlanta, GA 30346":{lat:33.9275,lng:-84.3400},
 "1275 Oakbrook Drive, Suite D, Norcross, GA 30093":{lat:33.9225,lng:-84.2085},
 };
-function getCoords(addr){return COORDS[addr]||null;}
+const _dynamicCoords={};
+function getCoords(addr){
+  if(!addr)return null;
+  if(COORDS[addr])return COORDS[addr];
+  if(_dynamicCoords[addr])return _dynamicCoords[addr];
+  /* Try to geocode via Google Maps if available (async, caches result) */
+  if(window.google?.maps?.Geocoder&&!_dynamicCoords["_pending_"+addr]){
+    _dynamicCoords["_pending_"+addr]=true;
+    const geocoder=new window.google.maps.Geocoder();
+    geocoder.geocode({address:addr},(results,status)=>{
+      if(status==="OK"&&results[0]){
+        const loc=results[0].geometry.location;
+        _dynamicCoords[addr]={lat:loc.lat(),lng:loc.lng()};
+      }
+    });
+  }
+  return null;
+}
 
 /* ── ROUTE BUILDER COMPONENT ── */
 function RouteBuilder({entries,drivers,onAssign,onReorder,onBack}){
 const[activeDriver,setActiveDriver]=useState(null);
-const[routeOrders,setRouteOrders]=useState({}); /* {driverId: [entryId, ...]} */
+/* Filter out pickups — routing only cares about deliveries */
+const deliveryEntries=entries.filter(e=>e.stopType!=="pickup");
+/* Initialize routeOrders from existing manifest assignments */
+const[routeOrders,setRouteOrders]=useState(()=>{
+const o={};drivers.forEach(d=>{o[d.id]=deliveryEntries.filter(e=>e.driverId===d.id).map(e=>e.id);});return o;
+});
 const[hoveredStop,setHoveredStop]=useState(null);
 const mapRef=useState(null);
 
-/* Geocode all entries */
-const stopsWithCoords=entries.map(e=>{
+/* Geocode all delivery entries and compute route order from routeOrders */
+const stopsWithCoords=deliveryEntries.map(e=>{
 const addr=e.addr||getAddr(e.stop);
 const coords=getCoords(addr);
-return{...e,coords,displayAddr:addr};
+/* Find which driver has this stop and what position it's in */
+let assignedDriver=0;
+let routeOrder=0;
+for(const[did,ids]of Object.entries(routeOrders)){
+  const idx=ids.indexOf(e.id);
+  if(idx>=0){assignedDriver=Number(did);routeOrder=idx+1;break;}
+}
+return{...e,coords,displayAddr:addr,driverId:assignedDriver,routeOrder};
 }).filter(e=>e.coords);
 
-const stopsNoCoords=entries.filter(e=>{
+const stopsNoCoords=deliveryEntries.filter(e=>{
 const addr=e.addr||getAddr(e.stop);
 return!getCoords(addr);
 });
@@ -1339,9 +1423,40 @@ return!getCoords(addr);
 /* Build route order for active driver */
 const driverRoute=activeDriver?routeOrders[activeDriver]||[]:[];
 
+/* ── Route optimization functions for RouteBuilder ── */
+const[rbSortMenu,setRbSortMenu]=useState(null);
+const _rbCoord=(e)=>{if(!e)return null;const addr=e.addr||getAddr(e.stop);return getCoords(addr);};
+const _rbOrigin={lat:33.93,lng:-84.21};
+const _rbDist=(a,b)=>Math.sqrt(Math.pow(a.lat-b.lat,2)+Math.pow(a.lng-b.lng,2));
+const _rbDistO=(e)=>{const c=_rbCoord(e);return c?_rbDist(_rbOrigin,c):0;};
+const _rbSplit=(es)=>{
+const pu=es.filter(e=>e.stopType==="pickup"||e.dueBy?.startsWith("Pickup"));
+const tm=es.filter(e=>e.dueBy&&!e.dueBy.startsWith("Pickup")&&!pu.includes(e));
+const rg=es.filter(e=>!pu.includes(e)&&!tm.includes(e));
+return{pu,tm,rg};
+};
+const _rbParseTime=(db)=>{if(!db)return 9999;const m=db.match(/(\d{1,2})(?::(\d{2}))?\s*(AM|PM)/i);if(!m)return 9999;let h=parseInt(m[1]);const min=parseInt(m[2]||"0");const ap=(m[3]||"").toUpperCase();if(ap==="PM"&&h!==12)h+=12;if(ap==="AM"&&h===12)h=0;return h*60+min;};
+const _rbApply=(drvId,sorted)=>{
+setRouteOrders(p=>({...p,[drvId]:sorted.map(e=>e.id)}));
+sorted.forEach((e,i)=>onAssign(e.id,drvId));
+setRbSortMenu(null);
+};
+const rbSortClosest=(drvId)=>{const ids=routeOrders[drvId]||[];if(ids.length<2)return;const es=ids.map(id=>deliveryEntries.find(e=>e.id===id)).filter(Boolean);const{pu,tm,rg}=_rbSplit(es);rg.sort((a,b)=>_rbDistO(a)-_rbDistO(b));tm.sort((a,b)=>_rbDistO(a)-_rbDistO(b));_rbApply(drvId,[...pu,...tm,...rg]);};
+const rbSortFurthest=(drvId)=>{const ids=routeOrders[drvId]||[];if(ids.length<2)return;const es=ids.map(id=>deliveryEntries.find(e=>e.id===id)).filter(Boolean);const{pu,tm,rg}=_rbSplit(es);rg.sort((a,b)=>_rbDistO(b)-_rbDistO(a));tm.sort((a,b)=>_rbDistO(b)-_rbDistO(a));_rbApply(drvId,[...pu,...tm,...rg]);};
+const rbSortByTime=(drvId)=>{const ids=routeOrders[drvId]||[];if(ids.length<2)return;const es=ids.map(id=>deliveryEntries.find(e=>e.id===id)).filter(Boolean);const{pu,tm,rg}=_rbSplit(es);tm.sort((a,b)=>_rbParseTime(a.dueBy)-_rbParseTime(b.dueBy));rg.sort((a,b)=>_rbDistO(a)-_rbDistO(b));_rbApply(drvId,[...pu,...tm,...rg]);};
+const rbSortShortest=(drvId)=>{const ids=routeOrders[drvId]||[];if(ids.length<2)return;const es=ids.map(id=>deliveryEntries.find(e=>e.id===id)).filter(Boolean);const{pu}=_rbSplit(es);const all=es.filter(e=>!pu.includes(e));const sorted=[];const rem=[...all];let cur=pu.length?(_rbCoord(pu[pu.length-1])||_rbOrigin):_rbOrigin;while(rem.length){let bi=0,bd=Infinity;rem.forEach((e,i)=>{const c=_rbCoord(e);if(!c)return;const d=_rbDist(cur,c);if(d<bd){bd=d;bi=i;}});const nx=rem.splice(bi,1)[0];const nc=_rbCoord(nx);if(nc)cur=nc;sorted.push(nx);}_rbApply(drvId,[...pu,...sorted]);};
+const rbSortReverse=(drvId)=>{const ids=routeOrders[drvId]||[];if(ids.length<2)return;const es=ids.map(id=>deliveryEntries.find(e=>e.id===id)).filter(Boolean);const{pu}=_rbSplit(es);const np=es.filter(e=>!pu.includes(e));np.reverse();_rbApply(drvId,[...pu,...np]);};
+const RB_SORT_OPTIONS=[
+{icon:"📍",label:"Closest → Furthest",fn:rbSortClosest},
+{icon:"🏁",label:"Furthest → Closest",fn:rbSortFurthest},
+{icon:"⏰",label:"By Time Constraint",fn:rbSortByTime},
+{icon:"🧭",label:"Shortest Distance",fn:rbSortShortest},
+{icon:"🔄",label:"Reverse Route",fn:rbSortReverse},
+];
+
 const handleStopClick=(entryId)=>{
 if(!activeDriver)return;
-const entry=entries.find(e=>e.id===entryId);
+const entry=deliveryEntries.find(e=>e.id===entryId);
 if(!entry)return;
 
 /* If already in this driver's route, remove it */
@@ -1422,7 +1537,7 @@ return(
 <div>
 <div style={{padding:"12px 4px 8px"}}>
 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-<h2 style={{margin:0,fontSize:16,fontWeight:600}}>Build Routes — {entries.length} stops</h2>
+<h2 style={{margin:0,fontSize:16,fontWeight:600}}>Build Routes — {deliveryEntries.length} stops</h2>
 <button onClick={onBack} style={{background:"#e7e5e4",border:"none",borderRadius:8,padding:"6px 12px",cursor:"pointer",fontSize:12,fontWeight:600,color:"#57534e"}}>← Back</button>
 </div>
 <p style={{margin:"0 0 12px",fontSize:12,color:"#78716c"}}>Select a driver, then tap stops on the map in delivery order.</p>
@@ -1470,10 +1585,18 @@ return(
 <div style={{width:18,height:18,borderRadius:6,background:DCOL[di],display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,color:"#fff",fontWeight:700}}>{drv.name.charAt(0)}</div>
 <span style={{fontSize:13,fontWeight:700}}>{drv.name}</span>
 <span style={{fontSize:11,color:"#a8a29e"}}>— {ids.length} stops</span>
+{ids.length>=2&&<div style={{position:"relative",marginLeft:"auto"}}>
+<button onClick={()=>setRbSortMenu(rbSortMenu===drv.id?null:drv.id)} style={{background:"linear-gradient(135deg,#2563eb,#1d4ed8)",border:"none",borderRadius:6,padding:"5px 8px",cursor:"pointer",fontSize:10,fontWeight:700,color:"#fff"}}>⚡ Route ▾</button>
+{rbSortMenu===drv.id&&<><div style={{position:"fixed",inset:0,zIndex:199}} onClick={()=>setRbSortMenu(null)}/>
+<div style={{position:"absolute",top:"100%",right:0,zIndex:200,background:"#fff",border:"1px solid #e7e5e4",borderRadius:12,padding:6,marginTop:4,boxShadow:"0 12px 40px rgba(0,0,0,0.2)",width:220}}>
+<div style={{fontSize:12,fontWeight:700,color:DCOL[di],padding:"6px 10px",borderBottom:"1px solid #f5f5f4",marginBottom:4}}>{drv.name} — Route Order</div>
+{RB_SORT_OPTIONS.map((opt,oi)=><button key={oi} onClick={()=>opt.fn(drv.id)} style={{display:"flex",alignItems:"center",gap:8,width:"100%",textAlign:"left",background:"none",border:"none",padding:"9px 10px",cursor:"pointer",borderRadius:8,fontSize:11,fontWeight:600,color:"#1c1917"}}><span style={{fontSize:14}}>{opt.icon}</span><span>{opt.label}</span></button>)}
+</div></>}
+</div>}
 </div>
 <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
 {ids.map((id,oi)=>{
-const s=entries.find(e=>e.id===id);
+const s=deliveryEntries.find(e=>e.id===id);
 if(!s)return null;
 return(
 <div key={id} style={{display:"flex",alignItems:"center",gap:4,background:"#f5f5f4",borderRadius:6,padding:"3px 8px"}}>
@@ -1628,6 +1751,13 @@ const[multiSelect,setMultiSelect]=useState(false);const[multiChecked,setMultiChe
 const[driverViewId,setDriverViewId]=useState(null);
 const[customInstr,setCustomInstr]=useState(()=>lsGet(LS_CUSTOM_INSTR,{}));
 const[showAddCustomDel,setShowAddCustomDel]=useState(false);
+/* Custom delivery stops added per customer — persisted to Firebase */
+const[customStops,setCustomStops]=useState(()=>{
+const stored=lsGet("dd_custom_stops",{});
+/* Populate address cache */
+Object.values(stored).forEach(stops=>{if(Array.isArray(stops))stops.forEach(s=>{if(s.addr&&s.s)_customAddrCache[s.s]=s.addr;});});
+return stored;
+}); /* {customerName: [{s:"name",r:100,addr:"...",note:"..."}]} */
 const[mapActiveDrv,setMapActiveDrv]=useState(null); /* driver selected for click-to-assign on Live Routes map */
 const[driverLocs,setDriverLocs]=useState({}); /* {driverId: {lat,lng,updatedAt}} */
 const[invoices,setInvoices]=useState([]);
@@ -1652,8 +1782,10 @@ const[showChat,setShowChat]=useState(false);
 const[chatMessages,setChatMessages]=useState([]);
 const[chatInput,setChatInput]=useState("");
 const[chatLoading,setChatLoading]=useState(false);
+const[chatImage,setChatImage]=useState(null); /* {base64, preview} */
 /* 2-Way Messaging */
 const[showMsgPanel,setShowMsgPanel]=useState(false);
+const[showMoreMenu,setShowMoreMenu]=useState(false);
 const[msgChannel,setMsgChannel]=useState(null); /* null=group, driverId=private */
 const[msgInput,setMsgInput]=useState("");
 const[allMessages,setAllMessages]=useState({}); /* {channelKey: [{id,from,text,time,fromName},...]} */
@@ -1671,6 +1803,7 @@ const[noteText,setNoteText]=useState("");
 const[savedQuotes,setSavedQuotes]=useState(()=>lsGet("dd_quotes",[]));
 const[quoteFormOpen,setQuoteFormOpen]=useState(false);
 const[qCust,setQCust]=useState("");
+const[qPickup,setQPickup]=useState(""); /* selected pickup location for quote customers */
 const[qStop,setQStop]=useState("");
 const[qAddr,setQAddr]=useState("");
 const[qRate,setQRate]=useState("");
@@ -1679,6 +1812,32 @@ const[qMiles,setQMiles]=useState("");
 const[qLiftgate,setQLiftgate]=useState(false);
 const[qGravel,setQGravel]=useState(false);
 const[qExtraPallets,setQExtraPallets]=useState(false);
+const[qCalcLoading,setQCalcLoading]=useState(false);
+const[qCalcError,setQCalcError]=useState("");
+const calcQuoteMiles=()=>{
+  /* Determine origin: pickup address from selected customer/pickup */
+  let origin="";
+  const qc=QUOTE_CUSTOMERS.find(q=>q.name===qCust);
+  if(qc&&qc.pickups){
+    if(qPickup){const p=qc.pickups.find(x=>x.label===qPickup);if(p)origin=p.addr;}
+    else if(qc.pickups.length===1)origin=qc.pickups[0].addr;
+  }
+  if(!origin){/* Try PICKUP_SOURCES for contract customers */
+    const ps=PICKUP_SOURCES.find(s=>s.customer===qCust);if(ps)origin=ps.addr;
+  }
+  if(!origin||!qAddr){setQCalcError(!origin?"Select pickup location first":"Enter delivery address");return;}
+  if(!window.google?.maps?.DistanceMatrixService){setQCalcError("Google Maps not loaded");return;}
+  setQCalcLoading(true);setQCalcError("");
+  try{
+    const svc=new window.google.maps.DistanceMatrixService();
+    svc.getDistanceMatrix({origins:[origin],destinations:[qAddr],travelMode:window.google.maps.TravelMode.DRIVING,unitSystem:window.google.maps.UnitSystem.IMPERIAL},(resp,status)=>{
+      setQCalcLoading(false);
+      if(status==="OK"&&resp.rows[0]?.elements[0]?.status==="OK"){
+        setQMiles(parseFloat(resp.rows[0].elements[0].distance.text.replace(/,/g,"")).toFixed(1));
+      }else{setQCalcError("Could not calculate distance");}
+    });
+  }catch(e){setQCalcLoading(false);setQCalcError("Maps error");}
+};
 const[qPushDay,setQPushDay]=useState(null); /* {quoteId, targetDk} */
 
 const wd=getWeekDates(wo);const dk=`${wo}-${sd}`;const dl=log[dk]||[];
@@ -1698,11 +1857,23 @@ useEffect(()=>{
 
 const firebaseReady=useRef(false);
 const skipSyncCount=useRef(0);
+const driverChangeSource=useRef("init"); /* "init" | "firebase" | "user" */
 
 /* ── FIREBASE SYNC ── */
 useEffect(()=>{
   const unsubDrivers=subscribeDrivers((fbDrivers)=>{
-    if(fbDrivers&&fbDrivers.length>0)setDrivers(fbDrivers);
+    if(fbDrivers&&fbDrivers.length>0){
+      driverChangeSource.current="firebase";
+      setDrivers(prev=>{
+        /* Always keep any local drivers that aren't in Firebase (newly added) */
+        const localOnly=prev.filter(ld=>!fbDrivers.find(fd=>fd.id===ld.id));
+        if(localOnly.length>0){
+          /* We have drivers locally that Firebase doesn't know about yet — keep them */
+          return[...fbDrivers,...localOnly];
+        }
+        return fbDrivers;
+      });
+    }
   });
   const unsubEmser=subscribeEmserHours((fbEmH)=>{setEmH(fbEmH);});
   const unsubNotes=subscribeDispatchNotes((fbNotes)=>{setDispNotes(p=>({...p,...fbNotes}));});
@@ -1710,8 +1881,13 @@ useEffect(()=>{
   const unsubQuotes=subscribeQuotes((fbQuotes)=>{setSavedQuotes(fbQuotes);});
   const unsubLocs=subscribeDriverLocations((locs)=>{setDriverLocs(locs);});
   const unsubInv=subscribeInvoices((inv)=>{setInvoices(inv);});
+  const unsubCustomStops=subscribeCustomStops((data)=>{
+    setCustomStops(data);lsSet("dd_custom_stops",data);
+    /* Populate address cache from custom stops */
+    Object.values(data).forEach(stops=>{if(Array.isArray(stops))stops.forEach(s=>{if(s.addr&&s.s)_customAddrCache[s.s]=s.addr;});});
+  });
   firebaseReady.current=true;
-  return()=>{unsubDrivers();unsubEmser();unsubNotes();unsubShifts();unsubQuotes();unsubLocs();unsubInv();};
+  return()=>{unsubDrivers();unsubEmser();unsubNotes();unsubShifts();unsubQuotes();unsubLocs();unsubInv();unsubCustomStops();};
 },[]);
 
 useEffect(()=>{
@@ -1729,17 +1905,33 @@ useEffect(()=>{
   return()=>unsubManifests();
 },[wo]);
 
+const prevLogRef=useRef({});
 useEffect(()=>{
   if(!firebaseReady.current)return;
   const timer=setTimeout(()=>{
-    skipSyncCount.current++;
-    saveManifestDay(wo,sd,log[dk]||[]).catch(e=>console.error("Save:",e));
+    /* Scan ALL day keys in log for changes — saves any week, not just current */
+    Object.keys(log).forEach(dayKey=>{
+      const cur=JSON.stringify(log[dayKey]||[]);
+      const prev=prevLogRef.current[dayKey]||"[]";
+      if(cur!==prev){
+        prevLogRef.current[dayKey]=cur;
+        const parts=dayKey.split("-");
+        const weekOff=parseInt(parts[0]);
+        const dayIdx=parseInt(parts[1]);
+        if(!isNaN(weekOff)&&dayIdx>=0&&dayIdx<=4){
+          skipSyncCount.current++;
+          saveManifestDay(weekOff,dayIdx,log[dayKey]||[]).catch(e=>console.error("Save "+dayKey+":",e));
+        }
+      }
+    });
   },300);
   return()=>clearTimeout(timer);
-},[log,dk]);
+},[log]);
 
 useEffect(()=>{
   if(!firebaseReady.current)return;
+  /* Only save to Firebase if this was a user-initiated change, not a Firebase update */
+  if(driverChangeSource.current==="firebase"){driverChangeSource.current="user";return;}
   const timer=setTimeout(()=>{saveDrivers(drivers).catch(e=>console.error("Drv save:",e));},500);
   return()=>clearTimeout(timer);
 },[drivers]);
@@ -1794,6 +1986,12 @@ useEffect(()=>{
   return()=>clearTimeout(timer);
 },[emserShifts]);
 useEffect(()=>{lsSet("dd_quotes",savedQuotes);},[savedQuotes]);
+useEffect(()=>{lsSet("dd_custom_stops",customStops);},[customStops]);
+useEffect(()=>{
+  if(!firebaseReady.current)return;
+  const timer=setTimeout(()=>{saveCustomStops(customStops).catch(e=>console.error("CustomStops save:",e));},500);
+  return()=>clearTimeout(timer);
+},[customStops]);
 
 /* ── QUOTE HELPERS ── */
 const calcQuoteRate=(miles,liftgate,gravel,extraPallets)=>{
@@ -1809,10 +2007,10 @@ const miles=parseFloat(qMiles)||0;
 const manualRate=parseFloat(qRate)||0;
 const calc=miles>0?calcQuoteRate(miles,qLiftgate,qGravel,qExtraPallets):null;
 const finalRate=manualRate||calc?.total||0;
-const q={id:Date.now()+Math.random(),num:savedQuotes.length+1,customer:qCust,stop:qStop,addr:qAddr,rate:finalRate,miles:miles||null,liftgate:qLiftgate,gravel:qGravel,extraPallets:qExtraPallets,note:qNote,calc,createdAt:new Date().toISOString(),status:"pending"};
+const q={id:Date.now()+Math.random(),num:savedQuotes.length+1,customer:qCust,stop:qStop,addr:qAddr,rate:finalRate,miles:miles||null,liftgate:qLiftgate,gravel:qGravel,extraPallets:qExtraPallets,note:qNote,pickup:qPickup||null,calc,createdAt:new Date().toISOString(),status:"pending"};
 setSavedQuotes(p=>[q,...p]);
 saveQuoteToFB(q).catch(e=>console.error("Quote save:",e));
-setQCust("");setQStop("");setQAddr("");setQRate("");setQNote("");setQMiles("");setQLiftgate(false);setQGravel(false);setQExtraPallets(false);setQuoteFormOpen(false);
+setQCust("");setQStop("");setQAddr("");setQRate("");setQNote("");setQMiles("");setQLiftgate(false);setQGravel(false);setQExtraPallets(false);setQPickup("");setQuoteFormOpen(false);
 showToast("Quote #"+q.num+" saved");
 };
 const pushQuoteToDay=(quoteId,targetDk)=>{
@@ -2167,9 +2365,9 @@ const getHistoryEntries=()=>{const all=[];for(let w=wo;w>=wo-histWeekRange;w--){
 const histAll=getHistoryEntries();
 const histFiltered=histAll.filter(e=>{const q=histSearch.toLowerCase();return(!q||e.stop.toLowerCase().includes(q)||e.customer.toLowerCase().includes(q)||(e.addr||"").toLowerCase().includes(q))&&(!histCustFilter||e.customer===histCustFilter)&&(!histDrvFilter||e.driverId===Number(histDrvFilter));});
 
-const addDrvr=()=>{if(!newDN.trim()||drivers.length>=4)return;setDrivers(p=>[...p,{id:Date.now(),name:newDN.trim(),phone:newDP.trim()}]);setNewDN("");setNewDP("");};
-const saveDrv=id=>{if(!editNm.trim())return;setDrivers(p=>p.map(d=>d.id===id?{...d,name:editNm.trim(),phone:editPh.trim()}:d));setEditDrv(null);};
-const rmDrv=id=>{if(drivers.length<=1)return;setDrivers(p=>p.filter(d=>d.id!==id));};
+const addDrvr=()=>{if(!newDN.trim())return;driverChangeSource.current="user";setDrivers(p=>[...p,{id:Date.now(),name:newDN.trim(),phone:newDP.trim()}]);setNewDN("");setNewDP("");};
+const saveDrv=id=>{if(!editNm.trim())return;driverChangeSource.current="user";setDrivers(p=>p.map(d=>d.id===id?{...d,name:editNm.trim(),phone:editPh.trim()}:d));setEditDrv(null);};
+const rmDrv=id=>{if(drivers.length<=1)return;driverChangeSource.current="user";setDrivers(p=>p.filter(d=>d.id!==id));};
 const drvEntries=did=>dl.filter(e=>e.driverId===did);
 const handleDrop=(drvId,toIdx)=>{
 if(!dragSrc){setDragSrc(null);setDragOver(null);return;}
@@ -2199,8 +2397,8 @@ const copyManifest=drvId=>{const t=buildManifestText(drvId);navigator.clipboard.
 const textManifest=drvId=>{const drv=drivers.find(d=>d.id===drvId);window.open(`sms:${drv?.phone||""}?&body=${encodeURIComponent(buildManifestText(drvId))}`,"_blank");};
 const printContent=(title,fn)=>{const w=window.open("","_blank","width=400,height=600");if(!w){showToast("Print blocked here — works when published");return;}w.document.write(`<!DOCTYPE html><html><head><title>${title}</title><style>body{font-family:'Segoe UI',system-ui,sans-serif;padding:20px;font-size:13px;color:#1c1917}h1{font-size:18px;margin:0 0 4px}h2{font-size:15px;margin:16px 0 8px;border-bottom:1px solid #ccc;padding-bottom:4px}.stop{padding:6px 0;border-bottom:1px dotted #e5e5e5}.addr{font-size:11px;color:#78716c}.note{font-size:11px;color:#a8a29e;font-style:italic}.instr{font-size:12px;color:#2563eb;font-weight:600}@media print{body{padding:10px}}</style></head><body>`);w.document.write(fn());w.document.write("</body></html>");w.document.close();setTimeout(()=>w.print(),300);};
 const printManifest=drvId=>{const drv=drivers.find(d=>d.id===drvId);const de=drvEntries(drvId);printContent(`Manifest - ${drv?.name}`,()=>{let h=`<h1>DAVIS DELIVERY DELIVERIES</h1><div style="color:#78716c">${wd[sd].name} — ${wd[sd].date}</div><h2>${drv?.name||"Unassigned"} — ${de.length} stops</h2>`;de.forEach((e,i)=>{const tag=e.stopType==="pickup"?"<b style='color:#1e40af'>[PICKUP]</b> ":e.priority?"<b style='color:#92400e'>[PRIORITY]</b> ":"";h+=`<div class="stop"><b>${i+1}.</b> ${tag}<b>${e.stop}</b><br><span style="color:#78716c;font-size:11px">${e.customer}</span>`;if(e.addr)h+=`<br><span class="addr">${e.addr}</span>`;if(e.note)h+=`<br><span class="note">${e.note}</span>`;if(e.instructions)h+=`<br><span class="instr">📋 ${e.instructions}</span>`;h+=`</div>`;});return h;});};
-const printDailyLog=()=>{printContent(`Daily Log`,()=>{let h=`<h1>DAVIS DELIVERY — Daily Log</h1><div style="color:#78716c">${wd[sd].name} — ${wd[sd].date}</div><div style="font-size:16px;font-weight:700;margin:8px 0;color:#16a34a">${fmt(dc.total)}</div>`;dl.forEach(e=>{const drv=drivers.find(d=>d.id===e.driverId);h+=`<div class="stop"><b>${e.customer}</b> — ${e.stop}`;if(drv)h+=` <span style="color:#2563eb;font-size:11px">[${drv.name}]</span>`;h+=`<br>${e.isHourly?"Hourly":fmt(e.baseRate)}`;if(e.addr)h+=`<br><span class="addr">${e.addr}</span>`;if(e.instructions)h+=`<br><span class="instr">📋 ${e.instructions}</span>`;if(e.shipPlan)h+=`<br><b style="color:#ea580c">Ship Plan #: ${e.shipPlan}</b>`;h+=`</div>`;});return h;});};
-const printWeekly=()=>{printContent("Weekly",()=>{let h=`<h1>DAVIS DELIVERY — Weekly Summary</h1><div style="font-size:16px;font-weight:700;color:#16a34a">${fmt(wkT)}</div>`;DAYS.forEach((day,i)=>{const{entries,calc}=wkD[i];if(!entries.length)return;h+=`<h2>${day} — ${wd[i].date} ${fmt(calc.total)}</h2>`;entries.forEach(e=>{h+=`<div class="stop">${e.customer} — ${e.stop} ${e.isHourly?"HR":fmt(e.baseRate)}`;if(e.shipPlan)h+=` <b style="color:#ea580c">SP# ${e.shipPlan}</b>`;h+=`</div>`;});});return h;});};
+const printDailyLog=()=>{printContent(`Daily Log`,()=>{let h=`<h1>DAVIS DELIVERY — Daily Log</h1><div style="color:#78716c">${wd[sd].name} — ${wd[sd].date}</div><div style="font-size:16px;font-weight:700;margin:8px 0;color:#16a34a">${fmt(dc.total)}</div>`;dl.filter(e=>e.stopType!=="pickup").forEach(e=>{const drv=drivers.find(d=>d.id===e.driverId);h+=`<div class="stop"><b>${e.customer}</b> — ${e.stop}`;if(drv)h+=` <span style="color:#2563eb;font-size:11px">[${drv.name}]</span>`;h+=`<br>${e.isHourly?"Hourly":fmt(e.baseRate)}`;if(e.addr)h+=`<br><span class="addr">${e.addr}</span>`;if(e.instructions)h+=`<br><span class="instr">📋 ${e.instructions}</span>`;if(e.shipPlan)h+=`<br><b style="color:#ea580c">Ship Plan #: ${e.shipPlan}</b>`;h+=`</div>`;});return h;});};
+const printWeekly=()=>{printContent("Weekly",()=>{let h=`<h1>DAVIS DELIVERY — Weekly Summary</h1><div style="font-size:16px;font-weight:700;color:#16a34a">${fmt(wkT)}</div>`;DAYS.forEach((day,i)=>{const{entries,calc}=wkD[i];if(!entries.length)return;h+=`<h2>${day} — ${wd[i].date} ${fmt(calc.total)}</h2>`;entries.filter(e=>e.stopType!=="pickup").forEach(e=>{h+=`<div class="stop">${e.customer} — ${e.stop} ${e.isHourly?"HR":fmt(e.baseRate)}`;if(e.shipPlan)h+=` <b style="color:#ea580c">SP# ${e.shipPlan}</b>`;h+=`</div>`;});});return h;});};
 
 /* ── NOTIFICATIONS ── */
 const sendNotification=(drvId,msg,type,viaSms=true)=>{
@@ -2292,6 +2490,12 @@ You can help with:
 - Answering questions about customer rates, addresses, instructions
 - Flagging scheduling conflicts between time-constrained stops
 - Drafting invoice summaries
+- PARSING DISPATCH PHOTOS: When the user sends a photo of a dispatch email (e.g. from Emser Tile), extract each delivery stop and respond with ONLY a JSON block like this:
+\`\`\`json
+{"stops":[{"stop":"Customer Name","weight":5000,"note":"from Norcross"},{"stop":"Another Customer","weight":8000,"note":"from Roswell"}]}
+\`\`\`
+Match stop names to known customers: AFD = "Advanced Flooring Design - Mableton", ELITE = "Elite Flooring - Norcross", FWORX = "Floorworx - Norcross", IDLEWOOD = "Idlewood - Norcross", VALUFLOR = "Valufloor - Doraville", BEC = "BEC - Alpharetta", PEACHWOOD = "Peachwood Floor Covering", AMERICAN FLOORING = "American Flooring Services", DCO = varies by location, HILLMAN = "Hillman - Sugar Hill", BRITTS = "Britts - Lawrenceville", STOCCO = "Stocco - Alpharetta", NE CORNER = "NE Corner - Flowery Branch", PREMIER = "Premier - Suwanee", PROSOURCE = varies by location, VANGUARD = "Vanguard - Norcross", SE COMMERCIAL = "SE Commercial - Woodstock", PRECISION = "Precision Flooring - Norcross", ATL WEST = "Atlanta West - Lithia Springs", ATL FLOORING = "Atlanta Flooring - Suwanee", SHERWIN = varies by location, GEL = "Gel & Associates - Atlanta", FLOORING DESIGN = "Flooring Design Group - Doraville", D3 = "D3 - Woodstock", PRESTIGIOUS = "Prestigious - Alpharetta", MADISON = "Madison Flooring Group", CONSTRUCTION RESOURCES = "Construction Resources - Decatur", NOCO = "NOCO Contracting", PEACHWOOD SUWANEE = "Peachwood Floor Covering".
+Include weight in lbs (convert K to thousands, e.g. 8K = 8000). Note which pickup location (Norcross or Roswell) each stop comes from.
 
 When suggesting route orders, ALWAYS show time constraints first, then order remaining stops by geographic proximity in the Atlanta metro.
 If two stops have conflicting time windows, flag the conflict clearly before suggesting a route.
@@ -2301,16 +2505,28 @@ Never make up addresses or rates — only use data provided above.`;
 };
 
 const sendChat=async()=>{
-if(!chatInput.trim()||chatLoading)return;
-const userMsg={role:"user",content:chatInput.trim()};
+if((!chatInput.trim()&&!chatImage)||chatLoading)return;
+const hasImage=!!chatImage;
+/* Build user message content — text only or multimodal */
+let userContent;
+if(hasImage){
+  const parts=[];
+  parts.push({type:"image",source:{type:"base64",media_type:"image/jpeg",data:chatImage.base64}});
+  parts.push({type:"text",text:chatInput.trim()||"Parse this dispatch email and extract all delivery stops as JSON."});
+  userContent=parts;
+}else{
+  userContent=chatInput.trim();
+}
+const userMsg={role:"user",content:userContent,_preview:hasImage?chatImage.preview:null,_text:chatInput.trim()||(hasImage?"📷 Dispatch photo":"")};
 const newMessages=[...chatMessages,userMsg];
 setChatMessages(newMessages);
 setChatInput("");
+setChatImage(null);
 setChatLoading(true);
 try{
 const payload={
 model:"claude-haiku-4-5-20251001",
-max_tokens:1024,
+max_tokens:2048,
 system:buildSystemPrompt(),
 messages:newMessages.map(m=>({role:m.role,content:m.content})),
 };
@@ -2323,7 +2539,7 @@ const txt=await r.text();
 if(r.ok){try{data=JSON.parse(txt);if(!data?.content)data=null;}catch(e){data=null;}}
 if(!data)errDetails="Netlify function returned: "+txt.slice(0,300);
 }catch(e){errDetails="Netlify function unreachable: "+e.message;}
-/* Attempt 2: Direct Anthropic API (works from deployed site with CORS header) */
+/* Attempt 2: Direct Anthropic API */
 if(!data){
 try{
 const r2=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify(payload)});
@@ -2333,7 +2549,16 @@ else{const t2=await r2.text();errDetails+="\nDirect API: "+t2.slice(0,200);}
 }
 if(data&&data.content){
 const assistantText=data.content.map(c=>c.type==="text"?c.text:"").join("")||"No response.";
-setChatMessages(prev=>[...prev,{role:"assistant",content:assistantText}]);
+/* Check if response contains parseable stops JSON */
+let parsedStops=null;
+try{
+  const jsonMatch=assistantText.match(/```json\s*([\s\S]*?)```/)||assistantText.match(/(\{[\s\S]*"stops"\s*:\s*\[[\s\S]*\]\s*\})/);
+  if(jsonMatch){
+    const parsed=JSON.parse(jsonMatch[1]||jsonMatch[0]);
+    if(parsed.stops&&Array.isArray(parsed.stops))parsedStops=parsed.stops;
+  }
+}catch(e){}
+setChatMessages(prev=>[...prev,{role:"assistant",content:assistantText,_stops:parsedStops}]);
 }else{
 setChatMessages(prev=>[...prev,{role:"assistant",content:"AI unavailable.\n\n"+errDetails+"\n\nTo fix:\n1. Set ANTHROPIC_API_KEY in Netlify env vars\n2. Redeploy the site\n3. Ensure the API key has credits"}]);
 }
@@ -2832,14 +3057,12 @@ return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius
 {/* Entry list */}
 {dl.length===0?<div style={{textAlign:"center",padding:"60px 20px",color:"#a8a29e"}}><div style={{fontSize:40,marginBottom:12}}>🚚</div><p style={{fontSize:14,margin:0}}>No deliveries logged for this day</p></div>
 :<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-{dl.map(entry=>{const c=getCustColor(entry.customer);const drv=drivers.find(d=>d.id===entry.driverId);const di=drivers.findIndex(d=>d.id===entry.driverId);const done=entry.status==="departed";const onSite=entry.status==="arrived";const isImetco=entry.customer==="IMETCO";return(
-<div key={entry.id} style={{background:"#fff",border:"1px solid #e7e5e4",borderRadius:12,padding:"12px 16px",borderLeft:`4px solid ${entry.priority?"#f59e0b":entry.stopType==="pickup"?"#2563eb":c.accent}`}}>
+{dl.filter(e=>e.stopType!=="pickup").map(entry=>{const c=getCustColor(entry.customer);const drv=drivers.find(d=>d.id===entry.driverId);const di=drivers.findIndex(d=>d.id===entry.driverId);const done=entry.status==="departed";const onSite=entry.status==="arrived";const isImetco=entry.customer==="IMETCO";return(
+<div key={entry.id} style={{background:"#fff",border:"1px solid #e7e5e4",borderRadius:12,padding:"12px 16px",borderLeft:`4px solid ${entry.priority?"#f59e0b":c.accent}`}}>
 <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
 <div style={{flex:1}}>
 <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:3,flexWrap:"wrap"}}>
 <span style={{fontSize:11,fontWeight:600,color:c.accent,textTransform:"uppercase"}}>{entry.customer}</span>
-{entry.stopType==="pickup"&&<span style={{fontSize:9,background:"#2563eb",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700}}>PICKUP</span>}
-{entry.stopType!=="pickup"&&<span style={{fontSize:9,background:"#16a34a",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700}}>DELIVERY</span>}
 {entry.priority&&<span style={{fontSize:9,background:"#f59e0b",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700}}>PRIORITY</span>}
 {done&&<span style={{fontSize:9,background:"#16a34a",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700}}>DONE</span>}
 {onSite&&!done&&<span style={{fontSize:9,background:"#f59e0b",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700}}>ON SITE</span>}
@@ -2921,7 +3144,7 @@ return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius
 {drivers.map((drv,di)=>{const mins=shiftByDrv[drv.id]||0;if(!mins)return null;const initials=drv.name.split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase();return(<span key={drv.id} style={{fontSize:11,background:DCOL[di],color:"#fff",padding:"1px 6px",borderRadius:4,fontWeight:600}}>{initials} {formatMins(mins)}</span>);})}
 <span style={{marginLeft:"auto",fontSize:12,fontWeight:700,color:"#1d4ed8",fontVariantNumeric:"tabular-nums"}}>{formatMins(shiftMins)} total</span>
 </div>}
-{entries.map(entry=>{const c=getCustColor(entry.customer);const drv=drivers.find(d=>d.id===entry.driverId);const di2=drivers.findIndex(d=>d.id===entry.driverId);return(<div key={entry.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"5px 8px 5px 14px",borderLeft:`3px solid ${c.accent}`,marginBottom:3,background:"#fff",borderRadius:"0 8px 8px 0"}}>
+{entries.filter(e=>e.stopType!=="pickup").map(entry=>{const c=getCustColor(entry.customer);const drv=drivers.find(d=>d.id===entry.driverId);const di2=drivers.findIndex(d=>d.id===entry.driverId);return(<div key={entry.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"5px 8px 5px 14px",borderLeft:`3px solid ${c.accent}`,marginBottom:3,background:"#fff",borderRadius:"0 8px 8px 0"}}>
 <div style={{display:"flex",alignItems:"center",gap:6,flex:1,minWidth:0}}>
 <span style={{fontSize:11,color:c.accent,fontWeight:600,flexShrink:0}}>{entry.customer}</span>
 <span style={{fontSize:12,color:"#57534e",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{entry.stop}</span>
@@ -3096,10 +3319,17 @@ return(<div>
 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
 <div>
 <label style={{fontSize:11,fontWeight:600,color:"#57534e",display:"block",marginBottom:4}}>Customer</label>
-<select value={qCust} onChange={e=>{setQCust(e.target.value);setQStop("");}} style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px",fontSize:13,outline:"none",background:"#fff"}}>
+<select value={qCust} onChange={e=>{setQCust(e.target.value);setQStop("");setQPickup("");}} style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px",fontSize:13,outline:"none",background:"#fff"}}>
 <option value="">Select customer...</option>{allCustNames.map(c=><option key={c} value={c}>{c}</option>)}<option value="__manual">Manual Entry</option>
 </select>
 </div>
+{(()=>{const qc=QUOTE_CUSTOMERS.find(q=>q.name===qCust);if(qc&&qc.pickups&&qc.pickups.length>1)return(<div style={{gridColumn:"1 / -1",marginBottom:4}}>
+<label style={{fontSize:11,fontWeight:600,color:qPickup?"#57534e":"#dc2626",display:"block",marginBottom:4}}>⚠ Pickup Location</label>
+<div style={{display:"flex",gap:6}}>
+{qc.pickups.map(p=><button key={p.label} onClick={()=>setQPickup(p.label)} style={{padding:"8px 16px",borderRadius:8,border:qPickup===p.label?"2px solid #2563eb":"2px solid #e7e5e4",cursor:"pointer",fontSize:13,fontWeight:700,background:qPickup===p.label?"#2563eb":"#fff",color:qPickup===p.label?"#fff":"#57534e"}}>{p.label}</button>)}
+</div>
+{qPickup&&<div style={{fontSize:11,color:"#78716c",marginTop:4}}>{qc.pickups.find(p=>p.label===qPickup)?.addr}</div>}
+</div>);return null;})()}
 <div>
 <label style={{fontSize:11,fontWeight:600,color:"#57534e",display:"block",marginBottom:4}}>Delivery To</label>
 {qCust&&qCust!=="__manual"&&getDeliveries(qCust).length>0?
@@ -3112,11 +3342,13 @@ return(<div>
 <div style={{marginBottom:12}}>
 <label style={{fontSize:11,fontWeight:600,color:"#57534e",display:"block",marginBottom:4}}>Address</label>
 <AddressInput value={qAddr} onChange={setQAddr} placeholder="Delivery address" style={{fontSize:13}}/>
+{qAddr&&<button onClick={calcQuoteMiles} disabled={qCalcLoading} style={{marginTop:6,background:"#1c1917",color:"#fff",border:"none",borderRadius:8,padding:"8px 16px",fontSize:12,fontWeight:600,cursor:"pointer",opacity:qCalcLoading?0.6:1}}>{qCalcLoading?"Calculating…":"📍 Calculate Distance"}</button>}
+{qCalcError&&<div style={{fontSize:11,color:"#dc2626",marginTop:4}}>{qCalcError}</div>}
 </div>
 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
 <div>
 <label style={{fontSize:11,fontWeight:600,color:"#57534e",display:"block",marginBottom:4}}>Distance (miles)</label>
-<input type="number" value={qMiles} onChange={e=>setQMiles(e.target.value)} placeholder="e.g. 25" style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px",fontSize:13,fontWeight:700,outline:"none",textAlign:"center"}}/>
+<input type="number" value={qMiles} onChange={e=>setQMiles(e.target.value)} placeholder="0" style={{width:"100%",border:qMiles?"2px solid #16a34a":"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px",fontSize:13,fontWeight:700,outline:"none",textAlign:"center",background:qMiles?"#f0fdf4":"#fff"}}/>
 {qMiles&&<div style={{fontSize:11,color:"#16a34a",fontWeight:700,marginTop:4}}>Auto: {fmt(calcQuoteRate(qMiles,qLiftgate,qGravel,qExtraPallets).total)}</div>}
 </div>
 <div>
@@ -3166,9 +3398,16 @@ return(<div>
 {q.calc&&<div style={{fontSize:10,color:"#78716c"}}>{fmt(q.calc.base)}+{fmt(q.calc.fuel)} fuel</div>}
 {!accepted&&<div style={{display:"flex",flexDirection:"column",gap:4,marginTop:8}}>
 {qPushDay&&qPushDay.quoteId===q.id?<div style={{display:"flex",flexDirection:"column",gap:4}}>
-<select onChange={e=>{if(e.target.value)pushQuoteToDay(q.id,e.target.value);}} defaultValue="" style={{border:"1px solid #16a34a",borderRadius:6,padding:"4px 6px",fontSize:10,outline:"none",background:"#f0fdf4"}}>
-<option value="">Pick day...</option>{DAYS.map((day,i)=><option key={i} value={`${wo}-${i}`}>{day} {wd[i].date}</option>)}<option value={`${wo+1}-0`}>Next Mon</option>
-</select>
+<input type="date" onChange={e=>{if(e.target.value){
+const target=new Date(e.target.value+"T12:00:00");const now=new Date();
+const tD=target.getDay();const tM=new Date(target);tM.setDate(target.getDate()-(tD===0?6:tD-1));
+const nD=now.getDay();const nM=new Date(now);nM.setDate(now.getDate()-(nD===0?6:nD-1));
+tM.setHours(0,0,0,0);nM.setHours(0,0,0,0);
+const weekOff=Math.round((tM-nM)/(7*24*60*60*1000));
+const dayIdx=tD===0?6:tD-1;
+if(dayIdx>=0&&dayIdx<=4){pushQuoteToDay(q.id,`${weekOff}-${dayIdx}`);}
+else{showToast("Pick a weekday (Mon-Fri)");}
+}}} style={{border:"1px solid #16a34a",borderRadius:6,padding:"6px 8px",fontSize:12,outline:"none",background:"#f0fdf4",fontWeight:600}}/>
 <button onClick={()=>setQPushDay(null)} style={{background:"none",border:"none",fontSize:9,color:"#78716c",cursor:"pointer"}}>Cancel</button>
 </div>
 :<button onClick={()=>setQPushDay({quoteId:q.id})} style={{background:"#16a34a",color:"#fff",border:"none",borderRadius:6,padding:"5px 10px",cursor:"pointer",fontSize:10,fontWeight:700}}>Push to Day</button>}
@@ -3276,7 +3515,7 @@ style={{width:"100%",border:"1px solid #d8b4fe",borderRadius:8,padding:"8px 10px
 {de.length>0&&<span style={{fontSize:9,color:"#78716c",fontVariantNumeric:"tabular-nums"}}>~{getDriverMiles(drv.id)}mi</span>}
 </div>
 <div style={{display:"flex",gap:3,flexWrap:"wrap"}}>
-{de.length>0&&<><button onClick={()=>printManifest(drv.id)} style={{background:"#e7e5e4",border:"none",borderRadius:5,padding:"3px 6px",cursor:"pointer",fontSize:9,color:"#57534e",fontWeight:600}}>Print</button><button onClick={()=>copyManifest(drv.id)} style={{background:"#dcfce7",border:"none",borderRadius:5,padding:"3px 6px",cursor:"pointer",fontSize:9,color:"#16a34a",fontWeight:600}}>Copy</button><button onClick={()=>textManifest(drv.id)} style={{background:"#dbeafe",border:"none",borderRadius:5,padding:"3px 6px",cursor:"pointer",fontSize:9,color:"#2563eb",fontWeight:600}}>Text</button></>}
+{de.length>0&&<><button onClick={()=>printManifest(drv.id)} style={{background:"#e7e5e4",border:"none",borderRadius:5,padding:"3px 6px",cursor:"pointer",fontSize:9,color:"#57534e",fontWeight:600}}>Print</button><button onClick={()=>textManifest(drv.id)} style={{background:"#dbeafe",border:"none",borderRadius:5,padding:"3px 6px",cursor:"pointer",fontSize:9,color:"#2563eb",fontWeight:600}}>Text</button></>}
 {de.length>=2&&<div style={{position:"relative"}}>
 <button onClick={()=>setSortMenuDrv(sortMenuDrv===drv.id?null:drv.id)} style={{background:"linear-gradient(135deg,#2563eb,#1d4ed8)",border:"none",borderRadius:5,padding:"3px 7px",cursor:"pointer",fontSize:9,color:"#fff",fontWeight:700}}>⚡ Route ▾</button>
 {sortMenuDrv===drv.id&&<><div style={{position:"fixed",inset:0,zIndex:199}} onClick={()=>setSortMenuDrv(null)}/>
@@ -3288,7 +3527,6 @@ style={{width:"100%",border:"1px solid #d8b4fe",borderRadius:8,padding:"8px 10px
 </div></>}
 </div>}
 <button onClick={()=>setInsertPickupFor({driverId:drv.id,afterIdx:-1})} style={{background:"#eff6ff",border:"none",borderRadius:5,padding:"3px 6px",cursor:"pointer",fontSize:9,color:"#2563eb",fontWeight:600}}>+PU</button>
-<button onClick={()=>{const slug=getDriverSlug(drv.name);const url=`${window.location.origin}${window.location.pathname}#/driver/${slug}`;setShowLinkModal({name:drv.name,url,phone:drv.phone||""});}} style={{background:"#f0fdf4",border:"none",borderRadius:5,padding:"3px 6px",cursor:"pointer",fontSize:9,color:"#16a34a",fontWeight:600}}>🔗</button>
 <button onClick={()=>{setNotifyDriver(drv.id);setNotifyCustomMsg("");}} style={{background:"#fef3c7",border:"none",borderRadius:5,padding:"3px 6px",cursor:"pointer",fontSize:9,color:"#92400e",fontWeight:600}}>Notify</button>
 <button onClick={()=>setDriverViewId(drv.id)} style={{background:"#f3e8f9",border:"none",borderRadius:5,padding:"3px 6px",cursor:"pointer",fontSize:9,color:"#7c3aed",fontWeight:600}}>View</button>
 <button onClick={()=>{setPreAssignDriver(drv.id);setView("add");setSelCust(null);setQuoteMode(null);}} style={{background:"#dcfce7",border:"none",borderRadius:5,padding:"3px 6px",cursor:"pointer",fontSize:9,color:"#16a34a",fontWeight:600}}>+</button>
@@ -3567,9 +3805,9 @@ onAssignStop={mapActiveDrv?(stopId,drvId)=>{assignInOrder(stopId,mapActiveDrv);}
 <div style={{display:"flex",gap:6,alignItems:"center"}}>
 <input value={newDN} onChange={e=>setNewDN(e.target.value)} placeholder="Name" style={{flex:2,border:"1px solid #d6d3d1",borderRadius:8,padding:"6px 10px",fontSize:13,outline:"none"}}/>
 <input value={newDP} onChange={e=>setNewDP(e.target.value)} placeholder="Phone (opt)" style={{flex:2,border:"1px solid #d6d3d1",borderRadius:8,padding:"6px 10px",fontSize:13,outline:"none"}}/>
-<button onClick={addDrvr} disabled={!newDN.trim()||drivers.length>=4} style={{background:newDN.trim()&&drivers.length<4?"#16a34a":"#d6d3d1",color:"#fff",border:"none",borderRadius:8,padding:"6px 12px",cursor:newDN.trim()&&drivers.length<4?"pointer":"default",fontSize:12,fontWeight:600,flexShrink:0}}>Add</button>
+<button onClick={addDrvr} disabled={!newDN.trim()} style={{background:newDN.trim()?"#16a34a":"#d6d3d1",color:"#fff",border:"none",borderRadius:8,padding:"6px 12px",cursor:newDN.trim()?"pointer":"default",fontSize:12,fontWeight:600,flexShrink:0}}>Add</button>
 </div>
-{drivers.length>=4&&<p style={{fontSize:10,color:"#a8a29e",margin:"6px 0 0"}}>Max 4 drivers reached</p>}
+
 </div>
 </div>
 </div>}
@@ -3623,8 +3861,15 @@ style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,width:"
 </div>}
 {chatMessages.map((msg,i)=>(
 <div key={i} style={{display:"flex",justifyContent:msg.role==="user"?"flex-end":"flex-start"}}>
-<div style={{maxWidth:"85%",padding:"10px 14px",borderRadius:msg.role==="user"?"14px 14px 4px 14px":"14px 14px 14px 4px",background:msg.role==="user"?BRAND.main:"#f5f5f4",color:msg.role==="user"?"#fff":"#1c1917",fontSize:13,lineHeight:1.5,whiteSpace:"pre-wrap",wordBreak:"break-word"}}>
-{msg.content}
+<div style={{maxWidth:"85%"}}>
+{msg._preview&&<img src={msg._preview} alt="dispatch" style={{maxWidth:"100%",maxHeight:150,borderRadius:12,marginBottom:4,objectFit:"cover"}}/>}
+<div style={{padding:"10px 14px",borderRadius:msg.role==="user"?"14px 14px 4px 14px":"14px 14px 14px 4px",background:msg.role==="user"?BRAND.main:"#f5f5f4",color:msg.role==="user"?"#fff":"#1c1917",fontSize:13,lineHeight:1.5,whiteSpace:"pre-wrap",wordBreak:"break-word"}}>
+{msg.role==="user"?(msg._text||"📷 Photo"):typeof msg.content==="string"?msg.content.replace(/```json[\s\S]*?```/g,"").trim():""}
+</div>
+{msg._stops&&msg._stops.length>0&&<ParsedStopsCard stops={msg._stops} onAddSelected={(selected)=>{
+selected.forEach(s=>{addDel("Emser Tile",s.stop,0,0,{isHourly:true,weight:s.weight||0,note:s.note||null});});
+showToast(selected.length+" Emser stops added");
+}}/>}
 </div>
 </div>
 ))}
@@ -3634,13 +3879,21 @@ style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,width:"
 </div>
 </div>}
 </div>
-<div style={{padding:"8px 16px 16px",borderTop:"1px solid #e7e5e4",display:"flex",gap:8,flexShrink:0}}>
+{chatImage&&<div style={{padding:"8px 16px 0",display:"flex",alignItems:"center",gap:8}}>
+<div style={{position:"relative"}}><img src={chatImage.preview} alt="" style={{height:50,borderRadius:8}}/><button onClick={()=>setChatImage(null)} style={{position:"absolute",top:-4,right:-4,background:"#dc2626",color:"#fff",border:"none",borderRadius:10,width:18,height:18,fontSize:9,cursor:"pointer",fontWeight:700}}>✕</button></div>
+<span style={{fontSize:11,color:"#16a34a",fontWeight:600}}>📷 Ready</span>
+</div>}
+<div style={{padding:"8px 16px 16px",borderTop:"1px solid #e7e5e4",display:"flex",gap:6,flexShrink:0,alignItems:"center"}}>
+<label style={{display:"flex",alignItems:"center",justifyContent:"center",width:40,height:40,background:"#f5f5f4",border:"1px solid #e7e5e4",borderRadius:10,cursor:"pointer",flexShrink:0}}>
+<span style={{fontSize:16}}>📷</span>
+<input type="file" accept="image/*" style={{display:"none"}} onChange={e=>{if(e.target.files[0]){const r=new FileReader();r.onload=ev=>{setChatImage({base64:ev.target.result.split(",")[1],preview:ev.target.result});};r.readAsDataURL(e.target.files[0]);}e.target.value="";}}/>
+</label>
 <input value={chatInput} onChange={e=>setChatInput(e.target.value)}
 onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendChat();}}}
-placeholder="Ask about routes, quotes, revenue..."
+placeholder={chatImage?"Add note or send…":"Ask about routes, quotes, revenue..."}
 style={{flex:1,border:"1px solid #d6d3d1",borderRadius:12,padding:"12px 16px",fontSize:14,outline:"none",background:"#fafaf9",fontFamily:"inherit"}}/>
-<button onClick={sendChat} disabled={!chatInput.trim()||chatLoading}
-style={{background:chatInput.trim()&&!chatLoading?BRAND.main:"#e7e5e4",color:chatInput.trim()&&!chatLoading?"#fff":"#a8a29e",border:"none",borderRadius:12,padding:"12px 16px",cursor:chatInput.trim()&&!chatLoading?"pointer":"default",fontSize:14,fontWeight:700,flexShrink:0}}>
+<button onClick={sendChat} disabled={(!chatInput.trim()&&!chatImage)||chatLoading}
+style={{background:(chatInput.trim()||chatImage)&&!chatLoading?BRAND.main:"#e7e5e4",color:(chatInput.trim()||chatImage)&&!chatLoading?"#fff":"#a8a29e",border:"none",borderRadius:12,padding:"12px 16px",cursor:(chatInput.trim()||chatImage)&&!chatLoading?"pointer":"default",fontSize:14,fontWeight:700,flexShrink:0}}>
 {chatLoading?"...":"\u2191"}
 </button>
 </div>
@@ -3728,11 +3981,41 @@ return(
 
 {/* TABS */}
 <div style={{display:"flex",gap:5,padding:"12px 16px",background:"#e7e5e4",borderBottom:"1px solid #d6d3d1"}}>
-{[{k:"manifest",l:"Manifests"},{k:"routes",l:"Routes"},{k:"daily",l:"Daily"},{k:"weekly",l:"Weekly"},{k:"history",l:"History"},{k:"add",l:"+ Add"}].map(v=>
-<button key={v.k} onClick={()=>{setView(v.k);setSelCust(null);setSelStop(null);setQuoteMode(null);setInsertPickupFor(null);setMultiSelect(false);setMultiChecked([]);if(v.k!=="add")setPreAssignDriver(null);}}
-style={{flex:1,border:v.k==="add"?"2px solid #16a34a":v.k==="routes"?"2px solid #d97706":v.k==="history"?"2px solid #7c3aed":"1px solid #d6d3d1",borderRadius:10,padding:"9px 2px",cursor:"pointer",fontSize:11,fontWeight:600,background:view===v.k?(v.k==="add"?"#16a34a":v.k==="routes"?"#d97706":v.k==="history"?"#7c3aed":BRAND.main):"#fff",color:view===v.k?"#fff":v.k==="add"?"#16a34a":v.k==="routes"?"#d97706":v.k==="history"?"#7c3aed":"#57534e"}}>{v.l}</button>
+{[{k:"manifest",l:"Manifests"},{k:"routes",l:"Routes"},{k:"daily",l:"Daily"},{k:"weekly",l:"Weekly"}].map(v=>
+<button key={v.k} onClick={()=>{setView(v.k);setSelCust(null);setSelStop(null);setQuoteMode(null);setInsertPickupFor(null);setMultiSelect(false);setMultiChecked([]);setPreAssignDriver(null);setShowMoreMenu(false);}}
+style={{flex:1,border:v.k==="routes"?"2px solid #d97706":"1px solid #d6d3d1",borderRadius:10,padding:"9px 2px",cursor:"pointer",fontSize:11,fontWeight:600,background:view===v.k?(v.k==="routes"?"#d97706":BRAND.main):"#fff",color:view===v.k?"#fff":v.k==="routes"?"#d97706":"#57534e"}}>{v.l}</button>
 )}
+<button onClick={()=>setShowMoreMenu(true)}
+style={{flex:1,border:view==="history"?"2px solid #7c3aed":"1px solid #d6d3d1",borderRadius:10,padding:"9px 2px",cursor:"pointer",fontSize:11,fontWeight:600,background:view==="history"?"#7c3aed":"#fff",color:view==="history"?"#fff":"#7c3aed"}}>
+{view==="history"?(histMode==="quotes"?"Quotes":histMode==="emser"?"Emser":"History"):"More ⋯"}
+</button>
+<button onClick={()=>{setView("add");setSelCust(null);setSelStop(null);setQuoteMode(null);setInsertPickupFor(null);setMultiSelect(false);setMultiChecked([]);setShowMoreMenu(false);}}
+style={{flex:1,border:"2px solid #16a34a",borderRadius:10,padding:"9px 2px",cursor:"pointer",fontSize:11,fontWeight:600,background:view==="add"?"#16a34a":"#fff",color:view==="add"?"#fff":"#16a34a"}}>+ Add</button>
 </div>
+
+{/* MORE MENU — bottom sheet */}
+{showMoreMenu&&<div style={{position:"fixed",inset:0,zIndex:200,display:"flex",flexDirection:"column"}} onClick={()=>setShowMoreMenu(false)}>
+<div style={{flex:1,background:"rgba(0,0,0,0.4)"}}/>
+<div style={{background:"#fff",borderRadius:"20px 20px 0 0",padding:"20px 16px 32px"}} onClick={e=>e.stopPropagation()}>
+<div style={{width:40,height:4,borderRadius:2,background:"#d6d3d1",margin:"0 auto 16px"}}/>
+<div style={{fontSize:16,fontWeight:700,marginBottom:14,color:"#1c1917"}}>More Options</div>
+{[
+{icon:"📋",label:"Delivery History",desc:"Search past deliveries & proof of delivery",mode:"deliveries"},
+{icon:"📷",label:"Photos",desc:"Delivery photos & POD signatures",mode:"photos"},
+{icon:"💰",label:"Quotes",desc:"Create and manage delivery quotes",mode:"quotes"},
+{icon:"⏱",label:"Emser Hours",desc:"Track driver shift hours for Emser",mode:"emser"},
+].map(item=>(
+<button key={item.mode} onClick={()=>{setView("history");setHistMode(item.mode);setShowMoreMenu(false);}}
+style={{display:"flex",alignItems:"center",gap:12,width:"100%",textAlign:"left",padding:"14px 12px",marginBottom:6,borderRadius:12,border:view==="history"&&histMode===item.mode?"2px solid #7c3aed":"1px solid #e7e5e4",background:view==="history"&&histMode===item.mode?"#f3e8ff":"#fff",cursor:"pointer"}}>
+<span style={{fontSize:24,width:36,textAlign:"center",flexShrink:0}}>{item.icon}</span>
+<div>
+<div style={{fontSize:14,fontWeight:700,color:view==="history"&&histMode===item.mode?"#7c3aed":"#1c1917"}}>{item.label}</div>
+<div style={{fontSize:11,color:"#78716c",marginTop:1}}>{item.desc}</div>
+</div>
+</button>
+))}
+</div>
+</div>}
 
 {/* DRIVER MODAL */}
 {showDM&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:100,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
@@ -3763,7 +4046,7 @@ style={{flex:1,border:v.k==="add"?"2px solid #16a34a":v.k==="routes"?"2px solid 
 </div>);})}
 <p style={{fontSize:10,color:"#a8a29e",margin:"8px 0 0"}}>Driver PINs = last 4 digits of their phone number</p>
 </div>
-{drivers.length<4&&<div style={{marginTop:12}}><div style={{display:"flex",gap:6,marginBottom:6}}><input value={newDN} onChange={e=>setNewDN(e.target.value)} placeholder="Driver name" style={{flex:1,border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 12px",fontSize:14,outline:"none"}}/></div><div style={{display:"flex",gap:6}}><input value={newDP} onChange={e=>setNewDP(e.target.value)} placeholder="Phone number" type="tel" onKeyDown={e=>e.key==="Enter"&&addDrvr()} style={{flex:1,border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 12px",fontSize:14,outline:"none"}}/><button onClick={addDrvr} style={{background:(!newDN.trim()||!newDP.trim())?"#e7e5e4":"#1c1917",color:(!newDN.trim()||!newDP.trim())?"#a8a29e":"#fff",border:"none",borderRadius:8,padding:"8px 16px",cursor:"pointer",fontSize:13,fontWeight:600}}>Add</button></div>{newDN.trim()&&!newDP.trim()&&<p style={{fontSize:11,color:"#dc2626",margin:"4px 0 0"}}>Phone required</p>}</div>}
+{<div style={{marginTop:12}}><div style={{display:"flex",gap:6,marginBottom:6}}><input value={newDN} onChange={e=>setNewDN(e.target.value)} placeholder="Driver name" style={{flex:1,border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 12px",fontSize:14,outline:"none"}}/></div><div style={{display:"flex",gap:6}}><input value={newDP} onChange={e=>setNewDP(e.target.value)} placeholder="Phone number" type="tel" onKeyDown={e=>e.key==="Enter"&&addDrvr()} style={{flex:1,border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 12px",fontSize:14,outline:"none"}}/><button onClick={addDrvr} style={{background:(!newDN.trim()||!newDP.trim())?"#e7e5e4":"#1c1917",color:(!newDN.trim()||!newDP.trim())?"#a8a29e":"#fff",border:"none",borderRadius:8,padding:"8px 16px",cursor:"pointer",fontSize:13,fontWeight:600}}>Add</button></div>{newDN.trim()&&!newDP.trim()&&<p style={{fontSize:11,color:"#dc2626",margin:"4px 0 0"}}>Phone required</p>}</div>}
 </div>
 </div>}
 
@@ -3930,7 +4213,6 @@ style={{background:isDrvDropTarget&&!de.length?"#dcfce7":"#fff",border:isDrvDrop
 <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:de.length?8:0}}><div style={{width:14,height:14,borderRadius:4,background:DCOL[di]}}/><span style={{fontSize:15,fontWeight:700}}>{drv.name}</span><span style={{fontSize:12,color:"#a8a29e"}}>({de.length})</span>{de.length>0&&<span style={{fontSize:10,color:"#78716c",fontVariantNumeric:"tabular-nums"}}>~{getDriverMiles(drv.id)}mi</span>}</div>
 <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
 {de.length>0&&<button onClick={()=>printManifest(drv.id)} style={{background:"#e7e5e4",border:"none",borderRadius:6,padding:"5px 8px",cursor:"pointer",fontSize:10,fontWeight:600,color:"#57534e"}}>Print</button>}
-{de.length>0&&<button onClick={()=>copyManifest(drv.id)} style={{background:"#dcfce7",border:"none",borderRadius:6,padding:"5px 8px",cursor:"pointer",fontSize:10,fontWeight:600,color:"#16a34a"}}>Copy</button>}
 {de.length>0&&<button onClick={()=>textManifest(drv.id)} style={{background:"#dbeafe",border:"none",borderRadius:6,padding:"5px 8px",cursor:"pointer",fontSize:10,fontWeight:600,color:"#2563eb"}}>Text</button>}
 {de.length>=2&&<div style={{position:"relative"}}>
 <button onClick={()=>setSortMenuDrv(sortMenuDrv===drv.id?null:drv.id)} style={{background:"linear-gradient(135deg,#2563eb,#1d4ed8)",border:"none",borderRadius:6,padding:"5px 8px",cursor:"pointer",fontSize:10,fontWeight:700,color:"#fff"}}>⚡ Route ▾</button>
@@ -3944,7 +4226,6 @@ style={{background:isDrvDropTarget&&!de.length?"#dcfce7":"#fff",border:isDrvDrop
 </div>}
 <button onClick={()=>{setPreAssignDriver(drv.id);setView("add");setSelCust(null);setSelStop(null);setQuoteMode(null);}} style={{background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:6,padding:"5px 8px",cursor:"pointer",fontSize:10,fontWeight:600,color:"#16a34a"}}>+ Add</button>
 <button onClick={()=>setDriverViewId(drv.id)} style={{background:"#f3e8f9",border:"1px solid #d8b4fe",borderRadius:6,padding:"5px 8px",cursor:"pointer",fontSize:10,fontWeight:600,color:"#7c3aed"}}>Driver View</button>
-<button onClick={()=>{const slug=getDriverSlug(drv.name);const url=`${window.location.origin}${window.location.pathname}#/driver/${slug}`;setShowLinkModal({name:drv.name,url,phone:drv.phone||""});}} style={{background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:6,padding:"5px 8px",cursor:"pointer",fontSize:10,fontWeight:600,color:"#16a34a"}}>🔗 Link</button>
 <button onClick={()=>{setNotifyDriver(drv.id);setNotifyCustomMsg("");}} style={{background:"#fef3c7",border:"1px solid #fde68a",borderRadius:6,padding:"5px 8px",cursor:"pointer",fontSize:10,fontWeight:600,color:"#92400e"}}>Notify</button>
 </div>
 {de.length===0&&<p style={{fontSize:13,color:dragSrc?"#16a34a":"#a8a29e",margin:"8px 0 0",fontWeight:dragSrc?600:400}}>{dragSrc?"Drop here to assign":"No stops"}</p>}
@@ -4049,14 +4330,12 @@ return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius
 </div>);
 })()}
 {dl.length===0?<div style={{textAlign:"center",padding:"48px 20px",color:"#a8a29e"}}><div style={{fontSize:36,marginBottom:12}}>🚚</div><p style={{fontSize:14,margin:0}}>No deliveries logged</p></div>:<>
-{dl.map(entry=>{const c=getCustColor(entry.customer);const drv=drivers.find(d=>d.id===entry.driverId);const di=drivers.findIndex(d=>d.id===entry.driverId);const isImetco=entry.customer==="IMETCO";return(
-<div key={entry.id} style={{background:"#fff",border:"1px solid #e7e5e4",borderRadius:14,padding:"12px 16px",marginBottom:8,borderLeft:`4px solid ${entry.priority?"#f59e0b":entry.stopType==="pickup"?"#2563eb":c.accent}`}}>
+{dl.filter(e=>e.stopType!=="pickup").map(entry=>{const c=getCustColor(entry.customer);const drv=drivers.find(d=>d.id===entry.driverId);const di=drivers.findIndex(d=>d.id===entry.driverId);const isImetco=entry.customer==="IMETCO";return(
+<div key={entry.id} style={{background:"#fff",border:"1px solid #e7e5e4",borderRadius:14,padding:"12px 16px",marginBottom:8,borderLeft:`4px solid ${entry.priority?"#f59e0b":c.accent}`}}>
 <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
 <div style={{flex:1}}>
 <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:2,flexWrap:"wrap"}}>
 <span style={{fontSize:11,fontWeight:600,color:c.accent,textTransform:"uppercase"}}>{entry.customer}</span>
-{entry.stopType==="pickup"&&<span style={{fontSize:9,background:"#2563eb",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700}}>PICKUP</span>}
-{entry.stopType!=="pickup"&&<span style={{fontSize:9,background:"#16a34a",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700}}>DELIVERY</span>}
 {entry.priority&&<span style={{fontSize:9,background:"#f59e0b",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700}}>PRIORITY</span>}
 {entry.dueBy&&<span style={{fontSize:9,background:entry.dueBy.includes("-")?"#7c3aed":entry.dueBy.startsWith("After")?"#2563eb":"#dc2626",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700,display:"inline-flex",alignItems:"center",gap:2}}>{"\u23F0"} {entry.dueBy}</span>}
 <span style={{fontSize:10,background:drv?(DCOL[di]||"#78716c"):"#a8a29e",color:"#fff",padding:"1px 6px",borderRadius:4,fontWeight:600}}>{drv?.name||"Unassigned"}</span>
@@ -4122,7 +4401,7 @@ style={{flex:1,border:entry.shipPlan?"1px solid #bbf7d0":"1px solid #fca5a5",bor
 {drivers.map((drv,di)=>{const mins=shiftByDrv[drv.id]||0;if(!mins)return null;const initials=drv.name.split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase();return(<span key={drv.id} style={{fontSize:11,background:DCOL[di],color:"#fff",padding:"1px 6px",borderRadius:4,fontWeight:600}}>{initials} {formatMins(mins)}</span>);})}
 <span style={{marginLeft:"auto",fontSize:11,fontWeight:700,color:"#1d4ed8",fontVariantNumeric:"tabular-nums"}}>{formatMins(shiftMins)}</span>
 </div>}
-{entries.map(entry=>{const c=getCustColor(entry.customer);const drv=drivers.find(d=>d.id===entry.driverId);const di2=drivers.findIndex(d=>d.id===entry.driverId);const isImetco=entry.customer==="IMETCO";return(<div key={entry.id}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 8px 6px 16px",borderLeft:`3px solid ${c.accent}`,marginTop:4,background:"#fff",borderRadius:isImetco?"0 8px 0 0":"0 8px 8px 0"}}><div style={{display:"flex",alignItems:"center",gap:4,flex:1,minWidth:0}}><span style={{fontSize:11,color:c.accent,fontWeight:600}}>{entry.customer}</span><span style={{fontSize:12,color:"#57534e",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{entry.stop}</span>{drv&&<span style={{fontSize:9,background:DCOL[di2]||"#78716c",color:"#fff",padding:"1px 4px",borderRadius:3,fontWeight:600,flexShrink:0}}>{drv.name.charAt(0)}</span>}</div><InlineRate value={entry.baseRate} isHourly={entry.isHourly} onSave={r=>updateRate(entry.id,r)}/></div>
+{entries.filter(e=>e.stopType!=="pickup").map(entry=>{const c=getCustColor(entry.customer);const drv=drivers.find(d=>d.id===entry.driverId);const di2=drivers.findIndex(d=>d.id===entry.driverId);const isImetco=entry.customer==="IMETCO";return(<div key={entry.id}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 8px 6px 16px",borderLeft:`3px solid ${c.accent}`,marginTop:4,background:"#fff",borderRadius:isImetco?"0 8px 0 0":"0 8px 8px 0"}}><div style={{display:"flex",alignItems:"center",gap:4,flex:1,minWidth:0}}><span style={{fontSize:11,color:c.accent,fontWeight:600}}>{entry.customer}</span><span style={{fontSize:12,color:"#57534e",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{entry.stop}</span>{drv&&<span style={{fontSize:9,background:DCOL[di2]||"#78716c",color:"#fff",padding:"1px 4px",borderRadius:3,fontWeight:600,flexShrink:0}}>{drv.name.charAt(0)}</span>}</div><InlineRate value={entry.baseRate} isHourly={entry.isHourly} onSave={r=>updateRate(entry.id,r)}/></div>
 {isImetco&&<div style={{padding:"4px 8px 6px 16px",borderLeft:`3px solid ${c.accent}`,background:"#fff",borderRadius:"0 0 8px 0",display:"flex",alignItems:"center",gap:6}}>
 <span style={{fontSize:10,fontWeight:700,color:"#ea580c",flexShrink:0}}>SP#:</span>
 <input value={entry.shipPlan||""} onChange={e=>{const eid=entry.id;const val=e.target.value;setLog(p=>({...p,[wk2]:(p[wk2]||[]).map(en=>en.id===eid?{...en,shipPlan:val}:en)}));}} placeholder="—"
@@ -4149,14 +4428,7 @@ style={{width:80,border:"1px solid #e7e5e4",borderRadius:6,padding:"3px 6px",fon
 
 {/* ═══ HISTORY ═══ */}
 {view==="history"&&<div>
-<div style={{padding:"16px 4px 8px"}}><h2 style={{margin:0,fontSize:16,fontWeight:600}}>Delivery History</h2><p style={{margin:"4px 0 0",fontSize:12,color:"#78716c"}}>{histMode==="emser"?"Track Emser driver hours":"Search deliveries and proof of delivery photos"}</p></div>
-
-{/* Mode toggle - 4 options */}
-<div style={{display:"flex",gap:3,marginBottom:10,background:"#f5f5f4",borderRadius:10,padding:3}}>
-{[{k:"deliveries",l:"Deliveries"},{k:"photos",l:"📷 Photos"},{k:"emser",l:"⏱ Emser Hours"},{k:"quotes",l:"💰 Quotes"}].map(m=>(
-<button key={m.k} onClick={()=>setHistMode(m.k)} style={{flex:1,padding:"8px 4px",borderRadius:8,border:"none",cursor:"pointer",fontSize:11,fontWeight:600,background:histMode===m.k?"#fff":"transparent",color:histMode===m.k?BRAND.main:"#78716c",boxShadow:histMode===m.k?"0 1px 3px rgba(0,0,0,0.08)":"none"}}>{m.l}</button>
-))}
-</div>
+<div style={{padding:"16px 4px 8px"}}><h2 style={{margin:0,fontSize:16,fontWeight:600}}>{histMode==="quotes"?"Quotes":histMode==="emser"?"Emser Hours":histMode==="photos"?"Photos":"Delivery History"}</h2><p style={{margin:"4px 0 0",fontSize:12,color:"#78716c"}}>{histMode==="emser"?"Track Emser driver hours":histMode==="quotes"?"Create and manage delivery quotes":histMode==="photos"?"Delivery photos & proof of delivery":"Search deliveries and proof of delivery"}</p></div>
 
 {/* EMSER HOURS CALCULATOR MODE */}
 {histMode==="emser"&&(()=>{
@@ -4331,9 +4603,16 @@ return(<div>
 {quoteFormOpen&&<div style={{background:"#fff",border:"2px solid #16a34a",borderRadius:14,padding:"14px 16px",marginBottom:16}}>
 <div style={{fontSize:13,fontWeight:700,color:"#16a34a",marginBottom:12}}>New Quote</div>
 <label style={{fontSize:11,fontWeight:600,color:"#57534e",display:"block",marginBottom:4}}>Customer</label>
-<select value={qCust} onChange={e=>{setQCust(e.target.value);setQStop("");}} style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px",fontSize:13,outline:"none",background:"#fff",marginBottom:10}}>
+<select value={qCust} onChange={e=>{setQCust(e.target.value);setQStop("");setQPickup("");}} style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px",fontSize:13,outline:"none",background:"#fff",marginBottom:10}}>
 <option value="">Select customer...</option>{allCustNames.map(c=><option key={c} value={c}>{c}</option>)}<option value="__manual">Manual Entry</option>
 </select>
+{(()=>{const qc=QUOTE_CUSTOMERS.find(q=>q.name===qCust);if(qc&&qc.pickups&&qc.pickups.length>1)return(<div style={{marginBottom:10}}>
+<label style={{fontSize:11,fontWeight:600,color:qPickup?"#57534e":"#dc2626",display:"block",marginBottom:4}}>⚠ Pickup Location</label>
+<div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+{qc.pickups.map(p=><button key={p.label} onClick={()=>setQPickup(p.label)} style={{padding:"8px 14px",borderRadius:8,border:qPickup===p.label?"2px solid #2563eb":"2px solid #e7e5e4",cursor:"pointer",fontSize:13,fontWeight:700,background:qPickup===p.label?"#2563eb":"#fff",color:qPickup===p.label?"#fff":"#57534e"}}>{p.label}</button>)}
+</div>
+{qPickup&&<div style={{fontSize:11,color:"#78716c",marginTop:4}}>{qc.pickups.find(p=>p.label===qPickup)?.addr}</div>}
+</div>);return null;})()}
 <label style={{fontSize:11,fontWeight:600,color:"#57534e",display:"block",marginBottom:4}}>Delivery To</label>
 {qCust&&qCust!=="__manual"&&getDeliveries2(qCust).length>0?
 <select value={qStop} onChange={e=>setQStop(e.target.value)} style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px",fontSize:13,outline:"none",background:"#fff",marginBottom:10}}>
@@ -4342,8 +4621,10 @@ return(<div>
 :<input value={qStop} onChange={e=>setQStop(e.target.value)} placeholder="Delivery location" style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px",fontSize:13,outline:"none",marginBottom:10}}/>}
 <label style={{fontSize:11,fontWeight:600,color:"#57534e",display:"block",marginBottom:4}}>Address</label>
 <div style={{marginBottom:10}}><AddressInput value={qAddr} onChange={setQAddr} placeholder="Delivery address" style={{fontSize:13}}/></div>
+{qAddr&&<button onClick={calcQuoteMiles} disabled={qCalcLoading} style={{width:"100%",background:"#1c1917",color:"#fff",border:"none",borderRadius:8,padding:"10px",fontSize:13,fontWeight:600,cursor:"pointer",marginBottom:10,opacity:qCalcLoading?0.6:1}}>{qCalcLoading?"Calculating…":"📍 Calculate Distance"}</button>}
+{qCalcError&&<div style={{fontSize:11,color:"#dc2626",marginBottom:8}}>{qCalcError}</div>}
 <div style={{display:"flex",gap:10,marginBottom:10}}>
-<div style={{flex:1}}><label style={{fontSize:11,fontWeight:600,color:"#57534e",display:"block",marginBottom:4}}>Miles</label><input type="number" value={qMiles} onChange={e=>setQMiles(e.target.value)} placeholder="e.g. 25" style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px",fontSize:13,fontWeight:700,outline:"none",textAlign:"center"}}/></div>
+<div style={{flex:1}}><label style={{fontSize:11,fontWeight:600,color:"#57534e",display:"block",marginBottom:4}}>Miles</label><input type="number" value={qMiles} onChange={e=>setQMiles(e.target.value)} placeholder="0" style={{width:"100%",border:qMiles?"2px solid #16a34a":"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px",fontSize:13,fontWeight:700,outline:"none",textAlign:"center",background:qMiles?"#f0fdf4":"#fff"}}/></div>
 <div style={{flex:1}}><label style={{fontSize:11,fontWeight:600,color:"#57534e",display:"block",marginBottom:4}}>Rate Override</label><input type="number" value={qRate} onChange={e=>setQRate(e.target.value)} placeholder={qMiles?"Auto":"$"} style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px",fontSize:13,fontWeight:700,outline:"none",textAlign:"center"}}/></div>
 </div>
 {qMiles&&<div style={{fontSize:12,color:"#16a34a",fontWeight:700,marginBottom:8}}>Auto: {fmt(calcQuoteRate(qMiles,qLiftgate,qGravel,qExtraPallets).total)}</div>}
@@ -4386,10 +4667,17 @@ return(<div>
 </div>
 {!accepted&&<div style={{display:"flex",gap:6,marginTop:8}}>
 {qPushDay&&qPushDay.quoteId===q.id?<div style={{flex:1,display:"flex",gap:4}}>
-<select onChange={e=>{if(e.target.value)pushQuoteToDay(q.id,e.target.value);}} defaultValue="" style={{flex:1,border:"1px solid #16a34a",borderRadius:6,padding:"4px 6px",fontSize:10,outline:"none",background:"#f0fdf4"}}>
-<option value="">Pick day...</option>{DAYS.map((day,i)=><option key={i} value={`${wo}-${i}`}>{day} {wd[i].date}</option>)}<option value={`${wo+1}-0`}>Next Mon</option>
-</select>
-<button onClick={()=>setQPushDay(null)} style={{background:"#e7e5e4",border:"none",borderRadius:5,padding:"3px 8px",cursor:"pointer",fontSize:9}}>✕</button>
+<input type="date" onChange={e=>{if(e.target.value){
+const target=new Date(e.target.value+"T12:00:00");const now=new Date();
+const tD=target.getDay();const tM=new Date(target);tM.setDate(target.getDate()-(tD===0?6:tD-1));
+const nD=now.getDay();const nM=new Date(now);nM.setDate(now.getDate()-(nD===0?6:nD-1));
+tM.setHours(0,0,0,0);nM.setHours(0,0,0,0);
+const weekOff=Math.round((tM-nM)/(7*24*60*60*1000));
+const dayIdx=tD===0?6:tD-1;
+if(dayIdx>=0&&dayIdx<=4){pushQuoteToDay(q.id,`${weekOff}-${dayIdx}`);}
+else{showToast("Pick a weekday (Mon-Fri)");}
+}}} style={{flex:1,border:"1px solid #16a34a",borderRadius:8,padding:"8px 10px",fontSize:13,outline:"none",background:"#f0fdf4",fontWeight:600}}/>
+<button onClick={()=>setQPushDay(null)} style={{background:"#e7e5e4",border:"none",borderRadius:6,padding:"4px 8px",cursor:"pointer",fontSize:10}}>✕</button>
 </div>
 :<><button onClick={()=>setQPushDay({quoteId:q.id})} style={{flex:1,background:"#16a34a",color:"#fff",border:"none",borderRadius:8,padding:"7px",cursor:"pointer",fontSize:11,fontWeight:700}}>Push to Day</button>
 <button onClick={()=>{setSavedQuotes(p=>p.filter(x=>x.id!==q.id));deleteQuoteFromFB(q.id).catch(e=>console.error("Quote del:",e));showToast("Deleted");}} style={{background:"#fef2f2",border:"none",borderRadius:8,padding:"7px 10px",cursor:"pointer",fontSize:11,color:"#dc2626",fontWeight:600}}>Delete</button></>}
@@ -4451,7 +4739,10 @@ return(<div>
 
 {/* ═══ ADD ═══ */}
 {view==="add"&&!selCust&&!quoteMode&&<div>
-{preAssignDriver&&(()=>{const drv=drivers.find(d=>d.id===preAssignDriver);const di=drivers.findIndex(d=>d.id===preAssignDriver);return(<div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 14px",margin:"12px 0 8px",background:"#f0fdf4",border:`2px solid ${DCOL[di]||"#16a34a"}`,borderRadius:12}}><div style={{display:"flex",alignItems:"center",gap:8}}><div style={{width:28,height:28,borderRadius:8,background:DCOL[di],display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,color:"#fff",fontWeight:700}}>{drv?.name?.charAt(0)}</div><div><div style={{fontSize:13,fontWeight:700}}>Adding for {drv?.name}</div><div style={{fontSize:10,color:"#16a34a"}}>Auto-assigned</div></div></div><button onClick={()=>setPreAssignDriver(null)} style={{background:"#e7e5e4",border:"none",borderRadius:6,padding:"4px 8px",cursor:"pointer",fontSize:10,color:"#57534e"}}>Clear</button></div>);})()}
+{preAssignDriver&&(()=>{const drv=drivers.find(d=>d.id===preAssignDriver);const di=drivers.findIndex(d=>d.id===preAssignDriver);return(<>
+<button onClick={()=>{setPreAssignDriver(null);setView("manifest");}} style={{background:"none",border:"none",color:"#2563eb",fontSize:13,cursor:"pointer",padding:"16px 4px 4px",fontWeight:600}}>← Back to Manifests</button>
+<div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 14px",margin:"4px 0 8px",background:"#f0fdf4",border:`2px solid ${DCOL[di]||"#16a34a"}`,borderRadius:12}}><div style={{display:"flex",alignItems:"center",gap:8}}><div style={{width:28,height:28,borderRadius:8,background:DCOL[di],display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,color:"#fff",fontWeight:700}}>{drv?.name?.charAt(0)}</div><div><div style={{fontSize:13,fontWeight:700}}>Adding for {drv?.name}</div><div style={{fontSize:10,color:"#16a34a"}}>Auto-assigned</div></div></div><button onClick={()=>setPreAssignDriver(null)} style={{background:"#e7e5e4",border:"none",borderRadius:6,padding:"4px 8px",cursor:"pointer",fontSize:10,color:"#57534e"}}>Clear</button></div>
+</>);})()}
 
 {/* ═══ CUSTOMER GRID ═══ */}
 <h2 style={{margin:0,fontSize:16,fontWeight:600,padding:"16px 4px 8px"}}>Contract Customers</h2>
@@ -4468,7 +4759,7 @@ return(<div>
 
 {/* ═══ ADD — Delivery List ═══ */}
 {view==="add"&&selCust&&<div>
-<button onClick={()=>{setSelCust(null);setMultiSelect(false);setMultiChecked([]);setShowAddCustomDel(false);}} style={BB}>← Back</button>
+<button onClick={()=>{setSelCust(null);setMultiSelect(false);setMultiChecked([]);setShowAddCustomDel(false);}} style={BB}>← {preAssignDriver?"Customers":"Back"}</button>
 {preAssignDriver&&(()=>{const drv=drivers.find(d=>d.id===preAssignDriver);const di=drivers.findIndex(d=>d.id===preAssignDriver);return(<div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",margin:"0 4px 8px",background:"#f0fdf4",border:`1px solid ${DCOL[di]||"#bbf7d0"}`,borderRadius:10}}><div style={{width:20,height:20,borderRadius:6,background:DCOL[di],display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:"#fff",fontWeight:700}}>{drv?.name?.charAt(0)}</div><span style={{fontSize:12,fontWeight:600,color:"#16a34a"}}>Auto-adding to {drv?.name}</span></div>);})()}
 <div style={{padding:"0 4px"}}>
 <h2 style={{margin:"0 0 4px",fontSize:18,fontWeight:700,color:CC[selCust].accent}}>{selCust}</h2>
@@ -4480,15 +4771,18 @@ return(<div>
 <button onClick={()=>{setMultiSelect(!multiSelect);setMultiChecked([]);}} style={{background:multiSelect?"#2563eb":"#e7e5e4",color:multiSelect?"#fff":"#57534e",border:"none",borderRadius:8,padding:"6px 12px",cursor:"pointer",fontSize:12,fontWeight:600}}>
 {multiSelect?"Cancel Multi-Select":"Select Multiple"}
 </button>
-{multiSelect&&multiChecked.length>0&&<button onClick={()=>{const stops=CUSTOMERS[selCust].deliveries.filter((_,i)=>multiChecked.includes(i));addMulti(selCust,stops,preAssignDriver||0);}} style={{background:"#16a34a",color:"#fff",border:"none",borderRadius:8,padding:"6px 12px",cursor:"pointer",fontSize:12,fontWeight:600}}>Add {multiChecked.length} stops</button>}
+{multiSelect&&multiChecked.length>0&&<button onClick={()=>{const allDels=[...CUSTOMERS[selCust].deliveries,...(customStops[selCust]||[])];const stops=allDels.filter((_,i)=>multiChecked.includes(i));addMulti(selCust,stops,preAssignDriver||0);}} style={{background:"#16a34a",color:"#fff",border:"none",borderRadius:8,padding:"6px 12px",cursor:"pointer",fontSize:12,fontWeight:600}}>Add {multiChecked.length} stops</button>}
 </div>
 {CUSTOMERS[selCust].roundTrip&&<button onClick={()=>{const cd=CUSTOMERS[selCust];addDel(selCust,CUSTOMERS[selCust].roundTrip.label,CUSTOMERS[selCust].roundTrip.rate,preAssignDriver||0,{fuelPct:(cd.fuel_surcharge&&!cd.fuel_included)?cd.fuel_surcharge:0,priority:cd.priority});}} style={{display:"block",width:"100%",textAlign:"left",background:"#fef3c7",border:"2px solid #fbbf24",borderRadius:12,padding:"14px 16px",marginBottom:12,cursor:"pointer"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><div><div style={{fontSize:14,fontWeight:700,color:"#92400e"}}>🔄 {CUSTOMERS[selCust].roundTrip.label}</div></div><span style={{fontVariantNumeric:"tabular-nums",fontSize:17,fontWeight:700,color:"#ea580c"}}>{fmt(CUSTOMERS[selCust].roundTrip.rate)}</span></div></button>}
-{CUSTOMERS[selCust].deliveries.map((d,idx)=>{const isStr=typeof d==="string";const stop=isStr?d:d.s;const rate=isStr?0:d.r;const note=isStr?null:d.n;const addr=getAddr(stop);const curInstr=customInstr[stop]!==undefined?customInstr[stop]:getDefaultInstr(stop);const checked=multiChecked.includes(idx);
+{/* Merge hardcoded + custom stops for this customer */}
+{(()=>{const allDels=[...CUSTOMERS[selCust].deliveries,...(customStops[selCust]||[])];
+return allDels.map((d,idx)=>{const isStr=typeof d==="string";const stop=isStr?d:d.s;const rate=isStr?0:d.r;const note=isStr?null:d.n;const addr=d.addr||getAddr(stop);const curInstr=customInstr[stop]!==undefined?customInstr[stop]:getDefaultInstr(stop);const checked=multiChecked.includes(idx);
 return(<DeliveryListItem key={idx} stop={stop} rate={rate} note={note} addr={addr} curInstr={curInstr} checked={checked} multiSelect={multiSelect} accent={CC[selCust].accent}
 onCheck={()=>setMultiChecked(p=>p.includes(idx)?p.filter(x=>x!==idx):[...p,idx])}
 onAdd={(dueBy,weight)=>{const cd=CUSTOMERS[selCust];addDel(selCust,stop,rate||0,preAssignDriver||0,{isHourly:cd.rate_type==="hourly",fuelPct:(cd.fuel_surcharge&&!cd.fuel_included)?cd.fuel_surcharge:0,note:note||null,addr,priority:cd.priority,dueBy:dueBy||null,weight:weight||0});}}
 onSaveInstr={text=>setCustomInstr(p=>({...p,[stop]:text}))}
-/>);})}
+/>);});
+})()}
 {/* Add new delivery location for this customer */}
 {!showAddCustomDel?<button onClick={()=>{setShowAddCustomDel(true);setCustomDelName("");setCustomDelAddr("");setCustomDelRate("");setCustomDelNote("");}} style={{display:"block",width:"100%",marginTop:8,background:"#fafaf9",border:"2px dashed #d6d3d1",borderRadius:12,padding:"14px 16px",cursor:"pointer",textAlign:"center",color:"#78716c",fontSize:13,fontWeight:600}}>+ Add New Delivery Location</button>
 :<div style={{marginTop:8,background:"#fff",border:`2px solid ${CC[selCust].accent}`,borderRadius:14,padding:16}}>
@@ -4516,6 +4810,12 @@ style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:10,padding:"10px 14
 if(!customDelName.trim())return;
 const cd=CUSTOMERS[selCust];
 const rate=parseFloat(customDelRate)||0;
+/* Save to persistent custom stops */
+const newStop={s:customDelName.trim(),r:rate,addr:customDelAddr.trim(),n:customDelNote.trim()||null};
+setCustomStops(p=>({...p,[selCust]:[...(p[selCust]||[]),newStop]}));
+/* Cache address for getAddr lookups */
+if(customDelAddr.trim())_customAddrCache[customDelName.trim()]=customDelAddr.trim();
+/* Also add to today's manifest */
 addDel(selCust,customDelName.trim(),rate,preAssignDriver||0,{
 isHourly:cd.rate_type==="hourly",
 fuelPct:(cd.fuel_surcharge&&!cd.fuel_included)?cd.fuel_surcharge:0,
@@ -4524,6 +4824,7 @@ addr:customDelAddr.trim(),
 priority:cd.priority,
 });
 setShowAddCustomDel(false);setCustomDelName("");setCustomDelAddr("");setCustomDelRate("");setCustomDelNote("");
+showToast(customDelName.trim()+" saved to "+selCust);
 }} disabled={!customDelName.trim()}
 style={{background:customDelName.trim()?CC[selCust].accent:"#e7e5e4",color:customDelName.trim()?"#fff":"#a8a29e",border:"none",borderRadius:10,padding:"12px",fontSize:14,fontWeight:600,cursor:customDelName.trim()?"pointer":"default"}}>
 Add {customDelName.trim()||"Delivery"} to {selCust}
@@ -4614,8 +4915,17 @@ style={{background:msgInput.trim()?BRAND.main:"#e7e5e4",color:msgInput.trim()?"#
 </div>}
 {chatMessages.map((msg,i)=>(
 <div key={i} style={{display:"flex",justifyContent:msg.role==="user"?"flex-end":"flex-start"}}>
-<div style={{maxWidth:"85%",padding:"10px 14px",borderRadius:msg.role==="user"?"14px 14px 4px 14px":"14px 14px 14px 4px",background:msg.role==="user"?"#1c1917":"#f5f5f4",color:msg.role==="user"?"#fff":"#1c1917",fontSize:13,lineHeight:1.5,whiteSpace:"pre-wrap",wordBreak:"break-word"}}>
-{msg.content}
+<div style={{maxWidth:"85%"}}>
+{/* Image preview for user messages */}
+{msg._preview&&<img src={msg._preview} alt="dispatch" style={{maxWidth:"100%",maxHeight:150,borderRadius:12,marginBottom:4,objectFit:"cover"}}/>}
+<div style={{padding:"10px 14px",borderRadius:msg.role==="user"?"14px 14px 4px 14px":"14px 14px 14px 4px",background:msg.role==="user"?"#1c1917":"#f5f5f4",color:msg.role==="user"?"#fff":"#1c1917",fontSize:13,lineHeight:1.5,whiteSpace:"pre-wrap",wordBreak:"break-word"}}>
+{msg.role==="user"?(msg._text||"📷 Photo"):typeof msg.content==="string"?msg.content.replace(/```json[\s\S]*?```/g,"").trim():""}
+</div>
+{/* Parsed stops — show Add All button */}
+{msg._stops&&msg._stops.length>0&&<ParsedStopsCard stops={msg._stops} onAddSelected={(selected)=>{
+selected.forEach(s=>{addDel("Emser Tile",s.stop,0,0,{isHourly:true,weight:s.weight||0,note:s.note||null});});
+showToast(selected.length+" Emser stops added");
+}}/>}
 </div>
 </div>
 ))}
@@ -4627,13 +4937,34 @@ style={{background:msgInput.trim()?BRAND.main:"#e7e5e4",color:msgInput.trim()?"#
 </div>
 
 {/* Chat input */}
-<div style={{padding:"8px 16px 20px",borderTop:"1px solid #e7e5e4",display:"flex",gap:8,flexShrink:0}}>
+{chatImage&&<div style={{padding:"8px 16px 0",display:"flex",alignItems:"center",gap:8}}>
+<div style={{position:"relative",display:"inline-block"}}>
+<img src={chatImage.preview} alt="upload" style={{height:60,borderRadius:8,objectFit:"cover"}}/>
+<button onClick={()=>setChatImage(null)} style={{position:"absolute",top:-4,right:-4,background:"#dc2626",color:"#fff",border:"none",borderRadius:10,width:20,height:20,fontSize:10,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700}}>✕</button>
+</div>
+<span style={{fontSize:11,color:"#16a34a",fontWeight:600}}>📷 Ready to parse</span>
+</div>}
+<div style={{padding:"8px 16px 20px",borderTop:"1px solid #e7e5e4",display:"flex",gap:6,flexShrink:0,alignItems:"center"}}>
+<label style={{display:"flex",alignItems:"center",justifyContent:"center",width:44,height:44,background:chatImage?"#f0fdf4":"#f5f5f4",border:chatImage?"2px solid #16a34a":"1px solid #e7e5e4",borderRadius:12,cursor:"pointer",flexShrink:0}}>
+<span style={{fontSize:18}}>📷</span>
+<input type="file" accept="image/*" capture="environment" style={{display:"none"}} onChange={e=>{
+if(e.target.files[0]){
+const r=new FileReader();
+r.onload=ev=>{
+const base64=ev.target.result.split(",")[1];
+setChatImage({base64,preview:ev.target.result});
+};
+r.readAsDataURL(e.target.files[0]);
+}
+e.target.value="";
+}}/>
+</label>
 <input value={chatInput} onChange={e=>setChatInput(e.target.value)}
 onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendChat();}}}
-placeholder="Ask about routes, quotes, revenue…"
-style={{flex:1,border:"1px solid #d6d3d1",borderRadius:12,padding:"12px 16px",fontSize:14,outline:"none",background:"#fafaf9",fontFamily:"inherit"}}/>
-<button onClick={sendChat} disabled={!chatInput.trim()||chatLoading}
-style={{background:chatInput.trim()&&!chatLoading?"#d97706":"#e7e5e4",color:chatInput.trim()&&!chatLoading?"#fff":"#a8a29e",border:"none",borderRadius:12,padding:"12px 16px",cursor:chatInput.trim()&&!chatLoading?"pointer":"default",fontSize:14,fontWeight:700,flexShrink:0}}>
+placeholder={chatImage?"Add note or send photo…":"Ask about routes, quotes, revenue…"}
+style={{flex:1,border:"1px solid #d6d3d1",borderRadius:12,padding:"12px 14px",fontSize:14,outline:"none",background:"#fafaf9",fontFamily:"inherit"}}/>
+<button onClick={sendChat} disabled={(!chatInput.trim()&&!chatImage)||chatLoading}
+style={{background:(chatInput.trim()||chatImage)&&!chatLoading?"#d97706":"#e7e5e4",color:(chatInput.trim()||chatImage)&&!chatLoading?"#fff":"#a8a29e",border:"none",borderRadius:12,padding:"12px 16px",cursor:(chatInput.trim()||chatImage)&&!chatLoading?"pointer":"default",fontSize:14,fontWeight:700,flexShrink:0}}>
 {chatLoading?"…":"↑"}
 </button>
 </div>
@@ -4683,6 +5014,7 @@ const getPin=(phone)=>{const digits=(phone||"").replace(/\D/g,"");return digits.
 const[sigStop,setSigStop]=useState(null);
 const[shipPlanInputs,setShipPlanInputs]=useState({});
 const[allDrivers,setAllDrivers]=useState(()=>lsGet(LS_DRIVERS,DEFAULT_DRIVERS));
+const[fbLoaded,setFbLoaded]=useState(false);
 const[driverNotifs,setDriverNotifs]=useState([]);
 const[showDriverMsg,setShowDriverMsg]=useState(false);
 const[driverMsgInput,setDriverMsgInput]=useState("");
@@ -4701,8 +5033,24 @@ const entries=dl.filter(e=>e.driverId===driverId);
 /* Firebase sync for driver page */
 useEffect(()=>{
   const unsubDrivers=subscribeDrivers((fbDrivers)=>{
-    if(fbDrivers.length>0)setAllDrivers(fbDrivers);
+    if(fbDrivers.length>0){
+      /* Only update if the current driver slug still resolves in the new list */
+      const stillExists=fbDrivers.find(d=>getDriverSlug(d.name)===driverSlug.toLowerCase());
+      if(stillExists){
+        setAllDrivers(fbDrivers);
+      } else {
+        /* Merge: add any new drivers from Firebase but keep local ones */
+        setAllDrivers(prev=>{
+          const merged=[...prev];
+          fbDrivers.forEach(fd=>{if(!merged.find(m=>m.id===fd.id))merged.push(fd);});
+          return merged;
+        });
+      }
+    }
+    setFbLoaded(true);
   });
+  /* If Firebase never loads (offline), mark loaded after timeout */
+  const timeout=setTimeout(()=>setFbLoaded(true),5000);
   const DAYNAMES=['Mon','Tue','Wed','Thu','Fri'];
   const unsubManifests=subscribeManifests(wo,(fbData)=>{
     const newLog={};
@@ -4713,7 +5061,7 @@ useEffect(()=>{
     });
     setLog(prev=>({...prev,...newLog}));
   });
-  return()=>{unsubDrivers();unsubManifests();};
+  return()=>{unsubDrivers();unsubManifests();clearTimeout(timeout);};
 },[wo]);
 
 /* Subscribe to notifications for this driver */
@@ -4785,6 +5133,15 @@ setDriverMsgInput("");
 };
 
 if(!driver){
+if(!fbLoaded){
+return(
+<div style={{fontFamily:"'DM Sans',system-ui,sans-serif",background:BRAND.dark,color:"#fff",minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",padding:40}}>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+<h1 style={{fontSize:24,fontWeight:800,margin:"0 0 8px"}}><img src={LOGO_WHITE} alt="Davis Delivery" style={{height:36,objectFit:"contain"}}/></h1>
+<p style={{color:"#93c5fd",fontSize:14,margin:0}}>Loading...</p>
+</div>
+);
+}
 return(
 <div style={{fontFamily:"'DM Sans',system-ui,sans-serif",background:BRAND.dark,color:"#fff",minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",padding:40}}>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet"/>
