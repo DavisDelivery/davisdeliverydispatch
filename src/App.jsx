@@ -214,9 +214,9 @@ const subscribeQuotes=(cb)=>{
 /* ── Messages ── */
 const saveMessage=async(channelKey,msg)=>{
   if(!window._fbOps)throw new Error("Firebase not loaded");
-  console.log("[MSG] Sending to",channelKey);
+
   await window._fbOps.add("messages/"+channelKey+"/items",{...msg,timestamp:Date.now()});
-  console.log("[MSG] ✓ Sent");
+
 };
 const subscribeMessages=(channelKey,cb)=>{
   let unsub;
@@ -269,6 +269,32 @@ const subscribeCustomStops=(cb)=>{
   return()=>{if(unsub)unsub();};
 };
 
+/* ── Stop Overrides (permanent edits to built-in stops) ── */
+const saveStopOverrides=async(data)=>{
+  if(!window._fbOps)return;
+  await window._fbOps.write("config/stopOverrides",{data,updatedAt:Date.now()});
+};
+const subscribeStopOverrides=(cb)=>{
+  let unsub;
+  _whenFB(()=>{unsub=window._fbOps.onDoc("config/stopOverrides",(data)=>{
+    if(data&&data.data)cb(data.data);
+  });});
+  return()=>{if(unsub)unsub();};
+};
+
+/* ── Hidden Stops (permanently deleted built-in stops) ── */
+const saveHiddenStops=async(data)=>{
+  if(!window._fbOps)return;
+  await window._fbOps.write("config/hiddenStops",{data,updatedAt:Date.now()});
+};
+const subscribeHiddenStops=(cb)=>{
+  let unsub;
+  _whenFB(()=>{unsub=window._fbOps.onDoc("config/hiddenStops",(data)=>{
+    if(data&&data.data)cb(data.data);
+  });});
+  return()=>{if(unsub)unsub();};
+};
+
 /* ── Mileage helper (shared) ── */
 const calcRouteMiles=(entries)=>{
   const origin={lat:33.93,lng:-84.21};
@@ -281,15 +307,13 @@ const calcRouteMiles=(entries)=>{
   }
   return Math.round(total);
 };
-
-const getDayKey=()=>{};const getWeekKey=()=>{};
 const requestPushPermission=async()=>null;const onPushMessage=()=>{};const saveDriverToken=async()=>{};
 
 const DAYS = ["Monday","Tuesday","Wednesday","Thursday","Friday"];
 
 /* -- BRAND COLORS -- */
 const BRAND={main:"#1e5b92",dark:"#134b7f",light:"#357bb7",pale:"#e8f0f8",bg:"#f0f5fa"};
-const APP_VERSION="3.9.13";
+const APP_VERSION="3.9.22";
 const LOGO_URI="data:image/png;base64,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";
 const LOGO_WHITE="data:image/png;base64,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";
 
@@ -320,8 +344,6 @@ function resolveDriverSlug(slug,driversArr){
   if(found)return found.id;
   return DRIVER_SLUGS[slug.toLowerCase()]||null;
 }
-
-
 /* ── CORRECTED ADDRESSES (from spreadsheet warehouse addresses) ── */
 const ADDR={
   // EMSER PICKUPS
@@ -903,8 +925,6 @@ return(<div style={{position:"absolute",bottom:12,left:12,right:12,zIndex:5,back
 </div>}
 </div>
 );}
-
-
 function AddressInput({value,onChange,placeholder,style:customStyle}){
 const inputRef=useRef(null);
 const acRef=useRef(null);
@@ -1000,7 +1020,7 @@ return(
 </div>
 </div>
 <div style={{display:"flex",gap:6,alignItems:"center"}}>
-<input placeholder="mins" type="number" defaultValue={entries[0].eta||""} style={{width:70,border:"1px solid #d6d3d1",borderRadius:8,padding:"8px",fontSize:14,fontWeight:700,outline:"none",textAlign:"center"}}
+<input placeholder="mins" type="number" inputMode="numeric" defaultValue={entries[0].eta||""} style={{width:70,border:"1px solid #d6d3d1",borderRadius:8,padding:"8px",fontSize:14,fontWeight:700,outline:"none",textAlign:"center"}}
 onBlur={e=>{if(e.target.value)onEta(entries[0].id,e.target.value,entries[0].stop);}}/>
 <span style={{fontSize:12,color:"#78716c"}}>min to</span>
 <span style={{fontSize:12,fontWeight:700,color:BRAND.main,flex:1}}>{entries[0].stop}</span>
@@ -1071,7 +1091,7 @@ style={{flex:1,border:"1px solid #d6d3d1",borderRadius:8,padding:"8px",fontSize:
 {entries.filter((_,ei)=>ei>i&&_.status!=="departed").map(ne=><option key={ne.id} value={ne.stop}>{ne.stop}</option>)}
 <option value="Davis Warehouse">{"🏠 Davis Warehouse"}</option>
 </select>
-<input placeholder="mins" type="number" defaultValue={entry.eta||""} style={{width:70,border:"1px solid #d6d3d1",borderRadius:8,padding:"8px",fontSize:13,fontWeight:700,outline:"none",textAlign:"center"}}
+<input placeholder="mins" type="number" inputMode="numeric" defaultValue={entry.eta||""} style={{width:70,border:"1px solid #d6d3d1",borderRadius:8,padding:"8px",fontSize:13,fontWeight:700,outline:"none",textAlign:"center"}}
 onBlur={e=>{if(e.target.value){const select=e.target.parentElement.querySelector("select");const dest=select?select.value:"";onEta(entry.id,e.target.value,dest||entry.etaDest);}}}/>
 </div>
 <div style={{display:"flex",gap:6}}>
@@ -1137,7 +1157,7 @@ return(
 </div>}
 <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:10}}>{(selectedPickup==="custom"||!pickupOptions?.length)&&<AddressInput value={originAddr} onChange={setOriginAddr} placeholder="Pickup address"/>}<AddressInput value={destAddr} onChange={setDestAddr} placeholder="Delivery address"/><button onClick={calcDistance} disabled={calcLoading} style={{background:"#1c1917",color:"#fff",border:"none",borderRadius:8,padding:"10px",fontSize:13,fontWeight:600,cursor:"pointer",opacity:calcLoading?0.6:1}}>{calcLoading?"Calculating…":"Calculate Distance"}</button></div>
 {calcError&&<p style={{fontSize:12,color:"#dc2626",margin:"0 0 8px"}}>{calcError}</p>}
-<div style={{display:"flex",alignItems:"center",gap:8}}><label style={{fontSize:13,fontWeight:600,color:"#57534e"}}>Miles:</label><input value={miles} onChange={e=>setMiles(e.target.value)} placeholder="0" type="number" step="0.1" style={{width:80,border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 12px",fontSize:15,fontWeight:700,outline:"none",textAlign:"center"}}/>{mi>0&&<span style={{fontSize:13,fontVariantNumeric:"tabular-nums",color:"#57534e"}}>Base: {fmt(baseTier)}</span>}</div>
+<div style={{display:"flex",alignItems:"center",gap:8}}><label style={{fontSize:13,fontWeight:600,color:"#57534e"}}>Miles:</label><input value={miles} onChange={e=>setMiles(e.target.value)} placeholder="0" type="number" inputMode="decimal" step="0.1" style={{width:80,border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 12px",fontSize:15,fontWeight:700,outline:"none",textAlign:"center"}}/>{mi>0&&<span style={{fontSize:13,fontVariantNumeric:"tabular-nums",color:"#57534e"}}>Base: {fmt(baseTier)}</span>}</div>
 </div>
 <div style={{background:"#fff",border:"1px solid #e7e5e4",borderRadius:14,padding:16,margin:"0 4px 12px"}}><span style={{fontSize:13,fontWeight:700,display:"block",marginBottom:10}}>Add-ons</span>
 {[{label:"Liftgate (+$75, replaces fuel)",val:liftgate,set:setLiftgate,color:"#dc2626"},{label:"Gravel / Uneven Driveway (+$25)",val:gravel,set:setGravel,color:"#d97706"},{label:"4-5 Pallets (+$25)",val:extraPallets,set:setExtraPallets,color:"#7c3aed"}].map((o,i)=><button key={i} onClick={()=>o.set(!o.val)} style={{display:"flex",justifyContent:"space-between",alignItems:"center",width:"100%",padding:"12px 14px",marginBottom:6,borderRadius:10,cursor:"pointer",background:o.val?`${o.color}11`:"#fafaf9",border:o.val?`2px solid ${o.color}`:"1px solid #e7e5e4"}}><div style={{display:"flex",alignItems:"center",gap:10}}><div style={{width:22,height:22,borderRadius:6,border:`2px solid ${o.val?o.color:"#d6d3d1"}`,background:o.val?o.color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:14,fontWeight:700}}>{o.val?"✓":""}</div><span style={{fontSize:13,fontWeight:600}}>{o.label}</span></div></button>)}
@@ -1155,7 +1175,7 @@ return(
 }
 
 /* ── MANIFEST STOP ── */
-function ManifestStop({entry,eIdx,total,drivers,onMove,onReassign,onRemove,onDelete,onUpdateInstructions,onShipPlan,onDueBy,onWeight,onLoadNum,onRate,maxLoad,onDragStart,onDragOver,onDrop,isDragOver,isDragging}){
+function ManifestStop({entry,eIdx,total,drivers,onMove,onReassign,onRemove,onDelete,onUpdateInstructions,onShipPlan,onDueBy,onWeight,onLoadNum,onRate,maxLoad,onDragStart,onDragOver,onDrop,isDragOver,isDragging,onLiftgate,onSplit,driverLoadCounts}){
 const[expanded,setExpanded]=useState(false);const[instrText,setInstrText]=useState(entry.instructions||"");const[dueByInput,setDueByInput]=useState(entry.dueBy||"");const[dueType,setDueType]=useState(entry.dueBy?(entry.dueBy.startsWith("After")?"after":"by"):"by");const[lastHour,setLastHour]=useState(()=>{if(entry.dueBy){const m=entry.dueBy.match(/(\d+(?::\d+)?\s*[AP]M)/);return m?m[1].replace(/:\d+/,""):""}return "";});
 const[showAssign,setShowAssign]=useState(false);
 const getInitials=(name)=>{const parts=name.split(" ");return parts.length>=2?(parts[0][0]+parts[1][0]).toUpperCase():name.slice(0,2).toUpperCase();};
@@ -1192,7 +1212,15 @@ style={{display:"flex",alignItems:"center",gap:6,padding:"8px",marginBottom:expa
 {entry.shipPlan&&!expanded&&<div style={{fontSize:10,color:"#ea580c",fontWeight:700,marginTop:1}}>SP# {entry.shipPlan}</div>}
 {entry.weight>0&&!expanded&&<div style={{fontSize:10,color:BRAND.main,fontWeight:700,marginTop:1}}>{entry.weight.toLocaleString()} lbs {(entry.loadNum||1)>1?"(Load "+(entry.loadNum||1)+")":""}</div>}
 </div>
+{/* Right column: rate, buttons, assign */}
+<div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:3,flexShrink:0}}>
 <span onClick={e=>e.stopPropagation()}><InlineRate value={entry.baseRate} isHourly={entry.isHourly} onSave={r=>onRate&&onRate(r)}/></span>
+{!isPU&&!entry.isHourly&&<div style={{display:"flex",gap:3}} onClick={e=>e.stopPropagation()}>
+{!entry.liftgateApplied&&<button onClick={()=>{if(onLiftgate)onLiftgate();}} style={{background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:5,padding:"2px 7px",cursor:"pointer",fontSize:9,color:"#ea580c",fontWeight:700}}>+LG</button>}
+{entry.liftgateApplied&&<span style={{fontSize:8,color:"#16a34a",fontWeight:700,background:"#f0fdf4",padding:"2px 6px",borderRadius:5,border:"1px solid #bbf7d0"}}>✓LG</span>}
+{!entry.wasSplit&&<button onClick={()=>{if(onSplit)onSplit();}} style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:5,padding:"2px 7px",cursor:"pointer",fontSize:9,color:"#2563eb",fontWeight:700}}>✂Split</button>}
+{entry.wasSplit&&<span style={{fontSize:8,color:"#2563eb",fontWeight:700,background:"#eff6ff",padding:"2px 6px",borderRadius:5,border:"1px solid #bfdbfe"}}>L{entry.loadNum}</span>}
+</div>}
 <div style={{position:"relative",flexShrink:0}}>
 <button onClick={e=>{e.stopPropagation();setShowAssign(!showAssign);}}
 style={{display:"flex",alignItems:"center",gap:4,background:curDrv?DCOL[curDrvIdx]:"#e7e5e4",color:curDrv?"#fff":"#78716c",border:"none",borderRadius:8,padding:"6px 10px",cursor:"pointer",fontSize:11,fontWeight:700,minWidth:56,justifyContent:"center"}}>
@@ -1200,16 +1228,20 @@ style={{display:"flex",alignItems:"center",gap:4,background:curDrv?DCOL[curDrvId
 </button>
 {showAssign&&<><div style={{position:"fixed",inset:0,zIndex:149}} onClick={()=>setShowAssign(false)}/>
 <div style={{position:"absolute",top:"100%",right:0,zIndex:150,background:"#fff",border:"1px solid #e7e5e4",borderRadius:12,padding:6,marginTop:4,boxShadow:"0 8px 32px rgba(0,0,0,0.18)",width:160}}>
-{drivers.map((dd,ddi)=>{const isCur=dd.id===entry.driverId;return(
-<button key={dd.id} onClick={e=>{e.stopPropagation();if(!isCur){onReassign(dd.id);setShowAssign(false);}}}
-style={{display:"flex",alignItems:"center",gap:8,width:"100%",padding:"10px 12px",marginBottom:2,borderRadius:8,border:isCur?`2px solid ${DCOL[ddi]}`:"1px solid transparent",background:isCur?`${DCOL[ddi]}10`:"#fff",cursor:isCur?"default":"pointer",transition:"background 0.1s"}}
-onMouseEnter={e=>{if(!isCur)e.currentTarget.style.background="#f5f5f4";}} onMouseLeave={e=>{if(!isCur)e.currentTarget.style.background=isCur?`${DCOL[ddi]}10`:"#fff";}}>
+{drivers.map((dd,ddi)=>{const isCur=dd.id===entry.driverId;const numLoads=driverLoadCounts?.[dd.id]||1;return(
+<div key={dd.id}>
+<button onClick={e=>{e.stopPropagation();if(numLoads<=1&&!isCur){onReassign(dd.id);if(onLoadNum)onLoadNum(1);setShowAssign(false);}}}
+style={{display:"flex",alignItems:"center",gap:8,width:"100%",padding:"10px 12px",marginBottom:numLoads>1?0:2,borderRadius:numLoads>1?"8px 8px 0 0":8,border:isCur?`2px solid ${DCOL[ddi]}`:"1px solid transparent",background:isCur?`${DCOL[ddi]}10`:"#fff",cursor:numLoads>1?"default":isCur?"default":"pointer"}}>
 <div style={{width:32,height:32,borderRadius:8,background:DCOL[ddi],display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,color:"#fff",fontWeight:800,flexShrink:0}}>{getInitials(dd.name)}</div>
 <div style={{flex:1,textAlign:"left"}}>
-<div style={{fontSize:12,fontWeight:700,color:isCur?DCOL[ddi]:"#1c1917"}}>{dd.name}</div>
-{isCur&&<div style={{fontSize:9,color:DCOL[ddi]}}>Current</div>}
+<div style={{fontSize:12,fontWeight:700,color:isCur?DCOL[ddi]:"#1c1917"}}>{dd.name}{numLoads>1?` · ${numLoads} loads`:""}</div>
+{isCur&&<div style={{fontSize:9,color:DCOL[ddi]}}>Current · L{entry.loadNum||1}</div>}
 </div>
-</button>);})}
+</button>
+{numLoads>1&&<div style={{display:"flex",gap:3,padding:"4px 12px 8px",marginBottom:2,background:"#f5f5f4",borderRadius:"0 0 8px 8px"}}>
+{Array.from({length:numLoads},(_,i)=>i+1).map(ln=><button key={ln} onClick={e=>{e.stopPropagation();onReassign(dd.id);if(onLoadNum)onLoadNum(ln);setShowAssign(false);}} style={{flex:1,padding:"6px",borderRadius:6,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,background:(isCur&&(entry.loadNum||1)===ln)?DCOL[ddi]:"#e7e5e4",color:(isCur&&(entry.loadNum||1)===ln)?"#fff":"#57534e"}}>L{ln}</button>)}
+</div>}
+</div>);})}
 {entry.driverId>0&&<button onClick={e=>{e.stopPropagation();onReassign(0);setShowAssign(false);}}
 style={{display:"flex",alignItems:"center",gap:8,width:"100%",padding:"10px 12px",marginTop:2,borderRadius:8,border:"1px solid #fca5a5",background:"#fef2f2",cursor:"pointer"}}>
 <div style={{width:32,height:32,borderRadius:8,background:"#f59e0b",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,color:"#fff",fontWeight:800}}>↩</div>
@@ -1221,6 +1253,7 @@ style={{display:"flex",alignItems:"center",gap:8,width:"100%",padding:"10px 12px
 <div style={{fontSize:12,fontWeight:700,color:"#dc2626"}}>Delete permanently</div>
 </button>
 </div></>}
+</div>
 </div>
 </div>
 {isImetco&&!expanded&&<div style={{padding:"4px 8px 6px 12px",background:"#fafaf9",border:"1px solid #e7e5e4",borderTop:"none",borderRadius:"0 0 10px 10px",borderLeft:`4px solid ${c.accent}`,marginBottom:2,display:"flex",alignItems:"center",gap:6}} onClick={e=>e.stopPropagation()}>
@@ -1263,7 +1296,7 @@ style={{flex:1,padding:"5px 2px",borderRadius:6,border:"none",cursor:disabled?"d
 <div style={{display:"flex",gap:8,alignItems:"center"}}>
 <div style={{flex:1}}>
 <label style={{fontSize:10,fontWeight:600,color:"#57534e",display:"block",marginBottom:3}}>Weight (lbs)</label>
-<input type="number" value={entry.weight||""} onChange={e=>{e.stopPropagation();if(onWeight)onWeight(e.target.value);}} onClick={e=>e.stopPropagation()} placeholder="0"
+<input type="number" inputMode="numeric" pattern="[0-9]*" value={entry.weight||""} onChange={e=>{e.stopPropagation();if(onWeight)onWeight(e.target.value);}} onClick={e=>e.stopPropagation()} placeholder="0"
 style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"6px 10px",fontSize:14,fontWeight:700,outline:"none",textAlign:"center"}}/>
 </div>
 <div style={{flex:1}}>
@@ -1277,7 +1310,7 @@ style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"6px 10px
 <div style={{display:"flex",gap:6,marginTop:8,justifyContent:"flex-end"}}>
 {hasI&&<button onClick={e=>{e.stopPropagation();setInstrText("");onUpdateInstructions("");setExpanded(false);}} style={{background:"#fef2f2",border:"none",borderRadius:6,padding:"5px 10px",cursor:"pointer",fontSize:11,color:"#dc2626",fontWeight:600}}>Clear All</button>}
 <button onClick={e=>{e.stopPropagation();setExpanded(false);}} style={{background:"#e7e5e4",border:"none",borderRadius:6,padding:"5px 10px",cursor:"pointer",fontSize:11,fontWeight:600}}>Cancel</button>
-<button onClick={e=>{e.stopPropagation();onUpdateInstructions(instrText.trim());if(onDueBy)onDueBy(dueByInput||null);setExpanded(false);}} style={{background:BRAND.main,color:"#fff",border:"none",borderRadius:6,padding:"5px 14px",cursor:"pointer",fontSize:11,fontWeight:600}}>Save</button>
+<button onClick={e=>{e.stopPropagation();onUpdateInstructions(instrText.trim());if(onDueBy)onDueBy(dueByInput||null);setExpanded(false);}} style={{background:BRAND.main,color:"#fff",border:"none",borderRadius:6,padding:"5px 14px",cursor:"pointer",fontSize:11,fontWeight:600}}>Done</button>
 </div>
 </div>}
 </div>
@@ -1670,7 +1703,7 @@ style={{display:"block",width:"calc(100% - 8px)",margin:"12px 4px",background:"#
 }
 
 /* ── DELIVERY LIST ITEM (Add tab — editable instructions) ── */
-function DeliveryListItem({stop,rate,note,addr,curInstr,checked,multiSelect,accent,onCheck,onAdd,onSaveInstr}){
+function DeliveryListItem({stop,rate,note,addr,curInstr,checked,multiSelect,accent,onCheck,onAdd,onSaveInstr,isCustom,onOpenEdit}){
 const[expanded,setExpanded]=useState(false);
 const[instrText,setInstrText]=useState(curInstr||"");
 const[dueVal,setDueVal]=useState("");
@@ -1719,15 +1752,20 @@ style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px
 <div style={{marginTop:8,background:"#f0f5fa",border:"1px solid "+BRAND.light+"44",borderRadius:10,padding:"8px 10px"}}>
 <div style={{display:"flex",alignItems:"center",gap:8}}>
 <label style={{fontSize:11,fontWeight:600,color:BRAND.main,flexShrink:0}}>Weight:</label>
-<input type="number" value={weightVal} onChange={e=>setWeightVal(e.target.value)} onClick={e=>e.stopPropagation()} placeholder="lbs"
+<input type="number" inputMode="numeric" pattern="[0-9]*" value={weightVal} onChange={e=>setWeightVal(e.target.value)} onClick={e=>e.stopPropagation()} placeholder="lbs"
 style={{flex:1,border:"1px solid #d6d3d1",borderRadius:8,padding:"6px 10px",fontSize:14,fontWeight:700,outline:"none",textAlign:"center",maxWidth:120}}/>
 <span style={{fontSize:11,color:"#78716c"}}>lbs</span>
 {weightVal&&<button onClick={e=>{e.stopPropagation();setWeightVal("");}} style={{background:"#fff",border:"1px solid #d6d3d1",borderRadius:5,padding:"2px 6px",cursor:"pointer",fontSize:10,color:"#78716c"}}>Clear</button>}
 </div>
 </div>
-<div style={{display:"flex",gap:6,marginTop:8,justifyContent:"flex-end"}}>
-<button onClick={()=>setExpanded(false)} style={{background:"#e7e5e4",border:"none",borderRadius:6,padding:"5px 10px",cursor:"pointer",fontSize:11,fontWeight:600}}>Cancel</button>
-<button onClick={()=>{onSaveInstr(instrText.trim());setExpanded(false);}} style={{background:BRAND.main,color:"#fff",border:"none",borderRadius:6,padding:"5px 14px",cursor:"pointer",fontSize:11,fontWeight:600}}>Save</button>
+<div style={{display:"flex",gap:6,marginTop:8,justifyContent:"space-between",alignItems:"center"}}>
+{/* Bottom-left: permanent edit gear */}
+{onOpenEdit&&<button onClick={e=>{e.stopPropagation();onOpenEdit();}} style={{background:"#f5f5f4",border:"1px solid #e7e5e4",borderRadius:8,padding:"5px 10px",cursor:"pointer",fontSize:10,fontWeight:700,color:"#57534e",display:"flex",alignItems:"center",gap:4}}>⚙ Edit Stop</button>}
+{!onOpenEdit&&<div/>}
+<div style={{display:"flex",gap:6}}>
+<button onClick={e=>{e.stopPropagation();setExpanded(false);}} style={{background:"#e7e5e4",border:"none",borderRadius:6,padding:"5px 10px",cursor:"pointer",fontSize:11,fontWeight:600}}>Cancel</button>
+<button onClick={e=>{e.stopPropagation();onSaveInstr(instrText.trim());addWithExtras();setExpanded(false);}} style={{background:"#16a34a",color:"#fff",border:"none",borderRadius:6,padding:"5px 14px",cursor:"pointer",fontSize:11,fontWeight:700}}>+ Add to Manifest</button>
+</div>
 </div>
 </div>}
 </div>
@@ -1741,8 +1779,8 @@ const LS_CUSTOM_INSTR="dd_custom_instr";
 const LS_DISP_NOTES="dd_disp_notes";
 const LS_EMH="dd_emh";
 const DEFAULT_DRIVERS=[{id:1,name:"Trevor Seyers",phone:"404-394-9891"},{id:2,name:"Brent Dixon",phone:""},{id:3,name:"Trevarr Howard",phone:""},{id:4,name:"Chad Davis",phone:"678-977-4808"}];
-function lsGet(key,fallback){try{const v=localStorage.getItem(key);if(v){const parsed=JSON.parse(v);if(key===LS_LOG){const keys=Object.keys(parsed).filter(k=>Array.isArray(parsed[k])&&parsed[k].length>0);if(keys.length)console.log("[LS LOAD]",key,"days with data:",keys.join(", "));}return parsed;}return fallback;}catch{return fallback;}}
-function lsSet(key,val){try{localStorage.setItem(key,JSON.stringify(val));if(key===LS_LOG){const keys=Object.keys(val).filter(k=>Array.isArray(val[k])&&val[k].length>0);if(keys.length)console.log("[LS SAVE]",key,"days with data:",keys.join(", "));}}catch{}}
+function lsGet(key,fallback){try{const v=localStorage.getItem(key);if(v){const parsed=JSON.parse(v);return parsed;}return fallback;}catch{return fallback;}}
+function lsSet(key,val){try{localStorage.setItem(key,JSON.stringify(val));}catch{}}
 
 /* ══════════════ DISPATCH APP (owner view) ══════════════ */
 function DispatchApp(){
@@ -1795,9 +1833,7 @@ useEffect(()=>{
         if(done===toSave.length)setSaveStatus("");
         return;
       }
-      console.log("[SAVE]",dayKey,"entries:",entries.length);
       saveManifestDay(wOff,dIdx,entries).then(()=>{
-        console.log("[SAVE] OK",dayKey);
         prevLogRef.current[dayKey]=savedJson;
         /* Only clear dirty if current log matches what we saved.
            logRef.current is always the LATEST log, not the closure's stale copy. */
@@ -1805,7 +1841,6 @@ useEffect(()=>{
         if(currentJson===savedJson){
           dirtyDaysRef.current.delete(dayKey);
         }else{
-          console.log("[SAVE]",dayKey,"changed during save — will re-save");
         }
         done++;
         if(done===toSave.length){
@@ -1844,6 +1879,14 @@ const[multiSelect,setMultiSelect]=useState(false);const[multiChecked,setMultiChe
 const[driverViewId,setDriverViewId]=useState(null);
 const[customInstr,setCustomInstr]=useState(()=>lsGet(LS_CUSTOM_INSTR,{}));
 const[showAddCustomDel,setShowAddCustomDel]=useState(false);
+const[stopEditOpen,setStopEditOpen]=useState(null); /* {cust, idx, isCustom, stop, addr, rate, note} when editing a stop permanently */
+const[stopEditName,setStopEditName]=useState("");
+const[stopEditAddr,setStopEditAddr]=useState("");
+const[stopEditRate,setStopEditRate]=useState("");
+const[stopEditNote,setStopEditNote]=useState("");
+const[confirmDeleteStop,setConfirmDeleteStop]=useState(false);
+const[stopOverrides,setStopOverrides]=useState(()=>lsGet("dd_stop_overrides",{})); /* {"Cust::StopName": {s,addr,r,n}} */
+const[hiddenStops,setHiddenStops]=useState(()=>lsGet("dd_hidden_stops",[])); /* ["Cust::StopName", ...] */
 /* Custom delivery stops added per customer — persisted to Firebase */
 const[customStops,setCustomStops]=useState(()=>{
 const stored=lsGet("dd_custom_stops",{});
@@ -2006,7 +2049,15 @@ useEffect(()=>{
     /* Populate address cache from custom stops */
     Object.values(data).forEach(stops=>{if(Array.isArray(stops))stops.forEach(s=>{if(s.addr&&s.s)_customAddrCache[s.s]=s.addr;});});
   });
-  return()=>{unsubDrivers();unsubEmser();unsubNotes();unsubShifts();unsubQuotes();unsubLocs();unsubInv();unsubCustomStops();};
+  const unsubStopOvr=subscribeStopOverrides((data)=>{
+    setStopOverrides(data);lsSet("dd_stop_overrides",data);
+    /* Populate address cache from overrides */
+    Object.values(data).forEach(o=>{if(o&&o.addr&&o.s)_customAddrCache[o.s]=o.addr;});
+  });
+  const unsubHidden=subscribeHiddenStops((data)=>{
+    setHiddenStops(data);lsSet("dd_hidden_stops",data);
+  });
+  return()=>{unsubDrivers();unsubEmser();unsubNotes();unsubShifts();unsubQuotes();unsubLocs();unsubInv();unsubCustomStops();unsubStopOvr();unsubHidden();};
 },[]);
 
 /*
@@ -2026,7 +2077,6 @@ useEffect(()=>{
         const lk=`${wo}-${dayIdx}`;
         /* SKIP if this day has unsaved user changes */
         if(dirtyDaysRef.current.has(lk)){
-          console.log("[SUB] Skipping",lk,"— has unsaved changes");
           return;
         }
         const fbJson=JSON.stringify(entries);
@@ -2113,6 +2163,65 @@ useEffect(()=>{
   const timer=setTimeout(()=>{saveCustomStops(customStops).catch(e=>console.error("CustomStops save:",e));},500);
   return()=>clearTimeout(timer);
 },[customStops]);
+useEffect(()=>{lsSet("dd_stop_overrides",stopOverrides);},[stopOverrides]);
+useEffect(()=>{
+  if(!firebaseReady.current)return;
+  const timer=setTimeout(()=>{saveStopOverrides(stopOverrides).catch(e=>console.error("StopOverrides save:",e));},500);
+  return()=>clearTimeout(timer);
+},[stopOverrides]);
+useEffect(()=>{lsSet("dd_hidden_stops",hiddenStops);},[hiddenStops]);
+useEffect(()=>{
+  if(!firebaseReady.current)return;
+  const timer=setTimeout(()=>{saveHiddenStops(hiddenStops).catch(e=>console.error("HiddenStops save:",e));},500);
+  return()=>clearTimeout(timer);
+},[hiddenStops]);
+
+/* ── STOP EDIT HELPERS (permanent changes to ALL stops) ── */
+const openStopEdit=(cust,idx,isCustom,stop,addr,rate,note)=>{
+  setStopEditOpen({cust,idx,isCustom,stop,addr,rate,note});
+  setStopEditName(stop);setStopEditAddr(addr||"");setStopEditRate(rate?String(rate):"");setStopEditNote(note||"");setConfirmDeleteStop(false);
+};
+const saveStopEdit=()=>{
+  if(!stopEditOpen||!stopEditName.trim())return;
+  const{cust,idx,isCustom,stop:origStop}=stopEditOpen;
+  if(isCustom){
+    /* Custom stop — edit in place */
+    const hardLen=CUSTOMERS[cust]?.deliveries?.length||0;
+    const ci=idx-hardLen;
+    setCustomStops(p=>{const arr=[...(p[cust]||[])];if(ci>=0&&ci<arr.length){arr[ci]={...arr[ci],s:stopEditName.trim(),addr:stopEditAddr.trim(),r:parseFloat(stopEditRate)||0,n:stopEditNote.trim()||null};}return{...p,[cust]:arr};});
+  }else{
+    /* Built-in stop — save override keyed by "Customer::OriginalStopName" */
+    const key=cust+"::"+origStop;
+    setStopOverrides(p=>({...p,[key]:{s:stopEditName.trim(),addr:stopEditAddr.trim(),r:parseFloat(stopEditRate)||0,n:stopEditNote.trim()||null}}));
+  }
+  if(stopEditAddr.trim())_customAddrCache[stopEditName.trim()]=stopEditAddr.trim();
+  showToast(stopEditName.trim()+" updated");
+  setStopEditOpen(null);
+};
+const deleteStopPermanent=()=>{
+  if(!stopEditOpen)return;
+  const{cust,idx,isCustom,stop}=stopEditOpen;
+  if(isCustom){
+    /* Custom stop — remove permanently */
+    const hardLen=CUSTOMERS[cust]?.deliveries?.length||0;
+    const ci=idx-hardLen;
+    setCustomStops(p=>({...p,[cust]:(p[cust]||[]).filter((_,i)=>i!==ci)}));
+    if(stop)delete _customAddrCache[stop];
+    showToast(stop+" permanently deleted");
+  }else{
+    /* Built-in stop — hide it + remove any override */
+    const key=cust+"::"+stop;
+    setHiddenStops(p=>[...p.filter(k=>k!==key),key]);
+    setStopOverrides(p=>{const next={...p};delete next[key];return next;});
+    showToast(stop+" removed permanently");
+  }
+  setStopEditOpen(null);setConfirmDeleteStop(false);
+};
+/* Restore a hidden built-in stop */
+const restoreHiddenStop=(key)=>{
+  setHiddenStops(p=>p.filter(k=>k!==key));
+  showToast("Stop restored");
+};
 
 /* ── QUOTE HELPERS ── */
 const calcQuoteRate=(miles,liftgate,gravel,extraPallets)=>{
@@ -2319,15 +2428,15 @@ setLog(p=>{
   const orig=all[idx];
   const w1=Math.round(totalWeight*(ratio/100));
   const w2=totalWeight-w1;
-  /* Update original with load 1 */
+  /* Update original with load 1 — stays with current driver */
   all[idx]={...orig,weight:w1,loadNum:1,wasSplit:true,note:(orig.note?orig.note+" | ":"")+"Split 1/2: "+w1+" lbs"};
-  /* Create load 2 right after */
-  const load2={...orig,id:Date.now()+Math.random(),weight:w2,loadNum:2,wasSplit:true,note:(orig.note?orig.note+" | ":"")+"Split 2/2: "+w2+" lbs",status:null,arrivedAt:null,departedAt:null,photos:[],signature:null};
-  all.splice(idx+1,0,load2);
+  /* Create load 2 — goes to UNASSIGNED so dispatcher can assign to another truck */
+  const load2={...orig,id:Date.now()+Math.random(),weight:w2,loadNum:2,wasSplit:true,driverId:0,note:(orig.note?orig.note+" | ":"")+"Split 2/2: "+w2+" lbs",status:null,arrivedAt:null,departedAt:null,photos:[],signature:null};
+  all.push(load2);
   return{...p,[dk]:all};
 });
 setSplitEntry(null);
-showToast("Shipment split into 2 loads");
+showToast("Split — Load 2 moved to Unassigned");
 };
 const updateStatus=(eid,status)=>{const now=new Date().toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,status,arrivedAt:status==="arrived"?now:e.arrivedAt,departedAt:status==="departed"?now:e.departedAt}:e)}));};
 const addPhoto=(eid,dataUrl)=>setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,photos:[...(e.photos||[]),dataUrl]}:e)}));
@@ -2342,8 +2451,11 @@ const setLoadNum=(eid,n)=>setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{.
 const TRUCK_LIMITS={default:10000,heavy:14000};
 const[driverCapacity,setDriverCapacity]=useState(()=>lsGet("dd_driver_capacity",{})); /* {driverId: 10000|14000} */
 useEffect(()=>{lsSet("dd_driver_capacity",driverCapacity);},[driverCapacity]);
+const[driverLoadCount,setDriverLoadCount]=useState({}); /* {driverId: numLoads} — tracks extra loads */
 const getDriverCapacity=(drvId)=>driverCapacity[drvId]||TRUCK_LIMITS.default;
 const toggleDriverCapacity=(drvId)=>{setDriverCapacity(p=>{const cur=p[drvId]||TRUCK_LIMITS.default;return{...p,[drvId]:cur===TRUCK_LIMITS.default?TRUCK_LIMITS.heavy:TRUCK_LIMITS.default};});};
+const addDriverLoad=(drvId)=>{const cur=driverLoadCount[drvId]||1;setDriverLoadCount(p=>({...p,[drvId]:Math.min(cur+1,3)}));showToast("Load "+(cur+1)+" added");};
+const getDriverLoadOptions=(drvId)=>{const explicit=driverLoadCount[drvId]||1;const fromEntries=getMaxLoad(drvId);return Math.max(explicit,fromEntries);};
 const getLoadWeight=(drvId,loadN)=>dl.filter(e=>e.driverId===drvId&&(e.loadNum||1)===loadN).reduce((s,e)=>s+(e.weight||0),0);
 const getDriverLoads=(drvId)=>{const loads=new Set();dl.filter(e=>e.driverId===drvId).forEach(e=>loads.add(e.loadNum||1));return[...loads].sort((a,b)=>a-b);};
 const getMaxLoad=(drvId)=>{const loads=getDriverLoads(drvId);return loads.length>0?Math.max(...loads):1;};
@@ -2404,8 +2516,7 @@ if(!msgInput.trim())return;
 const key=getMsgKey(ch);
 const now=new Date().toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});
 const msg={from:"dispatch",fromName:"Dispatch",text:msgInput.trim(),time:now,read:false};
-console.log("[MSG-DISPATCH] Sending to:",key);
-saveMessage(key,msg).then(()=>console.log("[MSG-DISPATCH] Sent OK")).catch(e=>console.error("[MSG-DISPATCH] FAILED:",e));
+saveMessage(key,msg).catch(e=>console.error("[MSG-DISPATCH] FAILED:",e));
 setMsgInput("");
 };
 const getUnreadCount=(ch)=>{const msgs=getMessages(ch);return msgs.filter(m=>m.from!=="dispatch"&&!m.read).length;};
@@ -3188,7 +3299,7 @@ activeDriver={rpActive} onStopClick={rpClick} onAssignStop={rpActive?(sid)=>rpCl
 <div style={{display:"flex",gap:6,marginTop:6,justifyContent:"flex-end"}}>
 {dispNotes[emDk]&&<button onClick={()=>{setDispNotes(p=>{const n={...p};delete n[emDk];return n;});setEditingNote(false);setNoteText("");}} style={{background:"#fef2f2",border:"none",borderRadius:6,padding:"5px 10px",cursor:"pointer",fontSize:11,color:"#dc2626",fontWeight:600}}>Clear</button>}
 <button onClick={()=>setEditingNote(false)} style={{background:"#e7e5e4",border:"none",borderRadius:6,padding:"5px 10px",cursor:"pointer",fontSize:11,fontWeight:600}}>Cancel</button>
-<button onClick={()=>{setDispNotes(p=>({...p,[dk]:noteText.trim()}));setEditingNote(false);showToast("Notes saved");}} style={{background:"#7c3aed",color:"#fff",border:"none",borderRadius:6,padding:"5px 14px",cursor:"pointer",fontSize:11,fontWeight:600}}>Save</button>
+<button onClick={()=>{setDispNotes(p=>({...p,[emDk]:noteText.trim()}));setEditingNote(false);showToast("Notes saved");}} style={{background:"#7c3aed",color:"#fff",border:"none",borderRadius:6,padding:"5px 14px",cursor:"pointer",fontSize:11,fontWeight:600}}>Save</button>
 </div>
 </div>}
 {/* Emser hours */}
@@ -3229,16 +3340,16 @@ return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius
 {[4,5,6,7,8,9,10].map(h=><button key={h} onClick={()=>setEmH(p=>({...p,[`${emDk}-emser`]:h}))} style={{width:32,height:30,borderRadius:8,border:"none",cursor:"pointer",fontSize:13,fontWeight:600,background:hoursUsed===h&&!totalMins?"#2563eb":"#e7e5e4",color:hoursUsed===h&&!totalMins?"#fff":"#78716c"}}>{h}</button>)}
 <button onClick={()=>setShowCustomHrs(!showCustomHrs)} style={{height:30,borderRadius:8,border:"none",cursor:"pointer",fontSize:11,fontWeight:600,padding:"0 10px",background:showCustomHrs?"#2563eb":"#dbeafe",color:showCustomHrs?"#fff":"#2563eb"}}>Other</button>
 </div></div>
-{showCustomHrs&&<div style={{display:"flex",gap:6,alignItems:"center",marginTop:8}}><input value={customHrsInput} onChange={e=>setCustomHrsInput(e.target.value)} placeholder="e.g. 4.5" type="number" step="0.25" min="1" style={{width:80,border:"1px solid #bfdbfe",borderRadius:8,padding:"6px 10px",fontSize:14,fontWeight:700,outline:"none",textAlign:"center"}}/><span style={{fontSize:12,color:"#64748b"}}>hrs</span><button onClick={()=>{const v=parseFloat(customHrsInput);if(v>0){setEmH(p=>({...p,[`${emDk}-emser`]:v}));setShowCustomHrs(false);setCustomHrsInput("");}}} style={{background:"#2563eb",color:"#fff",border:"none",borderRadius:8,padding:"6px 14px",fontSize:12,fontWeight:600,cursor:"pointer"}}>Set</button></div>}
+{showCustomHrs&&<div style={{display:"flex",gap:6,alignItems:"center",marginTop:8}}><input value={customHrsInput} onChange={e=>setCustomHrsInput(e.target.value)} placeholder="e.g. 4.5" type="number" inputMode="decimal" step="0.25" min="1" style={{width:80,border:"1px solid #bfdbfe",borderRadius:8,padding:"6px 10px",fontSize:14,fontWeight:700,outline:"none",textAlign:"center"}}/><span style={{fontSize:12,color:"#64748b"}}>hrs</span><button onClick={()=>{const v=parseFloat(customHrsInput);if(v>0){setEmH(p=>({...p,[`${emDk}-emser`]:v}));setShowCustomHrs(false);setCustomHrsInput("");}}} style={{background:"#2563eb",color:"#fff",border:"none",borderRadius:8,padding:"6px 14px",fontSize:12,fontWeight:600,cursor:"pointer"}}>Set</button></div>}
 </div>);})()}
 {/* Entry list */}
 {dl.length===0?<div style={{textAlign:"center",padding:"60px 20px",color:"#a8a29e"}}><div style={{fontSize:40,marginBottom:12}}>🚚</div><p style={{fontSize:14,margin:0}}>No deliveries logged for this day</p></div>
-:<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+:<div style={{display:"flex",flexDirection:"column",gap:8}}>
 {dl.filter(e=>e.stopType!=="pickup").map(entry=>{const c=getCustColor(entry.customer);const drv=drivers.find(d=>d.id===entry.driverId);const di=drivers.findIndex(d=>d.id===entry.driverId);const done=entry.status==="departed";const onSite=entry.status==="arrived";const isImetco=entry.customer==="IMETCO";return(
-<div key={entry.id} style={{background:"#fff",border:"1px solid #e7e5e4",borderRadius:12,padding:"12px 16px",borderLeft:`4px solid ${entry.priority?"#f59e0b":c.accent}`}}>
-<div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-<div style={{flex:1}}>
-<div style={{display:"flex",alignItems:"center",gap:5,marginBottom:3,flexWrap:"wrap"}}>
+<div key={entry.id} style={{background:"#fff",border:"1px solid #e7e5e4",borderRadius:12,padding:"12px 14px",borderLeft:`4px solid ${entry.priority?"#f59e0b":c.accent}`}}>
+{/* Header row: customer + rate */}
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+<div style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap",flex:1}}>
 <span style={{fontSize:11,fontWeight:600,color:c.accent,textTransform:"uppercase"}}>{entry.customer}</span>
 {entry.priority&&<span style={{fontSize:9,background:"#f59e0b",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700}}>PRIORITY</span>}
 {done&&<span style={{fontSize:9,background:"#16a34a",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700}}>DONE</span>}
@@ -3246,35 +3357,36 @@ return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius
 {entry.dueBy&&<span style={{fontSize:9,background:entry.dueBy.includes("-")?"#7c3aed":entry.dueBy.startsWith("After")?"#2563eb":"#dc2626",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700}}>⏰ {entry.dueBy}</span>}
 {drv&&<span style={{fontSize:9,background:DCOL[di]||"#78716c",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:600}}>{drv.name.split(" ")[0]}</span>}
 </div>
-<div style={{fontSize:14,fontWeight:600}}>{entry.stop}</div>
-{entry.addr&&<div style={{fontSize:11,color:"#78716c",marginTop:1}}>{entry.addr}</div>}
+<div style={{fontSize:16,fontWeight:700,fontVariantNumeric:"tabular-nums",flexShrink:0}}><InlineRate value={entry.baseRate} isHourly={entry.isHourly} onSave={r=>updateRate(entry.id,r)}/></div>
+</div>
+{/* Stop name + details */}
+<div style={{fontSize:15,fontWeight:600,marginBottom:2}}>{entry.stop}</div>
+{entry.addr&&<div style={{fontSize:11,color:"#78716c"}}>{entry.addr}</div>}
 {entry.instructions&&<div style={{fontSize:11,color:"#2563eb",marginTop:3,background:"#eff6ff",padding:"4px 8px",borderRadius:6}}>📋 {entry.instructions}</div>}
 {entry.shipPlan&&<div style={{fontSize:11,color:"#ea580c",fontWeight:700,marginTop:2}}>SP# {entry.shipPlan}</div>}
-</div>
-<div style={{textAlign:"right",marginLeft:10,flexShrink:0}}>
-<div style={{fontSize:15,fontWeight:700,fontVariantNumeric:"tabular-nums"}}><InlineRate value={entry.baseRate} isHourly={entry.isHourly} onSave={r=>updateRate(entry.id,r)}/></div>
-{!entry.liftgateApplied&&!entry.isHourly&&<button onClick={()=>manualLiftgate(entry.id)} style={{background:"#fff7ed",border:"1px solid #fed7aa",color:"#ea580c",fontSize:10,cursor:"pointer",padding:"3px 8px",borderRadius:6,fontWeight:700,marginTop:4,display:"block"}}>+LG $75</button>}
-{entry.liftgateApplied&&<div style={{fontSize:9,color:"#16a34a",fontWeight:700,marginTop:4}}>✓ LG +$75</div>}
-{!entry.isHourly&&!entry.wasSplit&&<button onClick={()=>setSplitEntry({id:entry.id,totalWeight:entry.weight||10000,ratio:50})} style={{background:"#eff6ff",border:"1px solid #bfdbfe",color:"#2563eb",fontSize:9,cursor:"pointer",padding:"3px 8px",borderRadius:6,fontWeight:700,marginTop:4,display:"block"}}>✂ Split</button>}
-{entry.weight>0&&<div style={{fontSize:8,color:"#78716c",marginTop:2}}>{entry.weight.toLocaleString()} lbs</div>}
-{entry.wasSplit&&<div style={{fontSize:8,color:"#2563eb",fontWeight:700,marginTop:2}}>Load {entry.loadNum}</div>}
-<button onClick={()=>deleteDel(entry.id)} style={{background:"none",border:"none",color:"#dc2626",fontSize:9,cursor:"pointer",padding:"0",opacity:0.5,marginTop:10,display:"block"}}>Delete</button>
-</div>
+{entry.weight>0&&<div style={{fontSize:11,color:BRAND.main,fontWeight:700,marginTop:2}}>{entry.weight.toLocaleString()} lbs{entry.wasSplit?" (Load "+entry.loadNum+")":""}</div>}
+{/* Action row — full width */}
+<div style={{display:"flex",gap:6,marginTop:8,alignItems:"center",flexWrap:"wrap"}}>
+{!entry.liftgateApplied&&!entry.isHourly&&<button onClick={()=>manualLiftgate(entry.id)} style={{background:"#fff7ed",border:"1px solid #fed7aa",color:"#ea580c",fontSize:11,cursor:"pointer",padding:"5px 12px",borderRadius:8,fontWeight:700}}>+LG $75</button>}
+{entry.liftgateApplied&&<span style={{fontSize:10,color:"#16a34a",fontWeight:700,background:"#f0fdf4",padding:"5px 10px",borderRadius:8,border:"1px solid #bbf7d0"}}>✓ LG +$75</span>}
+{!entry.isHourly&&!entry.wasSplit&&<button onClick={()=>setSplitEntry({id:entry.id,totalWeight:entry.weight||0,ratio:50})} style={{background:"#eff6ff",border:"1px solid #bfdbfe",color:"#2563eb",fontSize:11,cursor:"pointer",padding:"5px 12px",borderRadius:8,fontWeight:700}}>✂ Split</button>}
+{entry.wasSplit&&<span style={{fontSize:10,color:"#2563eb",fontWeight:700,background:"#eff6ff",padding:"5px 10px",borderRadius:8,border:"1px solid #bfdbfe"}}>Load {entry.loadNum}</span>}
+<button onClick={()=>deleteDel(entry.id)} style={{background:"none",border:"none",color:"#dc2626",fontSize:10,cursor:"pointer",padding:"5px 8px",opacity:0.5,marginLeft:"auto"}}>Delete</button>
 </div>
 {/* Split shipment panel */}
 {splitEntry?.id===entry.id&&<div style={{marginTop:8,background:"#eff6ff",border:"2px solid #2563eb",borderRadius:10,padding:14}}>
 <div style={{fontSize:13,fontWeight:700,color:"#1e40af",marginBottom:10}}>✂ Split Shipment</div>
 <div style={{marginBottom:10}}>
 <label style={{fontSize:11,fontWeight:600,color:"#57534e",display:"block",marginBottom:4}}>Total Weight (lbs)</label>
-<input type="number" value={splitEntry.totalWeight} onChange={e=>setSplitEntry(p=>({...p,totalWeight:parseInt(e.target.value)||0}))} style={{width:"100%",border:"1px solid #bfdbfe",borderRadius:8,padding:"8px 12px",fontSize:14,fontWeight:700,outline:"none"}}/>
+<input type="number" inputMode="numeric" pattern="[0-9]*" value={splitEntry.totalWeight} onChange={e=>setSplitEntry(p=>({...p,totalWeight:parseInt(e.target.value)||0}))} style={{width:"100%",border:"1px solid #bfdbfe",borderRadius:8,padding:"8px 12px",fontSize:14,fontWeight:700,outline:"none"}}/>
 </div>
 <div style={{marginBottom:8}}>
 <div style={{display:"flex",justifyContent:"space-between",fontSize:11,fontWeight:600,color:"#57534e",marginBottom:4}}>
 <span>Truck 1: {Math.round(splitEntry.totalWeight*(splitEntry.ratio/100)).toLocaleString()} lbs</span>
 <span>Truck 2: {(splitEntry.totalWeight-Math.round(splitEntry.totalWeight*(splitEntry.ratio/100))).toLocaleString()} lbs</span>
 </div>
-<input type="range" min="10" max="90" value={splitEntry.ratio} onChange={e=>setSplitEntry(p=>({...p,ratio:parseInt(e.target.value)}))} style={{width:"100%",accentColor:"#2563eb"}}/>
-<div style={{textAlign:"center",fontSize:12,fontWeight:700,color:"#2563eb",marginTop:2}}>{splitEntry.ratio}% / {100-splitEntry.ratio}%</div>
+<input type="range" min={100} max={Math.max((splitEntry.totalWeight||0)-100,200)} step={100} value={Math.round((splitEntry.totalWeight||0)*(splitEntry.ratio/100))} onChange={e=>{const v=parseInt(e.target.value)||0;const tw=splitEntry.totalWeight||1;setSplitEntry(p=>({...p,ratio:Math.round((v/tw)*100)}));}} style={{width:"100%",accentColor:"#2563eb"}}/>
+<div style={{textAlign:"center",fontSize:12,fontWeight:700,color:"#2563eb",marginTop:2}}>{Math.round((splitEntry.totalWeight||0)*(splitEntry.ratio/100)).toLocaleString()} / {((splitEntry.totalWeight||0)-Math.round((splitEntry.totalWeight||0)*(splitEntry.ratio/100))).toLocaleString()} lbs</div>
 </div>
 <div style={{display:"flex",gap:8}}>
 <button onClick={()=>confirmSplit(entry.id,splitEntry.totalWeight,splitEntry.ratio)} style={{flex:1,background:"#2563eb",color:"#fff",border:"none",borderRadius:8,padding:"10px",fontSize:13,fontWeight:700,cursor:"pointer"}}>✂ Split into 2 Loads</button>
@@ -3367,7 +3479,7 @@ return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius
 </div>);})}
 </div>
 <div style={{fontSize:12,color:"#64748b"}}>{formatMins(wkShiftTotal)} total · $102.50/hr</div>
-</div>);})()} 
+</div>);})()}
 {Object.keys(wkF).length>0&&<div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:14,padding:"14px 16px",marginBottom:16}}><div style={{fontSize:12,fontWeight:700,color:"#d97706",textTransform:"uppercase",marginBottom:8}}>Week Fuel Surcharges</div>{Object.entries(wkF).map(([cu,cf])=><div key={cu} style={{display:"flex",justifyContent:"space-between",padding:"4px 0"}}><span style={{fontSize:13}}>{cu} <span style={{fontSize:11,color:"#a8a29e"}}>{fmt(cf.base)} × {Math.round(cf.pct*100)}%</span></span><span style={{fontSize:14,fontWeight:700,color:"#d97706",fontVariantNumeric:"tabular-nums"}}>{fmt(cf.base*cf.pct)}</span></div>)}</div>}
 </div>}
 {view==="history"&&<div style={{maxWidth:1000,margin:"0 auto"}}>
@@ -3701,7 +3813,7 @@ style={{width:"100%",border:"1px solid #d8b4fe",borderRadius:8,padding:"8px 10px
 <div style={{display:"flex",gap:6,marginTop:6,justifyContent:"flex-end"}}>
 {dispNotes[emDk]&&<button onClick={()=>{setDispNotes(p=>{const n={...p};delete n[emDk];return n;});setEditingNote(false);setNoteText("");}} style={{background:"#fef2f2",border:"none",borderRadius:6,padding:"4px 8px",cursor:"pointer",fontSize:10,color:"#dc2626",fontWeight:600}}>Clear</button>}
 <button onClick={()=>setEditingNote(false)} style={{background:"#e7e5e4",border:"none",borderRadius:6,padding:"4px 8px",cursor:"pointer",fontSize:10,fontWeight:600}}>Cancel</button>
-<button onClick={()=>{setDispNotes(p=>({...p,[dk]:noteText.trim()}));setEditingNote(false);showToast("Notes saved");}} style={{background:"#7c3aed",color:"#fff",border:"none",borderRadius:6,padding:"4px 12px",cursor:"pointer",fontSize:10,fontWeight:600}}>Save</button>
+<button onClick={()=>{setDispNotes(p=>({...p,[emDk]:noteText.trim()}));setEditingNote(false);showToast("Notes saved");}} style={{background:"#7c3aed",color:"#fff",border:"none",borderRadius:6,padding:"4px 12px",cursor:"pointer",fontSize:10,fontWeight:600}}>Save</button>
 </div>
 </div>}
 
@@ -3715,7 +3827,7 @@ style={{width:"100%",border:"1px solid #d8b4fe",borderRadius:8,padding:"8px 10px
 {de.length>0&&<span style={{fontSize:9,color:"#78716c",fontVariantNumeric:"tabular-nums"}}>~{getDriverMiles(drv.id)}mi</span>}
 </div>
 <div style={{display:"flex",gap:3,flexWrap:"wrap"}}>
-{de.length>0&&<><button onClick={()=>printManifest(drv.id)} style={{background:"#e7e5e4",border:"none",borderRadius:5,padding:"3px 6px",cursor:"pointer",fontSize:9,color:"#57534e",fontWeight:600}}>Print</button><button onClick={()=>textManifest(drv.id)} style={{background:"#dbeafe",border:"none",borderRadius:5,padding:"3px 6px",cursor:"pointer",fontSize:9,color:"#2563eb",fontWeight:600}}>Text</button></>}
+{de.length>0&&<><button onClick={()=>printManifest(drv.id)} style={{background:"#e7e5e4",border:"none",borderRadius:5,padding:"3px 6px",cursor:"pointer",fontSize:9,color:"#57534e",fontWeight:600}}>Print</button><button onClick={()=>textManifest(drv.id)} style={{background:"#dbeafe",border:"none",borderRadius:5,padding:"3px 6px",cursor:"pointer",fontSize:9,color:"#2563eb",fontWeight:600}}>Text</button><button onClick={()=>{setNotifyDriver(drv.id);setNotifyCustomMsg("");}} style={{background:"#fef3c7",border:"none",borderRadius:5,padding:"3px 6px",cursor:"pointer",fontSize:9,color:"#92400e",fontWeight:600}}>Notify</button></>}
 {de.length>=2&&<div style={{position:"relative"}}>
 <button onClick={()=>setSortMenuDrv(sortMenuDrv===drv.id?null:drv.id)} style={{background:"linear-gradient(135deg,#2563eb,#1d4ed8)",border:"none",borderRadius:5,padding:"3px 7px",cursor:"pointer",fontSize:9,color:"#fff",fontWeight:700}}>⚡ Route ▾</button>
 {sortMenuDrv===drv.id&&<><div style={{position:"fixed",inset:0,zIndex:199}} onClick={()=>setSortMenuDrv(null)}/>
@@ -3727,8 +3839,22 @@ style={{width:"100%",border:"1px solid #d8b4fe",borderRadius:8,padding:"8px 10px
 </div></>}
 </div>}
 <button onClick={()=>setInsertPickupFor({driverId:drv.id,afterIdx:-1})} style={{background:"#eff6ff",border:"none",borderRadius:5,padding:"3px 6px",cursor:"pointer",fontSize:9,color:"#2563eb",fontWeight:600}}>+PU</button>
-<button onClick={()=>{setNotifyDriver(drv.id);setNotifyCustomMsg("");}} style={{background:"#fef3c7",border:"none",borderRadius:5,padding:"3px 6px",cursor:"pointer",fontSize:9,color:"#92400e",fontWeight:600}}>Notify</button>
 <button onClick={()=>setDriverViewId(drv.id)} style={{background:"#f3e8f9",border:"none",borderRadius:5,padding:"3px 6px",cursor:"pointer",fontSize:9,color:"#7c3aed",fontWeight:600}}>View</button>
+{/* ⋯ More menu */}
+<div style={{position:"relative"}}>
+<button onClick={()=>setSortMenuDrv(sortMenuDrv===("more-"+drv.id)?null:"more-"+drv.id)} style={{background:"#f5f5f4",border:"1px solid #e7e5e4",borderRadius:5,padding:"3px 6px",cursor:"pointer",fontSize:9,color:"#57534e",fontWeight:600}}>⋯</button>
+{sortMenuDrv===("more-"+drv.id)&&<><div style={{position:"fixed",inset:0,zIndex:199}} onClick={()=>setSortMenuDrv(null)}/>
+<div style={{position:"absolute",top:"100%",right:0,zIndex:200,background:"#fff",border:"1px solid #e7e5e4",borderRadius:12,padding:6,marginTop:4,boxShadow:"0 12px 40px rgba(0,0,0,0.2)",width:180}}>
+<div style={{fontSize:11,fontWeight:700,color:DCOL[di],padding:"6px 10px",borderBottom:"1px solid #f5f5f4",marginBottom:4}}>{drv.name}</div>
+{getDriverLoadOptions(drv.id)<3&&<button onClick={()=>{addDriverLoad(drv.id);setSortMenuDrv(null);}} style={{display:"flex",alignItems:"center",gap:8,width:"100%",textAlign:"left",background:"none",border:"none",padding:"10px",cursor:"pointer",borderRadius:8,fontSize:12,fontWeight:600,color:"#1c1917"}}>
+<span style={{fontSize:14}}>🚚</span><span>Add Load {getDriverLoadOptions(drv.id)+1}</span>
+</button>}
+<button onClick={()=>{toggleDriverCapacity(drv.id);setSortMenuDrv(null);}} style={{display:"flex",alignItems:"center",gap:8,width:"100%",textAlign:"left",background:"none",border:"none",padding:"10px",cursor:"pointer",borderRadius:8,fontSize:12,fontWeight:600,color:"#1c1917"}}>
+<span style={{fontSize:14}}>{getDriverCapacity(drv.id)===TRUCK_LIMITS.heavy?"🚚":"🚛"}</span><span>{getDriverCapacity(drv.id)===TRUCK_LIMITS.heavy?"Switch to 10k":"Switch to 14k"}</span>
+</button>
+</div></>}
+</div>
+{/* + Add (far right) */}
 <button onClick={()=>{setPreAssignDriver(drv.id);setView("add");setSelCust(null);setQuoteMode(null);}} style={{background:"#dcfce7",border:"none",borderRadius:5,padding:"3px 6px",cursor:"pointer",fontSize:9,color:"#16a34a",fontWeight:600}}>+</button>
 </div>
 </div>
@@ -3786,7 +3912,7 @@ style={{background:isDrgOver?"#dcfce7":isDrgSrc?"#fef9c3":done?"#f0fdf4":onSite?
 <button onClick={()=>moveInDriver(drv.id,eIdx,1)} style={{background:"#f5f5f4",border:"1px solid #e7e5e4",borderRadius:4,padding:"1px 5px",cursor:"pointer",fontSize:9,color:"#78716c"}} title="Move down">▼</button>
 {!isPU&&!entry.isHourly&&!entry.liftgateApplied&&<button onClick={()=>manualLiftgate(entry.id)} style={{background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:4,padding:"1px 6px",cursor:"pointer",fontSize:9,color:"#ea580c",fontWeight:700}}>+LG</button>}
 {entry.liftgateApplied&&<span style={{fontSize:8,color:"#16a34a",fontWeight:700,padding:"2px 4px"}}>✓LG</span>}
-{!isPU&&!entry.isHourly&&!entry.wasSplit&&<button onClick={()=>setSplitEntry({id:entry.id,totalWeight:entry.weight||10000,ratio:50})} style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:4,padding:"1px 6px",cursor:"pointer",fontSize:9,color:"#2563eb",fontWeight:700}}>✂Split</button>}
+{!isPU&&!entry.isHourly&&!entry.wasSplit&&<button onClick={()=>setSplitEntry({id:entry.id,totalWeight:entry.weight||0,ratio:50})} style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:4,padding:"1px 6px",cursor:"pointer",fontSize:9,color:"#2563eb",fontWeight:700}}>✂Split</button>}
 {entry.wasSplit&&<span style={{fontSize:8,color:"#2563eb",fontWeight:700,padding:"2px 4px"}}>L{entry.loadNum}</span>}
 <button onClick={()=>deleteDel(entry.id)} style={{background:"none",border:"none",color:"#dc2626",fontSize:9,cursor:"pointer",padding:"1px 4px"}}>✕</button>
 </div>
@@ -3795,14 +3921,14 @@ style={{background:isDrgOver?"#dcfce7":isDrgSrc?"#fef9c3":done?"#f0fdf4":onSite?
 <div style={{fontSize:11,fontWeight:700,color:"#1e40af",marginBottom:8}}>✂ Split Shipment</div>
 <div style={{marginBottom:8}}>
 <label style={{fontSize:10,fontWeight:600,color:"#57534e",display:"block",marginBottom:3}}>Total Weight (lbs)</label>
-<input type="number" value={splitEntry.totalWeight} onChange={e=>setSplitEntry(p=>({...p,totalWeight:parseInt(e.target.value)||0}))} style={{width:"100%",border:"1px solid #bfdbfe",borderRadius:6,padding:"6px 10px",fontSize:13,fontWeight:700,outline:"none"}}/>
+<input type="number" inputMode="numeric" pattern="[0-9]*" value={splitEntry.totalWeight} onChange={e=>setSplitEntry(p=>({...p,totalWeight:parseInt(e.target.value)||0}))} style={{width:"100%",border:"1px solid #bfdbfe",borderRadius:6,padding:"6px 10px",fontSize:13,fontWeight:700,outline:"none"}}/>
 </div>
 <div style={{display:"flex",justifyContent:"space-between",fontSize:10,fontWeight:600,color:"#57534e",marginBottom:3}}>
 <span>Truck 1: {Math.round(splitEntry.totalWeight*(splitEntry.ratio/100)).toLocaleString()} lbs</span>
 <span>Truck 2: {(splitEntry.totalWeight-Math.round(splitEntry.totalWeight*(splitEntry.ratio/100))).toLocaleString()} lbs</span>
 </div>
-<input type="range" min="10" max="90" value={splitEntry.ratio} onChange={e=>setSplitEntry(p=>({...p,ratio:parseInt(e.target.value)}))} style={{width:"100%",accentColor:"#2563eb"}}/>
-<div style={{textAlign:"center",fontSize:11,fontWeight:700,color:"#2563eb",marginTop:2,marginBottom:8}}>{splitEntry.ratio}% / {100-splitEntry.ratio}%</div>
+<input type="range" min={100} max={Math.max((splitEntry.totalWeight||0)-100,200)} step={100} value={Math.round((splitEntry.totalWeight||0)*(splitEntry.ratio/100))} onChange={e=>{const v=parseInt(e.target.value)||0;const tw=splitEntry.totalWeight||1;setSplitEntry(p=>({...p,ratio:Math.round((v/tw)*100)}));}} style={{width:"100%",accentColor:"#2563eb"}}/>
+<div style={{textAlign:"center",fontSize:11,fontWeight:700,color:"#2563eb",marginTop:2,marginBottom:8}}>{Math.round((splitEntry.totalWeight||0)*(splitEntry.ratio/100)).toLocaleString()} / {((splitEntry.totalWeight||0)-Math.round((splitEntry.totalWeight||0)*(splitEntry.ratio/100))).toLocaleString()} lbs</div>
 <div style={{display:"flex",gap:6}}>
 <button onClick={()=>confirmSplit(entry.id,splitEntry.totalWeight,splitEntry.ratio)} style={{flex:1,background:"#2563eb",color:"#fff",border:"none",borderRadius:6,padding:"8px",fontSize:12,fontWeight:700,cursor:"pointer"}}>✂ Split</button>
 <button onClick={()=>setSplitEntry(null)} style={{background:"#e7e5e4",border:"none",borderRadius:6,padding:"8px 12px",fontSize:11,cursor:"pointer",color:"#57534e"}}>Cancel</button>
@@ -4213,10 +4339,10 @@ return(
 <div style={{display:"flex",gap:5,padding:"12px 16px",background:"#e7e5e4",borderBottom:"1px solid #d6d3d1"}}>
 {[{k:"manifest",l:"Manifests"},{k:"routes",l:"Routes"},{k:"daily",l:"Daily"},{k:"weekly",l:"Weekly"}].map(v=>
 <button key={v.k} onClick={()=>{setView(v.k);setSelCust(null);setSelStop(null);setQuoteMode(null);setInsertPickupFor(null);setMultiSelect(false);setMultiChecked([]);setPreAssignDriver(null);setShowMoreMenu(false);}}
-style={{flex:1,border:v.k==="routes"?"2px solid #d97706":"1px solid #d6d3d1",borderRadius:10,padding:"9px 2px",cursor:"pointer",fontSize:11,fontWeight:600,background:view===v.k?(v.k==="routes"?"#d97706":BRAND.main):"#fff",color:view===v.k?"#fff":v.k==="routes"?"#d97706":"#57534e"}}>{v.l}</button>
+style={{flex:1,border:view===v.k?"2px solid "+BRAND.main:"1px solid #d6d3d1",borderRadius:10,padding:"9px 2px",cursor:"pointer",fontSize:11,fontWeight:600,background:view===v.k?BRAND.main:"#fff",color:view===v.k?"#fff":BRAND.main}}>{v.l}</button>
 )}
 <button onClick={()=>setShowMoreMenu(true)}
-style={{flex:1,border:view==="history"?"2px solid #7c3aed":"1px solid #d6d3d1",borderRadius:10,padding:"9px 2px",cursor:"pointer",fontSize:11,fontWeight:600,background:view==="history"?"#7c3aed":"#fff",color:view==="history"?"#fff":"#7c3aed"}}>
+style={{flex:1,border:view==="history"?"2px solid "+BRAND.main:"1px solid #d6d3d1",borderRadius:10,padding:"9px 2px",cursor:"pointer",fontSize:11,fontWeight:600,background:view==="history"?BRAND.main:"#fff",color:view==="history"?"#fff":BRAND.main}}>
 {view==="history"?(histMode==="quotes"?"Quotes":histMode==="emser"?"Emser":"History"):"More ⋯"}
 </button>
 <button onClick={()=>{setView("add");setSelCust(null);setSelStop(null);setQuoteMode(null);setInsertPickupFor(null);setMultiSelect(false);setMultiChecked([]);setShowMoreMenu(false);}}
@@ -4444,6 +4570,7 @@ style={{background:isDrvDropTarget&&!de.length?"#dcfce7":"#fff",border:isDrvDrop
 <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
 {de.length>0&&<button onClick={()=>printManifest(drv.id)} style={{background:"#e7e5e4",border:"none",borderRadius:6,padding:"5px 8px",cursor:"pointer",fontSize:10,fontWeight:600,color:"#57534e"}}>Print</button>}
 {de.length>0&&<button onClick={()=>textManifest(drv.id)} style={{background:"#dbeafe",border:"none",borderRadius:6,padding:"5px 8px",cursor:"pointer",fontSize:10,fontWeight:600,color:"#2563eb"}}>Text</button>}
+<button onClick={()=>{setNotifyDriver(drv.id);setNotifyCustomMsg("");}} style={{background:"#fef3c7",border:"1px solid #fde68a",borderRadius:6,padding:"5px 8px",cursor:"pointer",fontSize:10,fontWeight:600,color:"#92400e"}}>Notify</button>
 {de.length>=2&&<div style={{position:"relative"}}>
 <button onClick={()=>setSortMenuDrv(sortMenuDrv===drv.id?null:drv.id)} style={{background:"linear-gradient(135deg,#2563eb,#1d4ed8)",border:"none",borderRadius:6,padding:"5px 8px",cursor:"pointer",fontSize:10,fontWeight:700,color:"#fff"}}>⚡ Route ▾</button>
 {sortMenuDrv===drv.id&&<><div style={{position:"fixed",inset:0,zIndex:199}} onClick={()=>setSortMenuDrv(null)}/>
@@ -4454,9 +4581,22 @@ style={{background:isDrvDropTarget&&!de.length?"#dcfce7":"#fff",border:isDrvDrop
 </button>)}
 </div></>}
 </div>}
+<button onClick={()=>setDriverViewId(drv.id)} style={{background:"#f3e8f9",border:"1px solid #d8b4fe",borderRadius:6,padding:"5px 8px",cursor:"pointer",fontSize:10,fontWeight:600,color:"#7c3aed"}}>View</button>
+{/* ⋯ More menu */}
+<div style={{position:"relative"}}>
+<button onClick={()=>setSortMenuDrv(sortMenuDrv===("more2-"+drv.id)?null:"more2-"+drv.id)} style={{background:"#f5f5f4",border:"1px solid #e7e5e4",borderRadius:6,padding:"5px 8px",cursor:"pointer",fontSize:10,color:"#57534e",fontWeight:600}}>⋯</button>
+{sortMenuDrv===("more2-"+drv.id)&&<><div style={{position:"fixed",inset:0,zIndex:199}} onClick={()=>setSortMenuDrv(null)}/>
+<div style={{position:"absolute",top:"100%",right:0,zIndex:200,background:"#fff",border:"1px solid #e7e5e4",borderRadius:12,padding:6,marginTop:4,boxShadow:"0 12px 40px rgba(0,0,0,0.2)",width:180}}>
+<div style={{fontSize:11,fontWeight:700,color:DCOL[di],padding:"6px 10px",borderBottom:"1px solid #f5f5f4",marginBottom:4}}>{drv.name}</div>
+{getDriverLoadOptions(drv.id)<3&&<button onClick={()=>{addDriverLoad(drv.id);setSortMenuDrv(null);}} style={{display:"flex",alignItems:"center",gap:8,width:"100%",textAlign:"left",background:"none",border:"none",padding:"10px",cursor:"pointer",borderRadius:8,fontSize:12,fontWeight:600,color:"#1c1917"}}>
+<span style={{fontSize:14}}>🚚</span><span>Add Load {getDriverLoadOptions(drv.id)+1}</span>
+</button>}
+<button onClick={()=>{toggleDriverCapacity(drv.id);setSortMenuDrv(null);}} style={{display:"flex",alignItems:"center",gap:8,width:"100%",textAlign:"left",background:"none",border:"none",padding:"10px",cursor:"pointer",borderRadius:8,fontSize:12,fontWeight:600,color:"#1c1917"}}>
+<span style={{fontSize:14}}>{getDriverCapacity(drv.id)===TRUCK_LIMITS.heavy?"🚚":"🚛"}</span><span>{getDriverCapacity(drv.id)===TRUCK_LIMITS.heavy?"Switch to 10k":"Switch to 14k"}</span>
+</button>
+</div></>}
+</div>
 <button onClick={()=>{setPreAssignDriver(drv.id);setView("add");setSelCust(null);setSelStop(null);setQuoteMode(null);}} style={{background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:6,padding:"5px 8px",cursor:"pointer",fontSize:10,fontWeight:600,color:"#16a34a"}}>+ Add</button>
-<button onClick={()=>setDriverViewId(drv.id)} style={{background:"#f3e8f9",border:"1px solid #d8b4fe",borderRadius:6,padding:"5px 8px",cursor:"pointer",fontSize:10,fontWeight:600,color:"#7c3aed"}}>Driver View</button>
-<button onClick={()=>{setNotifyDriver(drv.id);setNotifyCustomMsg("");}} style={{background:"#fef3c7",border:"1px solid #fde68a",borderRadius:6,padding:"5px 8px",cursor:"pointer",fontSize:10,fontWeight:600,color:"#92400e"}}>Notify</button>
 </div>
 {de.length===0&&<p style={{fontSize:13,color:dragSrc?"#16a34a":"#a8a29e",margin:"8px 0 0",fontWeight:dragSrc?600:400}}>{dragSrc?"Drop here to assign":"No stops"}</p>}
 {de.length>0&&(()=>{const cap=getDriverCapacity(drv.id);const loads=getDriverLoads(drv.id);return(<>
@@ -4474,7 +4614,25 @@ style={{background:isDrvDropTarget&&!de.length?"#dcfce7":"#fff",border:isDrvDrop
 </>);})()}
 {de.map((entry,eIdx)=><div key={entry.id}>
 <ManifestStop entry={entry} eIdx={eIdx} total={de.length} drivers={drivers} onMove={dir=>moveInDriver(drv.id,eIdx,dir)} onReassign={did=>reassign(entry.id,did)} onRemove={()=>rmFromDriver(entry.id)} onDelete={()=>deleteDel(entry.id)} onUpdateInstructions={text=>updateInstructions(entry.id,text)} onShipPlan={val=>setShipPlan(entry.id,val)} onDueBy={time=>setDueBy(entry.id,time)} onWeight={w=>setWeight(entry.id,w)} onLoadNum={n=>setLoadNum(entry.id,n)} onRate={r=>updateRate(entry.id,r)} maxLoad={getMaxLoad(drv.id)}
+onLiftgate={()=>manualLiftgate(entry.id)} onSplit={()=>setSplitEntry({id:entry.id,totalWeight:entry.weight||0,ratio:50})} driverLoadCounts={Object.fromEntries(drivers.map(d=>[d.id,getDriverLoadOptions(d.id)]))}
 isDragging={dragSrc?.drvId===drv.id&&dragSrc?.idx===eIdx} isDragOver={dragOver?.drvId===drv.id&&dragOver?.idx===eIdx} onDragStart={()=>setDragSrc({drvId:drv.id,idx:eIdx})} onDragOver={()=>setDragOver({drvId:drv.id,idx:eIdx})} onDrop={()=>handleDrop(drv.id,eIdx)}/>
+{splitEntry?.id===entry.id&&<div style={{margin:"0 0 4px",background:"#eff6ff",border:"2px solid #2563eb",borderRadius:10,padding:12}}>
+<div style={{fontSize:12,fontWeight:700,color:"#1e40af",marginBottom:8}}>✂ Split Shipment</div>
+<div style={{marginBottom:8}}>
+<label style={{fontSize:10,fontWeight:600,color:"#57534e",display:"block",marginBottom:3}}>Total Weight (lbs)</label>
+<input type="number" inputMode="numeric" pattern="[0-9]*" value={splitEntry.totalWeight} onChange={e=>setSplitEntry(p=>({...p,totalWeight:parseInt(e.target.value)||0}))} style={{width:"100%",border:"1px solid #bfdbfe",borderRadius:6,padding:"6px 10px",fontSize:13,fontWeight:700,outline:"none"}}/>
+</div>
+<div style={{display:"flex",justifyContent:"space-between",fontSize:10,fontWeight:600,color:"#57534e",marginBottom:3}}>
+<span>Truck 1: {Math.round(splitEntry.totalWeight*(splitEntry.ratio/100)).toLocaleString()} lbs</span>
+<span>Truck 2: {(splitEntry.totalWeight-Math.round(splitEntry.totalWeight*(splitEntry.ratio/100))).toLocaleString()} lbs</span>
+</div>
+<input type="range" min={100} max={Math.max((splitEntry.totalWeight||0)-100,200)} step={100} value={Math.round((splitEntry.totalWeight||0)*(splitEntry.ratio/100))} onChange={e=>{const v=parseInt(e.target.value)||0;const tw=splitEntry.totalWeight||1;setSplitEntry(p=>({...p,ratio:Math.round((v/tw)*100)}));}} style={{width:"100%",accentColor:"#2563eb"}}/>
+<div style={{textAlign:"center",fontSize:11,fontWeight:700,color:"#2563eb",marginTop:2,marginBottom:8}}>{Math.round((splitEntry.totalWeight||0)*(splitEntry.ratio/100)).toLocaleString()} / {((splitEntry.totalWeight||0)-Math.round((splitEntry.totalWeight||0)*(splitEntry.ratio/100))).toLocaleString()} lbs</div>
+<div style={{display:"flex",gap:6}}>
+<button onClick={()=>confirmSplit(entry.id,splitEntry.totalWeight,splitEntry.ratio)} style={{flex:1,background:"#2563eb",color:"#fff",border:"none",borderRadius:6,padding:"8px",fontSize:12,fontWeight:700,cursor:"pointer"}}>✂ Split</button>
+<button onClick={()=>setSplitEntry(null)} style={{background:"#e7e5e4",border:"none",borderRadius:6,padding:"8px 12px",fontSize:11,cursor:"pointer",color:"#57534e"}}>Cancel</button>
+</div>
+</div>}
 <button onClick={()=>setInsertPickupFor({driverId:drv.id,afterIdx:eIdx})} style={{display:"block",width:"100%",background:"none",border:"1px dashed #bfdbfe",borderRadius:6,padding:"3px",cursor:"pointer",fontSize:10,color:"#93c5fd",marginBottom:4,textAlign:"center"}}>+ insert pickup here</button>
 </div>)}
 </div>);})}
@@ -4482,8 +4640,24 @@ isDragging={dragSrc?.drvId===drv.id&&dragSrc?.idx===eIdx} isDragOver={dragOver?.
 onDragOver={e=>{e.preventDefault();if(!ua.length)setDragOver({drvId:0,idx:0});}}
 onDrop={()=>{if(dragSrc){handleDrop(0,ua.length);}}}
 style={{background:dragOver?.drvId===0?"#dcfce7":"#fff",border:dragOver?.drvId===0?"2px dashed #16a34a":"2px dashed #d6d3d1",borderRadius:14,padding:16,marginBottom:12,transition:"background 0.15s"}}><div style={{display:"flex",alignItems:"center",gap:8,marginBottom:ua.length?10:0}}><div style={{width:14,height:14,borderRadius:4,background:"#a8a29e"}}/><span style={{fontSize:15,fontWeight:700,color:"#78716c"}}>Unassigned</span><span style={{fontSize:12,color:"#a8a29e"}}>({ua.length})</span></div>
-{ua.map((entry,eIdx)=><ManifestStop key={entry.id} entry={entry} eIdx={eIdx} total={ua.length} drivers={drivers} onMove={dir=>moveInDriver(0,eIdx,dir)} onReassign={did=>reassign(entry.id,did)} onRemove={()=>deleteDel(entry.id)} onDelete={()=>deleteDel(entry.id)} onUpdateInstructions={text=>updateInstructions(entry.id,text)} onShipPlan={val=>setShipPlan(entry.id,val)} onDueBy={time=>setDueBy(entry.id,time)} onWeight={w=>setWeight(entry.id,w)} onLoadNum={n=>setLoadNum(entry.id,n)} onRate={r=>updateRate(entry.id,r)} maxLoad={1}
-isDragging={dragSrc?.drvId===0&&dragSrc?.idx===eIdx} isDragOver={dragOver?.drvId===0&&dragOver?.idx===eIdx} onDragStart={()=>setDragSrc({drvId:0,idx:eIdx})} onDragOver={()=>setDragOver({drvId:0,idx:eIdx})} onDrop={()=>handleDrop(0,eIdx)}/>)}
+{ua.map((entry,eIdx)=><div key={entry.id}><ManifestStop entry={entry} eIdx={eIdx} total={ua.length} drivers={drivers} onMove={dir=>moveInDriver(0,eIdx,dir)} onReassign={did=>reassign(entry.id,did)} onRemove={()=>deleteDel(entry.id)} onDelete={()=>deleteDel(entry.id)} onUpdateInstructions={text=>updateInstructions(entry.id,text)} onShipPlan={val=>setShipPlan(entry.id,val)} onDueBy={time=>setDueBy(entry.id,time)} onWeight={w=>setWeight(entry.id,w)} onLoadNum={n=>setLoadNum(entry.id,n)} onRate={r=>updateRate(entry.id,r)} maxLoad={1}
+onLiftgate={()=>manualLiftgate(entry.id)} onSplit={()=>setSplitEntry({id:entry.id,totalWeight:entry.weight||0,ratio:50})} driverLoadCounts={Object.fromEntries(drivers.map(d=>[d.id,getDriverLoadOptions(d.id)]))}
+isDragging={dragSrc?.drvId===0&&dragSrc?.idx===eIdx} isDragOver={dragOver?.drvId===0&&dragOver?.idx===eIdx} onDragStart={()=>setDragSrc({drvId:0,idx:eIdx})} onDragOver={()=>setDragOver({drvId:0,idx:eIdx})} onDrop={()=>handleDrop(0,eIdx)}/>
+{splitEntry?.id===entry.id&&<div style={{margin:"0 0 4px",background:"#eff6ff",border:"2px solid #2563eb",borderRadius:10,padding:12}}>
+<div style={{fontSize:12,fontWeight:700,color:"#1e40af",marginBottom:8}}>✂ Split Shipment</div>
+<input type="number" inputMode="numeric" pattern="[0-9]*" value={splitEntry.totalWeight} onChange={e=>setSplitEntry(p=>({...p,totalWeight:parseInt(e.target.value)||0}))} placeholder="Total weight" style={{width:"100%",border:"1px solid #bfdbfe",borderRadius:6,padding:"6px 10px",fontSize:13,fontWeight:700,outline:"none",marginBottom:8}}/>
+<div style={{display:"flex",justifyContent:"space-between",fontSize:10,fontWeight:600,color:"#57534e",marginBottom:3}}>
+<span>Truck 1: {Math.round(splitEntry.totalWeight*(splitEntry.ratio/100)).toLocaleString()} lbs</span>
+<span>Truck 2: {(splitEntry.totalWeight-Math.round(splitEntry.totalWeight*(splitEntry.ratio/100))).toLocaleString()} lbs</span>
+</div>
+<input type="range" min={100} max={Math.max((splitEntry.totalWeight||0)-100,200)} step={100} value={Math.round((splitEntry.totalWeight||0)*(splitEntry.ratio/100))} onChange={e=>{const v=parseInt(e.target.value)||0;const tw=splitEntry.totalWeight||1;setSplitEntry(p=>({...p,ratio:Math.round((v/tw)*100)}));}} style={{width:"100%",accentColor:"#2563eb"}}/>
+<div style={{textAlign:"center",fontSize:11,fontWeight:700,color:"#2563eb",marginTop:2,marginBottom:8}}>{Math.round((splitEntry.totalWeight||0)*(splitEntry.ratio/100)).toLocaleString()} / {((splitEntry.totalWeight||0)-Math.round((splitEntry.totalWeight||0)*(splitEntry.ratio/100))).toLocaleString()} lbs</div>
+<div style={{display:"flex",gap:6}}>
+<button onClick={()=>confirmSplit(entry.id,splitEntry.totalWeight,splitEntry.ratio)} style={{flex:1,background:"#2563eb",color:"#fff",border:"none",borderRadius:6,padding:"8px",fontSize:12,fontWeight:700,cursor:"pointer"}}>✂ Split</button>
+<button onClick={()=>setSplitEntry(null)} style={{background:"#e7e5e4",border:"none",borderRadius:6,padding:"8px 12px",fontSize:11,cursor:"pointer",color:"#57534e"}}>Cancel</button>
+</div>
+</div>}
+</div>)}
 {!ua.length&&dragSrc&&<div style={{padding:"20px",textAlign:"center",color:"#16a34a",fontSize:13,fontWeight:600}}>Drop here to unassign</div>}
 </div>);})()}
 {/* Sort menu overlay for mobile */}
@@ -4525,7 +4699,7 @@ style={{width:"100%",border:"1px solid #d8b4fe",borderRadius:8,padding:"10px 12p
 <div style={{display:"flex",gap:6,marginTop:6,justifyContent:"flex-end"}}>
 {dispNotes[emDk]&&<button onClick={()=>{setDispNotes(p=>{const n={...p};delete n[emDk];return n;});setEditingNote(false);setNoteText("");}} style={{background:"#fef2f2",border:"none",borderRadius:6,padding:"5px 10px",cursor:"pointer",fontSize:11,color:"#dc2626",fontWeight:600}}>Clear</button>}
 <button onClick={()=>setEditingNote(false)} style={{background:"#e7e5e4",border:"none",borderRadius:6,padding:"5px 10px",cursor:"pointer",fontSize:11,fontWeight:600}}>Cancel</button>
-<button onClick={()=>{setDispNotes(p=>({...p,[dk]:noteText.trim()}));setEditingNote(false);showToast("Notes saved");}} style={{background:"#7c3aed",color:"#fff",border:"none",borderRadius:6,padding:"5px 14px",cursor:"pointer",fontSize:11,fontWeight:600}}>Save</button>
+<button onClick={()=>{setDispNotes(p=>({...p,[emDk]:noteText.trim()}));setEditingNote(false);showToast("Notes saved");}} style={{background:"#7c3aed",color:"#fff",border:"none",borderRadius:6,padding:"5px 14px",cursor:"pointer",fontSize:11,fontWeight:600}}>Save</button>
 </div>
 </div>}
 {dl.some(e=>e.isHourly)&&(()=>{
@@ -4555,7 +4729,7 @@ return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius
 {[4,5,6,7,8,9,10].map(h=><button key={h} onClick={()=>{setEmH(p=>({...p,[`${emDk}-emser`]:h}));setShowCustomHrs(false);}} style={{width:30,height:30,borderRadius:8,border:"none",cursor:"pointer",fontSize:13,fontWeight:600,background:!showCustomHrs&&hrs===h?"#2563eb":"#e7e5e4",color:!showCustomHrs&&hrs===h?"#fff":"#78716c"}}>{h}</button>)}
 <button onClick={()=>setShowCustomHrs(!showCustomHrs)} style={{height:30,borderRadius:8,border:"none",cursor:"pointer",fontSize:11,fontWeight:600,padding:"0 8px",background:showCustomHrs?"#2563eb":"#dbeafe",color:showCustomHrs?"#fff":"#2563eb"}}>Other</button>
 </div></div>
-{showCustomHrs&&<div style={{display:"flex",gap:6,alignItems:"center",marginTop:8}}><input value={customHrsInput} onChange={e=>setCustomHrsInput(e.target.value)} placeholder="e.g. 4.5" type="number" step="0.25" min="1" style={{width:80,border:"1px solid #bfdbfe",borderRadius:8,padding:"6px 10px",fontSize:14,fontWeight:700,outline:"none",textAlign:"center",background:"#fff"}}/><span style={{fontSize:12,color:"#64748b"}}>hrs</span><button onClick={()=>{const v=parseFloat(customHrsInput);if(v>0){setEmH(p=>({...p,[`${emDk}-emser`]:v}));setShowCustomHrs(false);setCustomHrsInput("");}}} style={{background:"#2563eb",color:"#fff",border:"none",borderRadius:8,padding:"6px 14px",fontSize:12,fontWeight:600,cursor:"pointer"}}>Set</button></div>}
+{showCustomHrs&&<div style={{display:"flex",gap:6,alignItems:"center",marginTop:8}}><input value={customHrsInput} onChange={e=>setCustomHrsInput(e.target.value)} placeholder="e.g. 4.5" type="number" inputMode="decimal" step="0.25" min="1" style={{width:80,border:"1px solid #bfdbfe",borderRadius:8,padding:"6px 10px",fontSize:14,fontWeight:700,outline:"none",textAlign:"center",background:"#fff"}}/><span style={{fontSize:12,color:"#64748b"}}>hrs</span><button onClick={()=>{const v=parseFloat(customHrsInput);if(v>0){setEmH(p=>({...p,[`${emDk}-emser`]:v}));setShowCustomHrs(false);setCustomHrsInput("");}}} style={{background:"#2563eb",color:"#fff",border:"none",borderRadius:8,padding:"6px 14px",fontSize:12,fontWeight:600,cursor:"pointer"}}>Set</button></div>}
 <div style={{fontSize:11,color:"#64748b",marginTop:6}}>💡 Log shifts in History → ⏱ Emser Hours for auto-calculation</div>
 </>)}
 </div>);
@@ -4579,7 +4753,7 @@ return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius
 <div style={{fontSize:16,fontWeight:700,fontVariantNumeric:"tabular-nums"}}><InlineRate value={entry.baseRate} isHourly={entry.isHourly} onSave={r=>updateRate(entry.id,r)}/></div>
 {!entry.liftgateApplied&&!entry.isHourly&&<button onClick={()=>manualLiftgate(entry.id)} style={{background:"#fff7ed",border:"1px solid #fed7aa",color:"#ea580c",fontSize:10,cursor:"pointer",padding:"3px 8px",borderRadius:6,fontWeight:700,marginTop:4,display:"block"}}>+LG $75</button>}
 {entry.liftgateApplied&&<div style={{fontSize:9,color:"#16a34a",fontWeight:700,marginTop:4}}>✓ LG +$75</div>}
-{!entry.isHourly&&!entry.wasSplit&&<button onClick={()=>setSplitEntry({id:entry.id,totalWeight:entry.weight||10000,ratio:50})} style={{background:"#eff6ff",border:"1px solid #bfdbfe",color:"#2563eb",fontSize:9,cursor:"pointer",padding:"3px 8px",borderRadius:6,fontWeight:700,marginTop:4,display:"block"}}>✂ Split</button>}
+{!entry.isHourly&&!entry.wasSplit&&<button onClick={()=>setSplitEntry({id:entry.id,totalWeight:entry.weight||0,ratio:50})} style={{background:"#eff6ff",border:"1px solid #bfdbfe",color:"#2563eb",fontSize:9,cursor:"pointer",padding:"3px 8px",borderRadius:6,fontWeight:700,marginTop:4,display:"block"}}>✂ Split</button>}
 {entry.weight>0&&<div style={{fontSize:8,color:"#78716c",marginTop:2}}>{entry.weight.toLocaleString()} lbs</div>}
 {entry.wasSplit&&<div style={{fontSize:8,color:"#2563eb",fontWeight:700,marginTop:2}}>Load {entry.loadNum}</div>}
 <button onClick={()=>deleteDel(entry.id)} style={{background:"none",border:"none",color:"#dc2626",fontSize:9,cursor:"pointer",padding:"0",opacity:0.5,marginTop:10,display:"block"}}>Delete</button>
@@ -4590,15 +4764,15 @@ return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius
 <div style={{display:"flex",gap:16,alignItems:"flex-start"}}>
 <div style={{flex:1}}>
 <label style={{fontSize:11,fontWeight:600,color:"#57534e",display:"block",marginBottom:4}}>Total Weight (lbs)</label>
-<input type="number" value={splitEntry.totalWeight} onChange={e=>setSplitEntry(p=>({...p,totalWeight:parseInt(e.target.value)||0}))} style={{width:"100%",border:"1px solid #bfdbfe",borderRadius:8,padding:"8px 12px",fontSize:14,fontWeight:700,outline:"none"}}/>
+<input type="number" inputMode="numeric" pattern="[0-9]*" value={splitEntry.totalWeight} onChange={e=>setSplitEntry(p=>({...p,totalWeight:parseInt(e.target.value)||0}))} style={{width:"100%",border:"1px solid #bfdbfe",borderRadius:8,padding:"8px 12px",fontSize:14,fontWeight:700,outline:"none"}}/>
 </div>
 <div style={{flex:2}}>
 <div style={{display:"flex",justifyContent:"space-between",fontSize:11,fontWeight:600,color:"#57534e",marginBottom:4}}>
 <span>Truck 1: {Math.round(splitEntry.totalWeight*(splitEntry.ratio/100)).toLocaleString()} lbs</span>
 <span>Truck 2: {(splitEntry.totalWeight-Math.round(splitEntry.totalWeight*(splitEntry.ratio/100))).toLocaleString()} lbs</span>
 </div>
-<input type="range" min="10" max="90" value={splitEntry.ratio} onChange={e=>setSplitEntry(p=>({...p,ratio:parseInt(e.target.value)}))} style={{width:"100%",accentColor:"#2563eb"}}/>
-<div style={{textAlign:"center",fontSize:12,fontWeight:700,color:"#2563eb",marginTop:2}}>{splitEntry.ratio}% / {100-splitEntry.ratio}%</div>
+<input type="range" min={100} max={Math.max((splitEntry.totalWeight||0)-100,200)} step={100} value={Math.round((splitEntry.totalWeight||0)*(splitEntry.ratio/100))} onChange={e=>{const v=parseInt(e.target.value)||0;const tw=splitEntry.totalWeight||1;setSplitEntry(p=>({...p,ratio:Math.round((v/tw)*100)}));}} style={{width:"100%",accentColor:"#2563eb"}}/>
+<div style={{textAlign:"center",fontSize:12,fontWeight:700,color:"#2563eb",marginTop:2}}>{Math.round((splitEntry.totalWeight||0)*(splitEntry.ratio/100)).toLocaleString()} / {((splitEntry.totalWeight||0)-Math.round((splitEntry.totalWeight||0)*(splitEntry.ratio/100))).toLocaleString()} lbs</div>
 </div>
 <div style={{display:"flex",gap:8,paddingTop:18}}>
 <button onClick={()=>confirmSplit(entry.id,splitEntry.totalWeight,splitEntry.ratio)} style={{background:"#2563eb",color:"#fff",border:"none",borderRadius:8,padding:"10px 16px",fontSize:12,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>✂ Split</button>
@@ -4677,7 +4851,7 @@ style={{width:80,border:"1px solid #e7e5e4",borderRadius:6,padding:"3px 6px",fon
 </div>);})}
 </div>
 <div style={{fontSize:11,color:"#64748b",fontVariantNumeric:"tabular-nums"}}>{formatMins(wkShiftTotal)} total across all drivers</div>
-</div>);})()} 
+</div>);})()}
 {Object.keys(wkF).length>0&&<div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:14,padding:"14px 16px",marginBottom:12}}><div style={{fontSize:12,fontWeight:700,color:"#d97706",textTransform:"uppercase",marginBottom:8}}>Week Fuel</div>{Object.entries(wkF).map(([cu,cf])=><div key={cu} style={{display:"flex",justifyContent:"space-between",padding:"4px 0"}}><span style={{fontSize:13}}>{cu} <span style={{fontSize:11,color:"#a8a29e",fontVariantNumeric:"tabular-nums"}}>{fmt(cf.base)} x {Math.round(cf.pct*100)}%</span></span><span style={{fontSize:14,fontWeight:700,color:"#d97706",fontVariantNumeric:"tabular-nums"}}>{fmt(cf.base*cf.pct)}</span></div>)}</div>}
 </div>}
 
@@ -5023,11 +5197,9 @@ else{showToast("Pick a weekday (Mon-Fri)");}
 </button>}
 </div>
 </div>}
-
-
 {/* ═══ ADD — Delivery List ═══ */}
 {view==="add"&&selCust&&<div>
-<button onClick={()=>{setSelCust(null);setMultiSelect(false);setMultiChecked([]);setShowAddCustomDel(false);}} style={BB}>← {preAssignDriver?"Customers":"Back"}</button>
+<button onClick={()=>{setSelCust(null);setMultiSelect(false);setMultiChecked([]);setShowAddCustomDel(false);setStopEditOpen(null);setConfirmDeleteStop(false);}} style={BB}>← {preAssignDriver?"Customers":"Back"}</button>
 {preAssignDriver&&(()=>{const drv=drivers.find(d=>d.id===preAssignDriver);const di=drivers.findIndex(d=>d.id===preAssignDriver);return(<div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",margin:"0 4px 8px",background:"#f0fdf4",border:`1px solid ${DCOL[di]||"#bbf7d0"}`,borderRadius:10}}><div style={{width:20,height:20,borderRadius:6,background:DCOL[di],display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:"#fff",fontWeight:700}}>{drv?.name?.charAt(0)}</div><span style={{fontSize:12,fontWeight:600,color:"#16a34a"}}>Auto-adding to {drv?.name}</span></div>);})()}
 <div style={{padding:"0 4px"}}>
 <h2 style={{margin:"0 0 4px",fontSize:18,fontWeight:700,color:CC[selCust].accent}}>{selCust}</h2>
@@ -5055,16 +5227,33 @@ else{showToast("Pick a weekday (Mon-Fri)");}
 {CUSTOMERS[selCust].roundTrip&&<button onClick={()=>{const cd=CUSTOMERS[selCust];addDel(selCust,CUSTOMERS[selCust].roundTrip.label,CUSTOMERS[selCust].roundTrip.rate,preAssignDriver||0,{fuelPct:(cd.fuel_surcharge&&!cd.fuel_included)?cd.fuel_surcharge:0,priority:cd.priority});}} style={{display:"block",width:"100%",textAlign:"left",background:"#fef3c7",border:"2px solid #fbbf24",borderRadius:12,padding:"14px 16px",marginBottom:12,cursor:"pointer"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><div><div style={{fontSize:14,fontWeight:700,color:"#92400e"}}>🔄 {CUSTOMERS[selCust].roundTrip.label}</div></div><span style={{fontVariantNumeric:"tabular-nums",fontSize:17,fontWeight:700,color:"#ea580c"}}>{fmt(CUSTOMERS[selCust].roundTrip.rate)}</span></div></button>}
 {/* Merge hardcoded + custom stops for this customer */}
 {(()=>{const hardcoded=CUSTOMERS[selCust].deliveries;const custom=customStops[selCust]||[];const allDels=[...hardcoded,...custom];
-return allDels.map((d,idx)=>{const isStr=typeof d==="string";const stop=isStr?d:d.s;const rate=isStr?0:d.r;const note=isStr?null:d.n;const addr=d.addr||getAddr(stop);const curInstr=customInstr[stop]!==undefined?customInstr[stop]:getDefaultInstr(stop);const checked=multiChecked.includes(idx);
+const custHidden=hiddenStops.filter(k=>k.startsWith(selCust+"::"));
+return(<>{allDels.map((d,idx)=>{const isStr=typeof d==="string";const origStop=isStr?d:d.s;const origRate=isStr?0:d.r;const origNote=isStr?null:d.n;const origAddr=d.addr||getAddr(origStop);
 const isCustom=idx>=hardcoded.length;
+/* Skip hidden built-in stops */
+const hideKey=selCust+"::"+origStop;
+if(!isCustom&&hiddenStops.includes(hideKey))return null;
+/* Apply override for built-in stops */
+const ovrKey=selCust+"::"+origStop;
+const ovr=(!isCustom&&stopOverrides[ovrKey])||null;
+const stop=ovr?ovr.s:origStop;const rate=ovr?(ovr.r||0):origRate;const note=ovr?(ovr.n||null):origNote;const addr=ovr?(ovr.addr||origAddr):origAddr;
+const curInstr=customInstr[stop]!==undefined?customInstr[stop]:(customInstr[origStop]!==undefined?customInstr[origStop]:getDefaultInstr(origStop));const checked=multiChecked.includes(idx);
+const hasOverride=!!ovr;
 return(<div key={idx} style={{position:"relative"}}>
 <DeliveryListItem stop={stop} rate={rate} note={note} addr={addr} curInstr={curInstr} checked={checked} multiSelect={multiSelect} accent={CC[selCust].accent}
+isCustom={isCustom}
+onOpenEdit={()=>openStopEdit(selCust,idx,isCustom,origStop,addr,rate,note)}
 onCheck={()=>setMultiChecked(p=>p.includes(idx)?p.filter(x=>x!==idx):[...p,idx])}
 onAdd={(dueBy,weight)=>{const cd=CUSTOMERS[selCust];addDel(selCust,stop,rate||0,preAssignDriver||0,{isHourly:cd.rate_type==="hourly",fuelPct:(cd.fuel_surcharge&&!cd.fuel_included)?cd.fuel_surcharge:0,note:note||null,addr,priority:cd.priority,dueBy:dueBy||null,weight:weight||0});}}
 onSaveInstr={text=>setCustomInstr(p=>({...p,[stop]:text}))}
 />
-{isCustom&&<button onClick={()=>{const ci=idx-hardcoded.length;setCustomStops(p=>({...p,[selCust]:(p[selCust]||[]).filter((_,i)=>i!==ci)}));showToast(stop+" removed from "+selCust);}} style={{position:"absolute",top:8,right:8,background:"#fef2f2",border:"1px solid #fecaca",color:"#dc2626",borderRadius:6,padding:"2px 8px",cursor:"pointer",fontSize:9,fontWeight:700,zIndex:2}}>✕ Remove</button>}
-</div>);});
+</div>);})}{custHidden.length>0&&<div style={{marginTop:10,background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:12,padding:"10px 14px"}}>
+<div style={{fontSize:11,fontWeight:700,color:"#dc2626",marginBottom:6}}>🗑 Deleted Stops ({custHidden.length})</div>
+{custHidden.map(key=>{const stopName=key.split("::")[1];return(<div key={key} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"5px 0",borderBottom:"1px solid #fecaca"}}>
+<span style={{fontSize:12,color:"#78716c",textDecoration:"line-through"}}>{stopName}</span>
+<button onClick={()=>restoreHiddenStop(key)} style={{background:"#fff",border:"1px solid #bfdbfe",borderRadius:6,padding:"3px 10px",cursor:"pointer",fontSize:10,fontWeight:700,color:"#2563eb"}}>↩ Restore</button>
+</div>);})}
+</div>}</>);
 })()}
 {/* Add new delivery location for this customer */}
 {!showAddCustomDel?<button onClick={()=>{setShowAddCustomDel(true);setCustomDelName("");setCustomDelAddr("");setCustomDelRate("");setCustomDelNote("");}} style={{display:"block",width:"100%",marginTop:8,background:"#fafaf9",border:"2px dashed #d6d3d1",borderRadius:12,padding:"14px 16px",cursor:"pointer",textAlign:"center",color:"#78716c",fontSize:13,fontWeight:600}}>+ Add New Delivery Location</button>
@@ -5080,7 +5269,7 @@ style={{border:"1px solid #d6d3d1",borderRadius:10,padding:"10px 14px",fontSize:
 <div style={{display:"flex",gap:8}}>
 <div style={{flex:1}}>
 <label style={{fontSize:11,fontWeight:600,color:"#57534e",display:"block",marginBottom:4}}>Rate ($)</label>
-<input value={customDelRate} onChange={e=>setCustomDelRate(e.target.value)} placeholder={CUSTOMERS[selCust].rate_type==="hourly"?"Hourly":"0.00"} type="number" step="0.01"
+<input value={customDelRate} onChange={e=>setCustomDelRate(e.target.value)} placeholder={CUSTOMERS[selCust].rate_type==="hourly"?"Hourly":"0.00"} type="number" inputMode="decimal" step="0.01"
 style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:10,padding:"10px 14px",fontSize:14,fontWeight:700,outline:"none"}}/>
 </div>
 <div style={{flex:1}}>
@@ -5123,9 +5312,60 @@ Add {customDelName.trim()||"Delivery"} to {selCust}
 </div>
 </div>}
 
+{/* ═══ STOP EDIT MODAL ═══ */}
+{stopEditOpen&&stopEditOpen.cust===selCust&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:200,display:"flex",alignItems:"center",justifyContent:"center",padding:20}} onClick={()=>{setStopEditOpen(null);setConfirmDeleteStop(false);}}>
+<div style={{background:"#fff",borderRadius:20,padding:24,width:"100%",maxWidth:440,boxShadow:"0 24px 64px rgba(0,0,0,0.25)"}} onClick={e=>e.stopPropagation()}>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+<div>
+<h3 style={{margin:0,fontSize:17,fontWeight:700,color:CC[selCust]?.accent||"#1c1917"}}>⚙ Edit Stop</h3>
+<div style={{fontSize:11,color:"#78716c",marginTop:2}}>{stopEditOpen.isCustom?"Custom stop":"Built-in stop"}{!stopEditOpen.isCustom&&stopOverrides[stopEditOpen.cust+"::"+stopEditOpen.stop]?" (modified)":""} — saves to Firebase</div>
+</div>
+<button onClick={()=>{setStopEditOpen(null);setConfirmDeleteStop(false);}} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:"#78716c",lineHeight:1}}>✕</button>
+</div>
+<div style={{display:"flex",flexDirection:"column",gap:10}}>
+<div>
+<label style={{fontSize:11,fontWeight:600,color:"#57534e",display:"block",marginBottom:4}}>Stop Name</label>
+<input value={stopEditName} onChange={e=>setStopEditName(e.target.value)} placeholder="Stop name"
+style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:10,padding:"10px 14px",fontSize:14,fontWeight:600,outline:"none"}}/>
+</div>
+<div>
+<label style={{fontSize:11,fontWeight:600,color:"#57534e",display:"block",marginBottom:4}}>Address</label>
+<AddressInput value={stopEditAddr} onChange={v=>setStopEditAddr(v)} placeholder="Full address" style={{borderRadius:10,padding:"10px 14px"}}/>
+</div>
+<div style={{display:"flex",gap:10}}>
+<div style={{flex:1}}>
+<label style={{fontSize:11,fontWeight:600,color:"#57534e",display:"block",marginBottom:4}}>Rate ($)</label>
+<input value={stopEditRate} onChange={e=>setStopEditRate(e.target.value)} placeholder="0.00" type="number" inputMode="decimal" step="0.01"
+style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:10,padding:"10px 14px",fontSize:14,fontWeight:700,outline:"none"}}/>
+</div>
+<div style={{flex:1}}>
+<label style={{fontSize:11,fontWeight:600,color:"#57534e",display:"block",marginBottom:4}}>Note</label>
+<input value={stopEditNote} onChange={e=>setStopEditNote(e.target.value)} placeholder="Optional"
+style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:10,padding:"10px 14px",fontSize:13,outline:"none"}}/>
+</div>
+</div>
+</div>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:16,gap:8}}>
+{/* Delete / Restore button */}
+{(()=>{const isCust=stopEditOpen.isCustom;
+const delLabel=isCust?"🗑 Delete Stop":"🗑 Delete Stop";
+const confirmLabel=isCust?"Yes, Delete Permanently":"Yes, Delete Permanently";
+return confirmDeleteStop
+?<div style={{flex:1,display:"flex",gap:6}}>
+<button onClick={deleteStopPermanent} style={{flex:1,background:"#dc2626",color:"#fff",border:"none",borderRadius:10,padding:"10px",cursor:"pointer",fontSize:12,fontWeight:700}}>{confirmLabel}</button>
+<button onClick={()=>setConfirmDeleteStop(false)} style={{background:"#e7e5e4",border:"none",borderRadius:10,padding:"10px 14px",cursor:"pointer",fontSize:12,fontWeight:600,color:"#57534e"}}>No</button>
+</div>
+:<button onClick={()=>setConfirmDeleteStop(true)} style={{background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:10,padding:"10px 14px",cursor:"pointer",fontSize:12,fontWeight:700,color:"#dc2626"}}>{delLabel}</button>;
+})()}
+<div style={{display:"flex",gap:8}}>
+<button onClick={()=>{setStopEditOpen(null);setConfirmDeleteStop(false);}} style={{background:"#e7e5e4",border:"none",borderRadius:10,padding:"10px 16px",cursor:"pointer",fontSize:13,fontWeight:600}}>Cancel</button>
+<button onClick={saveStopEdit} disabled={!stopEditName.trim()} style={{background:stopEditName.trim()?(CC[selCust]?.accent||"#16a34a"):"#d6d3d1",color:stopEditName.trim()?"#fff":"#a8a29e",border:"none",borderRadius:10,padding:"10px 20px",cursor:stopEditName.trim()?"pointer":"default",fontSize:13,fontWeight:700}}>Save</button>
+</div>
+</div>
+</div>
 </div>}
 
-{/* ═══ QUOTE BUILDER ═══ */}
+</div>}
 {view==="add"&&quoteMode&&<QuoteBuilder customerName={quoteMode.name} pickupOptions={quoteMode.pickups} onAdd={addDel} onBack={()=>setQuoteMode(null)} drivers={drivers} drvEntries={drvEntries}/>}
 </div>
 
@@ -5348,7 +5588,6 @@ useEffect(()=>{
   const unsubManifests=subscribeManifests(wo,(fbData)=>{
     /* Don't overwrite if driver just saved (within 3 seconds) */
     if(Date.now()-drvSaveTime.current<3000){
-      console.log("[DRV-SUB] Skipping — just saved",Date.now()-drvSaveTime.current,"ms ago");
       return;
     }
     const newLog={};
@@ -5411,9 +5650,8 @@ useEffect(()=>{
 /* Save driver status updates back to Firestore (cloud only) */
 const saveDriverLog=useCallback((newLog)=>{
   const entries2=newLog[dk]||[];
-  console.log("[DRV-SAVE]",dk,"entries:",entries2.length,"statuses:",entries2.map(e=>e.status||"pending").join(","));
   drvSaveTime.current=Date.now();
-  saveManifestDay(wo,sd,entries2).then(()=>console.log("[DRV-SAVE] OK",dk)).catch(e=>console.error("[DRV-SAVE] FAILED:",e));
+  saveManifestDay(wo,sd,entries2).catch(e=>console.error("[DRV-SAVE] FAILED:",e));
 },[dk,wo,sd]);
 
 const updateStatus=(eid,status)=>{const now=new Date().toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});setLog(p=>{const n={...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,status,arrivedAt:status==="arrived"?now:e.arrivedAt,departedAt:status==="departed"?now:e.departedAt}:e)};saveDriverLog(n);return n;});};
@@ -5427,8 +5665,7 @@ if(!driverMsgInput.trim()||!driver)return;
 const now=new Date().toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});
 const channelKey=driverMsgTab==="private"?"dm-"+driverId:"group";
 const msg={from:"driver-"+driverId,fromName:driver.name,text:driverMsgInput.trim(),time:now,read:false};
-console.log("[MSG] Sending to channel:",channelKey,"driverId:",driverId);
-saveMessage(channelKey,msg).then(()=>console.log("[MSG] Sent OK")).catch(e=>console.error("Msg send FAILED:",e));
+saveMessage(channelKey,msg).catch(e=>console.error("Msg send FAILED:",e));
 setDriverMsgInput("");
 };
 
@@ -5575,7 +5812,7 @@ return(
 </div>
 </div>
 <div style={{display:"flex",gap:6,alignItems:"center"}}>
-<input placeholder="mins" type="number" defaultValue={entries[0].eta||""} style={{width:70,border:"1px solid #d6d3d1",borderRadius:8,padding:"8px",fontSize:14,fontWeight:700,outline:"none",textAlign:"center"}}
+<input placeholder="mins" type="number" inputMode="numeric" defaultValue={entries[0].eta||""} style={{width:70,border:"1px solid #d6d3d1",borderRadius:8,padding:"8px",fontSize:14,fontWeight:700,outline:"none",textAlign:"center"}}
 onBlur={e=>{if(e.target.value)setEtaD(entries[0].id,e.target.value,entries[0].stop);}}/>
 <span style={{fontSize:12,color:"#78716c"}}>min to</span>
 <span style={{fontSize:12,fontWeight:700,color:BRAND.main,flex:1}}>{entries[0].stop}</span>
@@ -5647,7 +5884,7 @@ style={{flex:1,border:"1px solid #d6d3d1",borderRadius:8,padding:"8px",fontSize:
 {entries.filter((_,ei)=>ei>i&&_.status!=="departed").map(ne=><option key={ne.id} value={ne.stop}>{ne.stop}</option>)}
 <option value="Davis Warehouse">{"🏠 Davis Warehouse"}</option>
 </select>
-<input placeholder="mins" type="number" defaultValue={entry.eta||""} style={{width:70,border:"1px solid #d6d3d1",borderRadius:8,padding:"8px",fontSize:13,fontWeight:700,outline:"none",textAlign:"center"}}
+<input placeholder="mins" type="number" inputMode="numeric" defaultValue={entry.eta||""} style={{width:70,border:"1px solid #d6d3d1",borderRadius:8,padding:"8px",fontSize:13,fontWeight:700,outline:"none",textAlign:"center"}}
 onBlur={e=>{if(e.target.value){const select=e.target.parentElement.querySelector("select");const dest=select?select.value:"";setEtaD(entry.id,e.target.value,dest||entry.etaDest);}}}/>
 </div>
 <div style={{display:"flex",gap:6}}>
