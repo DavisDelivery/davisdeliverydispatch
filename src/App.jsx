@@ -2057,7 +2057,11 @@ useEffect(()=>{
   const unsubHidden=subscribeHiddenStops((data)=>{
     setHiddenStops(data);lsSet("dd_hidden_stops",data);
   });
-  return()=>{unsubDrivers();unsubEmser();unsubNotes();unsubShifts();unsubQuotes();unsubLocs();unsubInv();unsubCustomStops();unsubStopOvr();unsubHidden();};
+  let unsubCap;
+  _whenFB(()=>{unsubCap=window._fbOps.onDoc("config/driverCapacity",(data)=>{
+    if(data&&data.data){setDriverCapacity(data.data);lsSet("dd_driver_capacity",data.data);}
+  });});
+  return()=>{unsubDrivers();unsubEmser();unsubNotes();unsubShifts();unsubQuotes();unsubLocs();unsubInv();unsubCustomStops();unsubStopOvr();unsubHidden();if(unsubCap)unsubCap();};
 },[]);
 
 /*
@@ -2448,9 +2452,16 @@ const setWeight=(eid,w)=>setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{..
 const setLoadNum=(eid,n)=>setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,loadNum:n}:e)}));
 
 /* ── TRUCK WEIGHT LIMITS ── */
-const TRUCK_LIMITS={default:10000,heavy:14000};
-const[driverCapacity,setDriverCapacity]=useState(()=>lsGet("dd_driver_capacity",{})); /* {driverId: 10000|14000} */
+const TRUCK_LIMITS={default:10000,heavy:13500};
+const[driverCapacity,setDriverCapacity]=useState(()=>lsGet("dd_driver_capacity",{})); /* {driverId: 10000|13500} */
 useEffect(()=>{lsSet("dd_driver_capacity",driverCapacity);},[driverCapacity]);
+useEffect(()=>{
+  if(!firebaseReady.current)return;
+  const timer=setTimeout(()=>{
+    if(window._fbOps)window._fbOps.write("config/driverCapacity",{data:driverCapacity,updatedAt:Date.now()}).catch(e=>console.error("Cap save:",e));
+  },500);
+  return()=>clearTimeout(timer);
+},[driverCapacity]);
 const[driverLoadCount,setDriverLoadCount]=useState({}); /* {driverId: numLoads} — tracks extra loads */
 const getDriverCapacity=(drvId)=>driverCapacity[drvId]||TRUCK_LIMITS.default;
 const toggleDriverCapacity=(drvId)=>{setDriverCapacity(p=>{const cur=p[drvId]||TRUCK_LIMITS.default;return{...p,[drvId]:cur===TRUCK_LIMITS.default?TRUCK_LIMITS.heavy:TRUCK_LIMITS.default};});};
@@ -3850,7 +3861,7 @@ style={{width:"100%",border:"1px solid #d8b4fe",borderRadius:8,padding:"8px 10px
 <span style={{fontSize:14}}>🚚</span><span>Add Load {getDriverLoadOptions(drv.id)+1}</span>
 </button>}
 <button onClick={()=>{toggleDriverCapacity(drv.id);setSortMenuDrv(null);}} style={{display:"flex",alignItems:"center",gap:8,width:"100%",textAlign:"left",background:"none",border:"none",padding:"10px",cursor:"pointer",borderRadius:8,fontSize:12,fontWeight:600,color:"#1c1917"}}>
-<span style={{fontSize:14}}>{getDriverCapacity(drv.id)===TRUCK_LIMITS.heavy?"🚚":"🚛"}</span><span>{getDriverCapacity(drv.id)===TRUCK_LIMITS.heavy?"Switch to 10k":"Switch to 14k"}</span>
+<span style={{fontSize:14}}>{getDriverCapacity(drv.id)===TRUCK_LIMITS.heavy?"🚚":"🚛"}</span><span>{getDriverCapacity(drv.id)===TRUCK_LIMITS.heavy?"Switch to 10k":"Switch to 13.5k"}</span>
 </button>
 </div></>}
 </div>
@@ -3870,7 +3881,7 @@ style={{width:"100%",border:"1px solid #d8b4fe",borderRadius:8,padding:"8px 10px
 {over&&<span style={{fontSize:7,background:"#dc2626",color:"#fff",padding:"0px 3px",borderRadius:2,fontWeight:700}}>OVER</span>}
 </div>):null;})}
 <button onClick={()=>toggleDriverCapacity(drv.id)} style={{fontSize:8,color:cap===TRUCK_LIMITS.heavy?"#d97706":"#a8a29e",background:cap===TRUCK_LIMITS.heavy?"#fef3c7":"transparent",border:"none",borderRadius:4,padding:"1px 6px",cursor:"pointer",fontWeight:600}}>
-{cap===TRUCK_LIMITS.heavy?"🚛 14k":"→ 14k"}
+{cap===TRUCK_LIMITS.heavy?"🚛 13.5k":"→ 13.5k"}
 </button>
 </>);})()}
 {de.map((entry,eIdx)=>{const c=CC[entry.customer]||CC["One-Off Delivery"];const isPU=entry.stopType==="pickup";const done=entry.status==="departed";const onSite=entry.status==="arrived";const hasDue=!!entry.dueBy;const addr=entry.addr||getAddr(entry.stop);const isP=entry.priority;const hasInstr=entry.instructions?.trim();const isImetco=entry.customer==="IMETCO";
@@ -4592,7 +4603,7 @@ style={{background:isDrvDropTarget&&!de.length?"#dcfce7":"#fff",border:isDrvDrop
 <span style={{fontSize:14}}>🚚</span><span>Add Load {getDriverLoadOptions(drv.id)+1}</span>
 </button>}
 <button onClick={()=>{toggleDriverCapacity(drv.id);setSortMenuDrv(null);}} style={{display:"flex",alignItems:"center",gap:8,width:"100%",textAlign:"left",background:"none",border:"none",padding:"10px",cursor:"pointer",borderRadius:8,fontSize:12,fontWeight:600,color:"#1c1917"}}>
-<span style={{fontSize:14}}>{getDriverCapacity(drv.id)===TRUCK_LIMITS.heavy?"🚚":"🚛"}</span><span>{getDriverCapacity(drv.id)===TRUCK_LIMITS.heavy?"Switch to 10k":"Switch to 14k"}</span>
+<span style={{fontSize:14}}>{getDriverCapacity(drv.id)===TRUCK_LIMITS.heavy?"🚚":"🚛"}</span><span>{getDriverCapacity(drv.id)===TRUCK_LIMITS.heavy?"Switch to 10k":"Switch to 13.5k"}</span>
 </button>
 </div></>}
 </div>
@@ -4609,7 +4620,7 @@ style={{background:isDrvDropTarget&&!de.length?"#dcfce7":"#fff",border:isDrvDrop
 {over&&<span style={{fontSize:8,background:"#dc2626",color:"#fff",padding:"1px 4px",borderRadius:3,fontWeight:700}}>OVER</span>}
 </div>):null;})}
 <button onClick={()=>toggleDriverCapacity(drv.id)} style={{fontSize:9,color:cap===TRUCK_LIMITS.heavy?"#d97706":"#78716c",background:cap===TRUCK_LIMITS.heavy?"#fef3c7":"#f5f5f4",border:cap===TRUCK_LIMITS.heavy?"1px solid #fde68a":"1px solid #e7e5e4",borderRadius:6,padding:"2px 8px",cursor:"pointer",fontWeight:600,marginBottom:4}}>
-{cap===TRUCK_LIMITS.heavy?"🚛 14k Truck":"🚚 10k → tap for 14k"}
+{cap===TRUCK_LIMITS.heavy?"🚛 13.5k Truck":"🚚 10k → tap for 13.5k"}
 </button>
 </>);})()}
 {de.map((entry,eIdx)=><div key={entry.id}>
