@@ -1219,7 +1219,7 @@ style={{display:"flex",alignItems:"center",gap:6,padding:"8px",marginBottom:expa
 {entry.pickupDueBy&&<span style={{fontSize:9,background:"#16a34a",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700,display:"inline-flex",alignItems:"center",gap:2}}>{"📦"} {entry.pickupDueBy}</span>}
 <span style={{fontSize:12,fontWeight:700,color:"#1c1917"}}>{entry.stop}</span>
 </div>
-<div style={{fontSize:10,color:c.accent,fontWeight:600}}>{entry.customer}</div>
+<div style={{fontSize:10,color:c.accent,fontWeight:600}}>{entry.customer}{entry.pickupFrom&&entry.stopType!=="pickup"?<span style={{color:"#78716c",fontWeight:500}}> — {entry.pickupFrom}</span>:""}</div>
 {addr&&<div style={{fontSize:10,color:"#78716c",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{addr}</div>}
 {entry.note&&<div style={{fontSize:10,color:"#a8a29e"}}>{entry.note}</div>}
 {hasI&&!expanded&&<div style={{fontSize:10,color:"#2563eb",marginTop:2}}>📋 {entry.instructions}</div>}
@@ -1230,9 +1230,10 @@ style={{display:"flex",alignItems:"center",gap:6,padding:"8px",marginBottom:expa
 {/* Right column: rate, buttons, assign */}
 <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:3,flexShrink:0}}>
 <span onClick={e=>e.stopPropagation()}><InlineRate value={entry.baseRate} isHourly={entry.isHourly} onSave={r=>onRate&&onRate(r)}/></span>
-{!isPU&&!entry.isHourly&&<div style={{display:"flex",gap:3}} onClick={e=>e.stopPropagation()}>
-{!entry.liftgateApplied&&<button onClick={()=>{if(onLiftgate)onLiftgate();}} style={{background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:5,padding:"2px 7px",cursor:"pointer",fontSize:9,color:"#ea580c",fontWeight:700}}>+LG</button>}
-{entry.liftgateApplied&&<span style={{fontSize:8,color:"#16a34a",fontWeight:700,background:"#f0fdf4",padding:"2px 6px",borderRadius:5,border:"1px solid #bbf7d0"}}>✓LG</span>}
+{!isPU&&<div style={{display:"flex",gap:3}} onClick={e=>e.stopPropagation()}>
+{!entry.isHourly&&!entry.liftgateApplied&&<button onClick={()=>{if(onLiftgate)onLiftgate();}} style={{background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:5,padding:"2px 7px",cursor:"pointer",fontSize:9,color:"#ea580c",fontWeight:700}}>+LG</button>}
+{entry.isHourly&&!entry.liftgateApplied&&<button onClick={()=>{if(onLiftgate)onLiftgate();}} style={{background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:5,padding:"2px 7px",cursor:"pointer",fontSize:9,color:"#ea580c",fontWeight:700}}>+1HR LG</button>}
+{entry.liftgateApplied&&<span style={{fontSize:8,color:"#16a34a",fontWeight:700,background:"#f0fdf4",padding:"2px 6px",borderRadius:5,border:"1px solid #bbf7d0"}}>{entry.isHourly?"✓+1HR":"✓LG"}</span>}
 {!entry.wasSplit&&<button onClick={()=>{if(onSplit)onSplit();}} style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:5,padding:"2px 7px",cursor:"pointer",fontSize:9,color:"#2563eb",fontWeight:700}}>✂Split</button>}
 {entry.wasSplit&&<span style={{fontSize:8,color:"#2563eb",fontWeight:700,background:"#eff6ff",padding:"2px 6px",borderRadius:5,border:"1px solid #bfdbfe"}}>L{entry.loadNum}</span>}
 </div>}
@@ -2338,32 +2339,39 @@ showToast(`${stops.length} stops added`);setMultiSelect(false);setMultiChecked([
 /* ── Shared: rebuild pickup cards for a customer. Pickups ONLY exist on assigned drivers, NEVER in unassigned. ── */
 const rebuildPickupsFor=(all,cust)=>{
 const makeNote=(dels)=>{if(!dels.length)return"";const names=dels.map(e=>e.stop);if(names.length<=3)return names.join(", ");return names.slice(0,2).join(", ")+" +"+(names.length-2)+" more";};
-const puSrc=PICKUP_SOURCES.filter(s=>s.customer===cust).length>1
-?PICKUP_SOURCES.find(s=>s.customer===cust&&s.label.includes(selPickup))||PICKUP_SOURCES.find(s=>s.customer===cust)
-:PICKUP_SOURCES.find(s=>s.customer===cust);
-if(!puSrc)return all;
-const existing=all.find(e=>e.customer===cust&&e.stopType==="pickup");
+const puSrcs=PICKUP_SOURCES.filter(s=>s.customer===cust);
+if(!puSrcs.length)return all;
+/* Remove ALL existing pickups for this customer */
 all=all.filter(e=>!(e.customer===cust&&e.stopType==="pickup"));
 const custDels=all.filter(e=>e.customer===cust&&e.stopType==="delivery");
+/* Group deliveries by driver, then by pickup location */
 const byDriver={};
 custDels.forEach(e=>{if(e.driverId>0){if(!byDriver[e.driverId])byDriver[e.driverId]=[];byDriver[e.driverId].push(e);}});
 const cd=CUSTOMERS[cust];
 const puDueBy=(cust==="Specialty")?"Pickup 7:30 AM — Specialty":null;
 Object.entries(byDriver).forEach(([drvIdStr,dels])=>{
 const dId=Number(drvIdStr);
-/* Check if any delivery has a pickupDueBy set */
-const delWithPuDue=dels.find(e=>e.pickupDueBy);
+/* Group this driver's deliveries by pickupFrom location */
+const byLoc={};
+dels.forEach(e=>{const loc=e.pickupFrom||selPickup||puSrcs[0].label.split(" - ").pop();if(!byLoc[loc])byLoc[loc]=[];byLoc[loc].push(e);});
+/* Create a pickup card for each unique location */
+Object.entries(byLoc).forEach(([loc,locDels])=>{
+const puSrc=puSrcs.find(s=>s.label.includes(loc))||puSrcs[0];
+const delWithPuDue=locDels.find(e=>e.pickupDueBy);
 const effectivePuDue=delWithPuDue?delWithPuDue.pickupDueBy:puDueBy;
-const puEntry=existing
-?{...existing,id:Date.now()+Math.random()+Math.random(),driverId:dId,note:makeNote(dels),instructions:"",dueBy:effectivePuDue||existing.dueBy}
-:{id:Date.now()+Math.random()+Math.random(),customer:cust,stop:puSrc.label,baseRate:0,fuelPct:0,isHourly:false,
-note:makeNote(dels),driverId:dId,addr:puSrc.addr,stopType:"pickup",priority:cd?.priority||false,
+const puEntry={id:Date.now()+Math.random()+Math.random(),customer:cust,stop:puSrc.label,baseRate:0,fuelPct:0,isHourly:false,
+note:makeNote(locDels),driverId:dId,addr:puSrc.addr,stopType:"pickup",priority:cd?.priority||false,
 instructions:"",status:null,arrivedAt:null,departedAt:null,eta:null,photos:[],signature:null,
-dueBy:effectivePuDue,weight:0,loadNum:1};
-/* Insert pickup BEFORE the first delivery for this customer+driver */
-const firstDelIdx=all.findIndex(e=>e.customer===cust&&e.stopType==="delivery"&&e.driverId===dId);
+dueBy:effectivePuDue,weight:0,loadNum:1,pickupFrom:loc};
+/* Insert pickup BEFORE the first delivery for this customer+driver+location */
+const firstDelIdx=all.findIndex(e=>e.customer===cust&&e.stopType==="delivery"&&e.driverId===dId&&(e.pickupFrom||selPickup)===loc);
 if(firstDelIdx>=0){all.splice(firstDelIdx,0,puEntry);}
-else{all.push(puEntry);}
+else{
+  const anyDelIdx=all.findIndex(e=>e.customer===cust&&e.stopType==="delivery"&&e.driverId===dId);
+  if(anyDelIdx>=0)all.splice(anyDelIdx,0,puEntry);
+  else all.push(puEntry);
+}
+});
 });
 return all;
 };
@@ -3427,8 +3435,9 @@ return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius
 {/* Action row — full width */}
 <div style={{display:"flex",gap:6,marginTop:8,alignItems:"center",flexWrap:"wrap"}}>
 {!entry.liftgateApplied&&!entry.isHourly&&<button onClick={()=>manualLiftgate(entry.id)} style={{background:"#fff7ed",border:"1px solid #fed7aa",color:"#ea580c",fontSize:11,cursor:"pointer",padding:"5px 12px",borderRadius:8,fontWeight:700}}>+LG $75</button>}
-{entry.liftgateApplied&&<span style={{fontSize:10,color:"#16a34a",fontWeight:700,background:"#f0fdf4",padding:"5px 10px",borderRadius:8,border:"1px solid #bbf7d0"}}>✓ LG +$75</span>}
-{!entry.isHourly&&!entry.wasSplit&&<button onClick={()=>setSplitEntry({id:entry.id,totalWeight:entry.weight||0,ratio:50})} style={{background:"#eff6ff",border:"1px solid #bfdbfe",color:"#2563eb",fontSize:11,cursor:"pointer",padding:"5px 12px",borderRadius:8,fontWeight:700}}>✂ Split</button>}
+{!entry.liftgateApplied&&entry.isHourly&&<button onClick={()=>{setEmH(p=>{const key=`${emDk}-emser`;const cur=p[key]||4;return{...p,[key]:cur+1};});setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===entry.id?{...e,liftgateApplied:true}:e)}));showToast("Liftgate +1 hr added");}} style={{background:"#fff7ed",border:"1px solid #fed7aa",color:"#ea580c",fontSize:11,cursor:"pointer",padding:"5px 12px",borderRadius:8,fontWeight:700}}>+1HR LG</button>}
+{entry.liftgateApplied&&<span style={{fontSize:10,color:"#16a34a",fontWeight:700,background:"#f0fdf4",padding:"5px 10px",borderRadius:8,border:"1px solid #bbf7d0"}}>{entry.isHourly?"✓ LG +1HR":"✓ LG +$75"}</span>}
+{!entry.wasSplit&&<button onClick={()=>setSplitEntry({id:entry.id,totalWeight:entry.weight||0,ratio:50})} style={{background:"#eff6ff",border:"1px solid #bfdbfe",color:"#2563eb",fontSize:11,cursor:"pointer",padding:"5px 12px",borderRadius:8,fontWeight:700}}>✂ Split</button>}
 {entry.wasSplit&&<span style={{fontSize:10,color:"#2563eb",fontWeight:700,background:"#eff6ff",padding:"5px 10px",borderRadius:8,border:"1px solid #bfdbfe"}}>Load {entry.loadNum}</span>}
 <button onClick={()=>deleteDel(entry.id)} style={{background:"none",border:"none",color:"#dc2626",fontSize:10,cursor:"pointer",padding:"5px 8px",opacity:0.5,marginLeft:"auto"}}>Delete</button>
 </div>
@@ -3953,7 +3962,7 @@ style={{background:isDrgOver?"#dcfce7":isDrgSrc?"#fef9c3":done?"#f0fdf4":onSite?
 <span style={{fontSize:11,fontWeight:600,color:"#1c1917",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{entry.stop}</span>
 </div>
 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-<div style={{fontSize:10,color:c.accent,fontWeight:600}}>{entry.customer}</div>
+<div style={{fontSize:10,color:c.accent,fontWeight:600}}>{entry.customer}{entry.pickupFrom&&entry.stopType!=="pickup"?<span style={{color:"#78716c",fontWeight:500}}> — {entry.pickupFrom}</span>:""}</div>
 <InlineRate value={entry.baseRate} isHourly={entry.isHourly} onSave={r=>updateRate(entry.id,r)}/>
 </div>
 {addr&&<div style={{fontSize:9,color:"#78716c",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:1}}>{addr}</div>}
@@ -3972,8 +3981,9 @@ style={{background:isDrgOver?"#dcfce7":isDrgSrc?"#fef9c3":done?"#f0fdf4":onSite?
 <button onClick={()=>moveInDriver(drv.id,eIdx,1)} style={{background:"#f5f5f4",border:"1px solid #e7e5e4",borderRadius:4,padding:"1px 5px",cursor:"pointer",fontSize:9,color:"#78716c"}} title="Move down">▼</button>
 <input type="number" inputMode="numeric" value={entry.weight||""} onChange={e=>setWeight(entry.id,e.target.value)} onClick={e=>e.stopPropagation()} placeholder="lbs" style={{width:52,border:"1px solid #d6d3d1",borderRadius:4,padding:"2px 4px",fontSize:9,fontWeight:700,outline:"none",textAlign:"center",background:entry.weight?"#f0f5fa":"#fff"}}/>
 {!isPU&&!entry.isHourly&&!entry.liftgateApplied&&<button onClick={()=>manualLiftgate(entry.id)} style={{background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:4,padding:"1px 6px",cursor:"pointer",fontSize:9,color:"#ea580c",fontWeight:700}}>+LG</button>}
-{entry.liftgateApplied&&<span style={{fontSize:8,color:"#16a34a",fontWeight:700,padding:"2px 4px"}}>✓LG</span>}
-{!isPU&&!entry.isHourly&&!entry.wasSplit&&<button onClick={()=>setSplitEntry({id:entry.id,totalWeight:entry.weight||0,ratio:50})} style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:4,padding:"1px 6px",cursor:"pointer",fontSize:9,color:"#2563eb",fontWeight:700}}>✂Split</button>}
+{!isPU&&entry.isHourly&&!entry.liftgateApplied&&<button onClick={()=>{setEmH(p=>{const key=`${emDk}-emser`;const cur=p[key]||4;return{...p,[key]:cur+1};});setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===entry.id?{...e,liftgateApplied:true}:e)}));showToast("Liftgate +1 hr added");}} style={{background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:4,padding:"1px 6px",cursor:"pointer",fontSize:9,color:"#ea580c",fontWeight:700}}>+1HR LG</button>}
+{entry.liftgateApplied&&<span style={{fontSize:8,color:"#16a34a",fontWeight:700,padding:"2px 4px"}}>{entry.isHourly?"✓+1HR":"✓LG"}</span>}
+{!isPU&&!entry.wasSplit&&<button onClick={()=>setSplitEntry({id:entry.id,totalWeight:entry.weight||0,ratio:50})} style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:4,padding:"1px 6px",cursor:"pointer",fontSize:9,color:"#2563eb",fontWeight:700}}>✂Split</button>}
 {entry.wasSplit&&<span style={{fontSize:8,color:"#2563eb",fontWeight:700,padding:"2px 4px"}}>L{entry.loadNum}</span>}
 <button onClick={()=>deleteDel(entry.id)} style={{background:"none",border:"none",color:"#dc2626",fontSize:9,cursor:"pointer",padding:"1px 4px"}}>✕</button>
 </div>
@@ -4022,7 +4032,7 @@ style={{background:isDrgOver?"#dcfce7":isDrgSrc?"#fef9c3":done?"#f0fdf4":onSite?
 <span style={{fontSize:11,fontWeight:600}}>{entry.stop}</span>
 </div>
 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-<div style={{fontSize:10,color:c.accent}}>{entry.customer}</div>
+<div style={{fontSize:10,color:c.accent}}>{entry.customer}{entry.pickupFrom&&entry.stopType!=="pickup"?<span style={{color:"#78716c"}}> — {entry.pickupFrom}</span>:""}</div>
 <InlineRate value={entry.baseRate} isHourly={entry.isHourly} onSave={r=>updateRate(entry.id,r)}/>
 </div>
 {addr&&<div style={{fontSize:9,color:"#78716c",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:1}}>{addr}</div>}
@@ -4684,7 +4694,7 @@ style={{background:isDrvDropTarget&&!de.length?"#dcfce7":"#fff",border:isDrvDrop
 </>);})()}
 {de.map((entry,eIdx)=><div key={entry.id}>
 <ManifestStop entry={entry} eIdx={eIdx} total={de.length} drivers={drivers} onMove={dir=>moveInDriver(drv.id,eIdx,dir)} onReassign={did=>reassign(entry.id,did)} onRemove={()=>rmFromDriver(entry.id)} onDelete={()=>deleteDel(entry.id)} onUpdateInstructions={text=>updateInstructions(entry.id,text)} onShipPlan={val=>setShipPlan(entry.id,val)} onDueBy={time=>setDueBy(entry.id,time)} onWeight={w=>setWeight(entry.id,w)} onLoadNum={n=>setLoadNum(entry.id,n)} onRate={r=>updateRate(entry.id,r)} maxLoad={getMaxLoad(drv.id)}
-onLiftgate={()=>manualLiftgate(entry.id)} onSplit={()=>setSplitEntry({id:entry.id,totalWeight:entry.weight||0,ratio:50})} driverLoadCounts={Object.fromEntries(drivers.map(d=>[d.id,getDriverLoadOptions(d.id)]))}
+onLiftgate={()=>{if(entry.isHourly){setEmH(p=>{const key=`${emDk}-emser`;const cur=p[key]||4;return{...p,[key]:cur+1};});setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===entry.id?{...e,liftgateApplied:true}:e)}));showToast("Liftgate +1 hr added");}else{manualLiftgate(entry.id);}}} onSplit={()=>setSplitEntry({id:entry.id,totalWeight:entry.weight||0,ratio:50})} driverLoadCounts={Object.fromEntries(drivers.map(d=>[d.id,getDriverLoadOptions(d.id)]))}
 isDragging={dragSrc?.drvId===drv.id&&dragSrc?.idx===eIdx} isDragOver={dragOver?.drvId===drv.id&&dragOver?.idx===eIdx} onDragStart={()=>setDragSrc({drvId:drv.id,idx:eIdx})} onDragOver={()=>setDragOver({drvId:drv.id,idx:eIdx})} onDrop={()=>handleDrop(drv.id,eIdx)}/>
 {splitEntry?.id===entry.id&&<div style={{margin:"0 0 4px",background:"#eff6ff",border:"2px solid #2563eb",borderRadius:10,padding:12}}>
 <div style={{fontSize:12,fontWeight:700,color:"#1e40af",marginBottom:8}}>✂ Split Shipment</div>
@@ -4711,7 +4721,7 @@ onDragOver={e=>{e.preventDefault();if(!ua.length)setDragOver({drvId:0,idx:0});}}
 onDrop={()=>{if(dragSrc){handleDrop(0,ua.length);}}}
 style={{background:dragOver?.drvId===0?"#dcfce7":"#fff",border:dragOver?.drvId===0?"2px dashed #16a34a":"2px dashed #d6d3d1",borderRadius:14,padding:16,marginBottom:12,transition:"background 0.15s"}}><div style={{display:"flex",alignItems:"center",gap:8,marginBottom:ua.length?10:0}}><div style={{width:14,height:14,borderRadius:4,background:"#a8a29e"}}/><span style={{fontSize:15,fontWeight:700,color:"#78716c"}}>Unassigned</span><span style={{fontSize:12,color:"#a8a29e"}}>({ua.length})</span></div>
 {ua.map((entry,eIdx)=><div key={entry.id}><ManifestStop entry={entry} eIdx={eIdx} total={ua.length} drivers={drivers} onMove={dir=>moveInDriver(0,eIdx,dir)} onReassign={did=>reassign(entry.id,did)} onRemove={()=>deleteDel(entry.id)} onDelete={()=>deleteDel(entry.id)} onUpdateInstructions={text=>updateInstructions(entry.id,text)} onShipPlan={val=>setShipPlan(entry.id,val)} onDueBy={time=>setDueBy(entry.id,time)} onWeight={w=>setWeight(entry.id,w)} onLoadNum={n=>setLoadNum(entry.id,n)} onRate={r=>updateRate(entry.id,r)} maxLoad={1}
-onLiftgate={()=>manualLiftgate(entry.id)} onSplit={()=>setSplitEntry({id:entry.id,totalWeight:entry.weight||0,ratio:50})} driverLoadCounts={Object.fromEntries(drivers.map(d=>[d.id,getDriverLoadOptions(d.id)]))}
+onLiftgate={()=>{if(entry.isHourly){setEmH(p=>{const key=`${emDk}-emser`;const cur=p[key]||4;return{...p,[key]:cur+1};});setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===entry.id?{...e,liftgateApplied:true}:e)}));showToast("Liftgate +1 hr added");}else{manualLiftgate(entry.id);}}} onSplit={()=>setSplitEntry({id:entry.id,totalWeight:entry.weight||0,ratio:50})} driverLoadCounts={Object.fromEntries(drivers.map(d=>[d.id,getDriverLoadOptions(d.id)]))}
 isDragging={dragSrc?.drvId===0&&dragSrc?.idx===eIdx} isDragOver={dragOver?.drvId===0&&dragOver?.idx===eIdx} onDragStart={()=>setDragSrc({drvId:0,idx:eIdx})} onDragOver={()=>setDragOver({drvId:0,idx:eIdx})} onDrop={()=>handleDrop(0,eIdx)}/>
 {splitEntry?.id===entry.id&&<div style={{margin:"0 0 4px",background:"#eff6ff",border:"2px solid #2563eb",borderRadius:10,padding:12}}>
 <div style={{fontSize:12,fontWeight:700,color:"#1e40af",marginBottom:8}}>✂ Split Shipment</div>
@@ -4822,8 +4832,9 @@ return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius
 <div style={{textAlign:"right",marginLeft:12}}>
 <div style={{fontSize:16,fontWeight:700,fontVariantNumeric:"tabular-nums"}}><InlineRate value={entry.baseRate} isHourly={entry.isHourly} onSave={r=>updateRate(entry.id,r)}/></div>
 {!entry.liftgateApplied&&!entry.isHourly&&<button onClick={()=>manualLiftgate(entry.id)} style={{background:"#fff7ed",border:"1px solid #fed7aa",color:"#ea580c",fontSize:10,cursor:"pointer",padding:"3px 8px",borderRadius:6,fontWeight:700,marginTop:4,display:"block"}}>+LG $75</button>}
-{entry.liftgateApplied&&<div style={{fontSize:9,color:"#16a34a",fontWeight:700,marginTop:4}}>✓ LG +$75</div>}
-{!entry.isHourly&&!entry.wasSplit&&<button onClick={()=>setSplitEntry({id:entry.id,totalWeight:entry.weight||0,ratio:50})} style={{background:"#eff6ff",border:"1px solid #bfdbfe",color:"#2563eb",fontSize:9,cursor:"pointer",padding:"3px 8px",borderRadius:6,fontWeight:700,marginTop:4,display:"block"}}>✂ Split</button>}
+{!entry.liftgateApplied&&entry.isHourly&&<button onClick={()=>{setEmH(p=>{const key=`${emDk}-emser`;const cur=p[key]||4;return{...p,[key]:cur+1};});setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===entry.id?{...e,liftgateApplied:true}:e)}));showToast("Liftgate +1 hr added");}} style={{background:"#fff7ed",border:"1px solid #fed7aa",color:"#ea580c",fontSize:10,cursor:"pointer",padding:"3px 8px",borderRadius:6,fontWeight:700,marginTop:4,display:"block"}}>+1HR LG</button>}
+{entry.liftgateApplied&&<div style={{fontSize:9,color:"#16a34a",fontWeight:700,marginTop:4}}>{entry.isHourly?"✓ LG +1HR":"✓ LG +$75"}</div>}
+{!entry.wasSplit&&<button onClick={()=>setSplitEntry({id:entry.id,totalWeight:entry.weight||0,ratio:50})} style={{background:"#eff6ff",border:"1px solid #bfdbfe",color:"#2563eb",fontSize:9,cursor:"pointer",padding:"3px 8px",borderRadius:6,fontWeight:700,marginTop:4,display:"block"}}>✂ Split</button>}
 {entry.weight>0&&<div style={{fontSize:8,color:"#78716c",marginTop:2}}>{entry.weight.toLocaleString()} lbs</div>}
 {entry.wasSplit&&<div style={{fontSize:8,color:"#2563eb",fontWeight:700,marginTop:2}}>Load {entry.loadNum}</div>}
 <button onClick={()=>deleteDel(entry.id)} style={{background:"none",border:"none",color:"#dc2626",fontSize:9,cursor:"pointer",padding:"0",opacity:0.5,marginTop:10,display:"block"}}>Delete</button>
