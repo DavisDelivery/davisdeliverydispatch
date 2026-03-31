@@ -731,10 +731,15 @@ const makeDueLabel=(map,pos,text)=>{
 if(!window.google?.maps?.OverlayView)return null;
 /* Determine color and display text based on format */
 const isWindow=text.includes("–")||text.includes("-")&&text.match(/\d.*–.*\d/);
-const isPickup=text.toLowerCase().startsWith("pickup");
+const isPickupBy=text.toLowerCase().startsWith("pickup by");
+const isPickupAfter=text.toLowerCase().startsWith("pickup after");
+const isPickup=isPickupBy||isPickupAfter||text.toLowerCase().startsWith("pickup");
 const isAfter=text.toLowerCase().startsWith("after");
 const bg=isWindow?"#7c3aed":isPickup?"#16a34a":isAfter?"#2563eb":"#dc2626";
-const display=text.replace(/^(By|After)\s*/i,"");
+const display=isPickupBy?"PU By "+text.replace(/^Pickup By\s*/i,"")
+  :isPickupAfter?"PU After "+text.replace(/^Pickup After\s*/i,"")
+  :isPickup?text
+  :text.replace(/^(By|After)\s*/i,"");
 class DueLabel extends window.google.maps.OverlayView{
 constructor(){super();this.pos=pos;this.div=null;}
 onAdd(){
@@ -1267,7 +1272,7 @@ style={{flex:1,maxWidth:120,border:entry.shipPlan?"1px solid #bbf7d0":"1px solid
 style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px",fontSize:13,outline:"none",resize:"vertical",fontFamily:"inherit"}}/>
 <div style={{marginTop:8,background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:10,padding:"8px 10px"}}>
 <div style={{display:"flex",gap:4,marginBottom:8}}>
-<button onClick={e=>{e.stopPropagation();setDueType("by");if(dueByInput)setDueByInput("By "+dueByInput.replace(/^(By |After )/,""));}} style={{flex:1,padding:"6px",borderRadius:6,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,background:dueType==="by"?"#dc2626":"#e7e5e4",color:dueType==="by"?"#fff":"#57534e"}}>{"\u23F0"} Due By</button>
+<button onClick={e=>{e.stopPropagation();setDueType("by");if(dueByInput)setDueByInput("By "+dueByInput.replace(/^(By |After )/,""));}} style={{flex:1,padding:"6px",borderRadius:6,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,background:dueType==="by"?"#dc2626":"#e7e5e4",color:dueType==="by"?"#fff":"#57534e"}}>{"\u23F0"} Deliver By</button>
 <button onClick={e=>{e.stopPropagation();setDueType("after");if(dueByInput)setDueByInput("After "+dueByInput.replace(/^(By |After )/,""));}} style={{flex:1,padding:"6px",borderRadius:6,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,background:dueType==="after"?"#2563eb":"#e7e5e4",color:dueType==="after"?"#fff":"#57534e"}}>Deliver After</button>
 </div>
 <div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:6}}>
@@ -1708,28 +1713,32 @@ const[expanded,setExpanded]=useState(false);
 const[instrText,setInstrText]=useState(curInstr||"");
 const[dueVal,setDueVal]=useState("");
 const[dueType,setDueType]=useState("by");
+const[pickupDueVal,setPickupDueVal]=useState("");
+const[pickupDueType,setPickupDueType]=useState("by");
 const[weightVal,setWeightVal]=useState("");
 const hasInstr=curInstr?.trim();
 const HOURS=["8 AM","9 AM","10 AM","11 AM","12 PM","1 PM","2 PM"];
 const dueLabel=dueVal?(dueType==="by"?"By "+dueVal:"After "+dueVal):"";
-const addWithExtras=()=>{onAdd(dueLabel||null,parseFloat(weightVal)||0);setDueVal("");setWeightVal("");};
+const pickupDueLabel=pickupDueVal?(pickupDueType==="by"?"Pickup By "+pickupDueVal:"Pickup After "+pickupDueVal):"";
+const addWithExtras=()=>{onAdd(dueLabel||null,parseFloat(weightVal)||0,pickupDueLabel||null);setDueVal("");setPickupDueVal("");setWeightVal("");};
 return(
 <div style={{marginBottom:6}}>
-<div style={{display:"flex",width:"100%",textAlign:"left",background:checked?"#eff6ff":dueLabel?"#fef2f2":"#fff",border:checked?"2px solid #2563eb":dueLabel?"1px solid #fca5a5":"1px solid #e7e5e4",borderRadius:expanded?"12px 12px 0 0":12,padding:"12px 16px",borderLeft:`4px solid ${accent}`,alignItems:"center",gap:10}}>
+<div style={{display:"flex",width:"100%",textAlign:"left",background:checked?"#eff6ff":dueLabel||pickupDueLabel?"#fef2f2":"#fff",border:checked?"2px solid #2563eb":dueLabel||pickupDueLabel?"1px solid #fca5a5":"1px solid #e7e5e4",borderRadius:expanded?"12px 12px 0 0":12,padding:"12px 16px",borderLeft:`4px solid ${accent}`,alignItems:"center",gap:10}}>
 {multiSelect&&<div onClick={onCheck} style={{width:22,height:22,borderRadius:6,border:`2px solid ${checked?"#2563eb":"#d6d3d1"}`,background:checked?"#2563eb":"#fff",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:14,fontWeight:700,flexShrink:0,cursor:"pointer"}}>{checked?"✓":""}</div>}
 <div style={{flex:1,minWidth:0,cursor:"pointer"}} onClick={()=>{if(multiSelect){onCheck();}else{addWithExtras();}}}>
 <div style={{fontSize:14,fontWeight:600}}>{stop}</div>
 {addr&&<div style={{fontSize:10,color:"#a8a29e"}}>{addr}</div>}
 {note&&<div style={{fontSize:11,color:"#d97706",marginTop:2}}>{note}</div>}
 {dueLabel&&<div style={{fontSize:10,color:dueType==="by"?"#dc2626":"#2563eb",fontWeight:700,marginTop:2}}>{"\u23F0"} {dueLabel}</div>}
+{pickupDueLabel&&<div style={{fontSize:10,color:"#16a34a",fontWeight:700,marginTop:2}}>{"📦"} {pickupDueLabel}</div>}
 {weightVal&&<div style={{fontSize:10,color:BRAND.main,fontWeight:700,marginTop:2}}>{parseFloat(weightVal).toLocaleString()} lbs</div>}
 {hasInstr&&!expanded&&<div style={{fontSize:10,color:"#2563eb",marginTop:2}}>{"📋"} {curInstr}</div>}
-{!hasInstr&&!expanded&&!dueLabel&&!weightVal&&<div style={{fontSize:9,color:"#d6d3d1",marginTop:2}}>tap to add</div>}
+{!hasInstr&&!expanded&&!dueLabel&&!pickupDueLabel&&!weightVal&&<div style={{fontSize:9,color:"#d6d3d1",marginTop:2}}>tap to add</div>}
 </div>
 <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4,flexShrink:0}}>
 <span style={{fontVariantNumeric:"tabular-nums",fontSize:17,fontWeight:700,color:accent}}>{rate?fmt(rate):"Hourly"}</span>
 <div style={{display:"flex",gap:3}}>
-<button onClick={e=>{e.stopPropagation();setInstrText(curInstr||"");setExpanded(!expanded);}} style={{background:hasInstr||dueLabel||weightVal?"#eff6ff":"#f5f5f4",border:hasInstr||dueLabel||weightVal?"1px solid #bfdbfe":"1px solid #e7e5e4",borderRadius:6,padding:"3px 6px",cursor:"pointer",fontSize:9,fontWeight:600,color:hasInstr||dueLabel||weightVal?"#2563eb":"#a8a29e"}}>{"⚙"}</button>
+<button onClick={e=>{e.stopPropagation();setInstrText(curInstr||"");setExpanded(!expanded);}} style={{background:hasInstr||dueLabel||pickupDueLabel||weightVal?"#eff6ff":"#f5f5f4",border:hasInstr||dueLabel||pickupDueLabel||weightVal?"1px solid #bfdbfe":"1px solid #e7e5e4",borderRadius:6,padding:"3px 6px",cursor:"pointer",fontSize:9,fontWeight:600,color:hasInstr||dueLabel||pickupDueLabel||weightVal?"#2563eb":"#a8a29e"}}>{"⚙"}</button>
 </div>
 </div>
 </div>
@@ -1737,16 +1746,31 @@ return(
 <label style={{fontSize:11,fontWeight:600,color:"#57534e",display:"block",marginBottom:4}}>Instructions for {stop}</label>
 <textarea value={instrText} onChange={e=>setInstrText(e.target.value)} placeholder="Phone #, gate code, dock info…" rows={2}
 style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px",fontSize:13,outline:"none",resize:"vertical",fontFamily:"inherit"}}/>
-{/* Time constraint */}
+{/* Delivery time constraint */}
 <div style={{marginTop:8,background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:10,padding:"8px 10px"}}>
 <div style={{display:"flex",gap:4,marginBottom:6}}>
-<button onClick={e=>{e.stopPropagation();setDueType("by");}} style={{flex:1,padding:"5px",borderRadius:6,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,background:dueType==="by"?"#dc2626":"#e7e5e4",color:dueType==="by"?"#fff":"#57534e"}}>{"\u23F0"} Due By</button>
+<button onClick={e=>{e.stopPropagation();setDueType("by");}} style={{flex:1,padding:"5px",borderRadius:6,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,background:dueType==="by"?"#dc2626":"#e7e5e4",color:dueType==="by"?"#fff":"#57534e"}}>{"\u23F0"} Deliver By</button>
 <button onClick={e=>{e.stopPropagation();setDueType("after");}} style={{flex:1,padding:"5px",borderRadius:6,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,background:dueType==="after"?"#2563eb":"#e7e5e4",color:dueType==="after"?"#fff":"#57534e"}}>Deliver After</button>
 </div>
-<div style={{display:"flex",gap:3,flexWrap:"wrap"}}>
-{HOURS.map(t=>{const sel=dueVal===t;return(<button key={t} onClick={e=>{e.stopPropagation();setDueVal(sel?"":t);}} style={{padding:"5px 8px",borderRadius:6,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,background:sel?(dueType==="by"?"#dc2626":"#2563eb"):"#fff",color:sel?"#fff":"#1c1917"}}>{t}</button>);})}
+<div style={{display:"flex",gap:3,flexWrap:"wrap",alignItems:"center"}}>
+{HOURS.map(t=>{const sel=dueVal===t||dueVal===t.replace(" ",":30 ");return(<button key={t} onClick={e=>{e.stopPropagation();setDueVal(dueVal===t?"":t);}} style={{padding:"5px 8px",borderRadius:6,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,background:sel?(dueType==="by"?"#dc2626":"#2563eb"):"#fff",color:sel?"#fff":"#1c1917"}}>{t}</button>);})}
+{dueVal&&<button onClick={e=>{e.stopPropagation();if(dueVal.includes(":30")){setDueVal(dueVal.replace(":30 "," "));}else{setDueVal(dueVal.replace(/(\d+) (AM|PM)/,"$1:30 $2"));}}} style={{padding:"5px 8px",borderRadius:6,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,background:dueVal.includes(":30")?"#f59e0b":"#fef3c7",color:dueVal.includes(":30")?"#fff":"#92400e"}}>{dueVal.includes(":30")?"− :30":"+:30"}</button>}
 {dueVal&&<button onClick={e=>{e.stopPropagation();setDueVal("");}} style={{padding:"5px 8px",borderRadius:6,border:"1px solid #d6d3d1",cursor:"pointer",fontSize:10,background:"#fff",color:"#78716c"}}>Clear</button>}
 </div>
+{dueVal&&<div style={{fontSize:11,fontWeight:700,color:dueType==="by"?"#dc2626":"#2563eb",marginTop:4}}>{dueType==="by"?"By":"After"} {dueVal}</div>}
+</div>
+{/* Pickup time constraint */}
+<div style={{marginTop:8,background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:10,padding:"8px 10px"}}>
+<div style={{display:"flex",gap:4,marginBottom:6}}>
+<button onClick={e=>{e.stopPropagation();setPickupDueType("by");}} style={{flex:1,padding:"5px",borderRadius:6,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,background:pickupDueType==="by"?"#16a34a":"#e7e5e4",color:pickupDueType==="by"?"#fff":"#57534e"}}>{"📦"} Pickup By</button>
+<button onClick={e=>{e.stopPropagation();setPickupDueType("after");}} style={{flex:1,padding:"5px",borderRadius:6,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,background:pickupDueType==="after"?"#059669":"#e7e5e4",color:pickupDueType==="after"?"#fff":"#57534e"}}>Pickup After</button>
+</div>
+<div style={{display:"flex",gap:3,flexWrap:"wrap",alignItems:"center"}}>
+{HOURS.map(t=>{const sel=pickupDueVal===t||pickupDueVal===t.replace(" ",":30 ");return(<button key={t} onClick={e=>{e.stopPropagation();setPickupDueVal(pickupDueVal===t?"":t);}} style={{padding:"5px 8px",borderRadius:6,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,background:sel?(pickupDueType==="by"?"#16a34a":"#059669"):"#fff",color:sel?"#fff":"#1c1917"}}>{t}</button>);})}
+{pickupDueVal&&<button onClick={e=>{e.stopPropagation();if(pickupDueVal.includes(":30")){setPickupDueVal(pickupDueVal.replace(":30 "," "));}else{setPickupDueVal(pickupDueVal.replace(/(\d+) (AM|PM)/,"$1:30 $2"));}}} style={{padding:"5px 8px",borderRadius:6,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,background:pickupDueVal.includes(":30")?"#f59e0b":"#fef3c7",color:pickupDueVal.includes(":30")?"#fff":"#92400e"}}>{pickupDueVal.includes(":30")?"− :30":"+:30"}</button>}
+{pickupDueVal&&<button onClick={e=>{e.stopPropagation();setPickupDueVal("");}} style={{padding:"5px 8px",borderRadius:6,border:"1px solid #d6d3d1",cursor:"pointer",fontSize:10,background:"#fff",color:"#78716c"}}>Clear</button>}
+</div>
+{pickupDueLabel&&<div style={{fontSize:11,fontWeight:700,color:"#16a34a",marginTop:4}}>{pickupDueLabel}</div>}
 </div>
 {/* Weight */}
 <div style={{marginTop:8,background:"#f0f5fa",border:"1px solid "+BRAND.light+"44",borderRadius:10,padding:"8px 10px"}}>
@@ -2272,7 +2296,7 @@ const autoDueBy=ex.dueBy||(stop==="Atlanta Flooring - Suwanee"?"9:30–1:00 PM"
 :cust==="IMETCO"&&stop==="Round Trip IMETCO & Finishing Dynamics"?"By 3:30 PM"
 :null);
 const autoDeliverAfter=(cust==="Specialty"&&!ex.dueBy)?"Pickup 7:30 AM — Specialty":null;
-const entry={id:Date.now()+Math.random(),customer:cust,stop,baseRate:rate,fuelPct:ex.fuelPct||0,isHourly:ex.isHourly||false,note:ex.note||null,driverId:drvId,addr:ex.addr||getAddr(stop),stopType:ex.stopType||"delivery",priority:ex.priority||(cd?.priority)||false,instructions:ex.instructions!==undefined?ex.instructions:instrForStop,status:null,arrivedAt:null,departedAt:null,eta:null,photos:[],signature:null,dueBy:autoDueBy||autoDeliverAfter||null,weight:ex.weight||0,loadNum:ex.loadNum||1,pickupFrom:ex.pickupFrom||selPickup||null};
+const entry={id:Date.now()+Math.random(),customer:cust,stop,baseRate:rate,fuelPct:ex.fuelPct||0,isHourly:ex.isHourly||false,note:ex.note||null,driverId:drvId,addr:ex.addr||getAddr(stop),stopType:ex.stopType||"delivery",priority:ex.priority||(cd?.priority)||false,instructions:ex.instructions!==undefined?ex.instructions:instrForStop,status:null,arrivedAt:null,departedAt:null,eta:null,photos:[],signature:null,dueBy:autoDueBy||autoDeliverAfter||null,weight:ex.weight||0,loadNum:ex.loadNum||1,pickupFrom:ex.pickupFrom||selPickup||null,pickupDueBy:ex.pickupDueBy||null};
 
 setLog(p=>({...p,[dk]:[...(p[dk]||[]),entry]}));
 if(stop==="DCO Eatonton"&&cust==="Emser Tile"){
@@ -2315,12 +2339,15 @@ const cd=CUSTOMERS[cust];
 const puDueBy=(cust==="Specialty")?"Pickup 7:30 AM — Specialty":null;
 Object.entries(byDriver).forEach(([drvIdStr,dels])=>{
 const dId=Number(drvIdStr);
+/* Check if any delivery has a pickupDueBy set */
+const delWithPuDue=dels.find(e=>e.pickupDueBy);
+const effectivePuDue=delWithPuDue?delWithPuDue.pickupDueBy:puDueBy;
 const puEntry=existing
-?{...existing,id:Date.now()+Math.random()+Math.random(),driverId:dId,note:makeNote(dels),instructions:""}
+?{...existing,id:Date.now()+Math.random()+Math.random(),driverId:dId,note:makeNote(dels),instructions:"",dueBy:effectivePuDue||existing.dueBy}
 :{id:Date.now()+Math.random()+Math.random(),customer:cust,stop:puSrc.label,baseRate:0,fuelPct:0,isHourly:false,
 note:makeNote(dels),driverId:dId,addr:puSrc.addr,stopType:"pickup",priority:cd?.priority||false,
 instructions:"",status:null,arrivedAt:null,departedAt:null,eta:null,photos:[],signature:null,
-dueBy:puDueBy,weight:0,loadNum:1};
+dueBy:effectivePuDue,weight:0,loadNum:1};
 /* Insert pickup BEFORE the first delivery for this customer+driver */
 const firstDelIdx=all.findIndex(e=>e.customer===cust&&e.stopType==="delivery"&&e.driverId===dId);
 if(firstDelIdx>=0){all.splice(firstDelIdx,0,puEntry);}
@@ -2337,6 +2364,15 @@ let all=[...(p[dk]||[])].filter(e=>e.id!==id);
 if(entry.stopType==="delivery"){all=rebuildPickupsFor(all,entry.customer);}
 return{...p,[dk]:all};
 });
+/* Remove Eatonton bonus hour if that stop was deleted */
+if(entry.stop==="DCO Eatonton"&&entry.customer==="Emser Tile"){
+  const remaining=dl.filter(e=>e.id!==id&&e.stop==="DCO Eatonton"&&e.customer==="Emser Tile");
+  if(remaining.length===0){
+    setEmH(p=>{const key=`${emDk}-emser`;const cur=p[key]||4;const next={...p,[key]:Math.max(cur-1,4)};delete next[`${emDk}-eatonton-bonus`];return next;});
+    showToast("DCO Eatonton deleted — bonus hr removed");
+    return;
+  }
+}
 showToast(entry.stop+" deleted");
 };
 
@@ -5255,7 +5291,7 @@ return(<div key={idx} style={{position:"relative"}}>
 isCustom={isCustom}
 onOpenEdit={()=>openStopEdit(selCust,idx,isCustom,origStop,addr,rate,note)}
 onCheck={()=>setMultiChecked(p=>p.includes(idx)?p.filter(x=>x!==idx):[...p,idx])}
-onAdd={(dueBy,weight)=>{const cd=CUSTOMERS[selCust];addDel(selCust,stop,rate||0,preAssignDriver||0,{isHourly:cd.rate_type==="hourly",fuelPct:(cd.fuel_surcharge&&!cd.fuel_included)?cd.fuel_surcharge:0,note:note||null,addr,priority:cd.priority,dueBy:dueBy||null,weight:weight||0});}}
+onAdd={(dueBy,weight,pickupDueBy)=>{const cd=CUSTOMERS[selCust];addDel(selCust,stop,rate||0,preAssignDriver||0,{isHourly:cd.rate_type==="hourly",fuelPct:(cd.fuel_surcharge&&!cd.fuel_included)?cd.fuel_surcharge:0,note:note||null,addr,priority:cd.priority,dueBy:dueBy||null,weight:weight||0,pickupDueBy:pickupDueBy||null});}}
 onSaveInstr={text=>setCustomInstr(p=>({...p,[stop]:text}))}
 />
 </div>);})}{custHidden.length>0&&<div style={{marginTop:10,background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:12,padding:"10px 14px"}}>
