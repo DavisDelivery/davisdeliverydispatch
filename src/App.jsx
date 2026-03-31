@@ -806,10 +806,11 @@ const isAssigned=s.driverId>0;
 const isActiveDriverStop=activeDriverRef.current&&s.driverId===activeDriverRef.current;
 
 const hasRouteNum=s.routeOrder>0&&!done;
-const scale=done?5:onSite?11:hasRouteNum?13:isActiveDriverStop?11:8;
-const fillColor=done?"#a8a29e":col;
-const strokeColor=onSite?"#f59e0b":isActiveDriverStop?"#1c1917":isP?"#f59e0b":"#fff";
-const strokeWeight=onSite?3:isActiveDriverStop?3:2;
+const isUnassigned=!isAssigned&&!done;
+const scale=done?5:onSite?11:hasRouteNum?13:isActiveDriverStop?11:isUnassigned?10:8;
+const fillColor=done?"#a8a29e":isUnassigned?"#d97706":col;
+const strokeColor=onSite?"#f59e0b":isActiveDriverStop?"#1c1917":isUnassigned?"#92400e":isP?"#f59e0b":"#fff";
+const strokeWeight=onSite?3:isActiveDriverStop?3:isUnassigned?2.5:2;
 const fillOpacity=done?0.4:hasActive&&!isActiveDriverStop&&isAssigned?0.5:1;
 
 const marker=new window.google.maps.Marker({
@@ -1755,6 +1756,7 @@ style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px
 <div style={{display:"flex",gap:3,flexWrap:"wrap",alignItems:"center"}}>
 {HOURS.map(t=>{const sel=dueVal===t||dueVal===t.replace(" ",":30 ");return(<button key={t} onClick={e=>{e.stopPropagation();setDueVal(dueVal===t?"":t);}} style={{padding:"5px 8px",borderRadius:6,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,background:sel?(dueType==="by"?"#dc2626":"#2563eb"):"#fff",color:sel?"#fff":"#1c1917"}}>{t}</button>);})}
 {dueVal&&<button onClick={e=>{e.stopPropagation();if(dueVal.includes(":30")){setDueVal(dueVal.replace(":30 "," "));}else{setDueVal(dueVal.replace(/(\d+) (AM|PM)/,"$1:30 $2"));}}} style={{padding:"5px 8px",borderRadius:6,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,background:dueVal.includes(":30")?"#f59e0b":"#fef3c7",color:dueVal.includes(":30")?"#fff":"#92400e"}}>{dueVal.includes(":30")?"− :30":"+:30"}</button>}
+{!dueVal&&<button style={{padding:"5px 8px",borderRadius:6,border:"none",fontSize:11,fontWeight:700,background:"#f5f5f4",color:"#d6d3d1",cursor:"default"}}>+:30</button>}
 {dueVal&&<button onClick={e=>{e.stopPropagation();setDueVal("");}} style={{padding:"5px 8px",borderRadius:6,border:"1px solid #d6d3d1",cursor:"pointer",fontSize:10,background:"#fff",color:"#78716c"}}>Clear</button>}
 </div>
 {dueVal&&<div style={{fontSize:11,fontWeight:700,color:dueType==="by"?"#dc2626":"#2563eb",marginTop:4}}>{dueType==="by"?"By":"After"} {dueVal}</div>}
@@ -1768,6 +1770,7 @@ style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px
 <div style={{display:"flex",gap:3,flexWrap:"wrap",alignItems:"center"}}>
 {HOURS.map(t=>{const sel=pickupDueVal===t||pickupDueVal===t.replace(" ",":30 ");return(<button key={t} onClick={e=>{e.stopPropagation();setPickupDueVal(pickupDueVal===t?"":t);}} style={{padding:"5px 8px",borderRadius:6,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,background:sel?(pickupDueType==="by"?"#16a34a":"#059669"):"#fff",color:sel?"#fff":"#1c1917"}}>{t}</button>);})}
 {pickupDueVal&&<button onClick={e=>{e.stopPropagation();if(pickupDueVal.includes(":30")){setPickupDueVal(pickupDueVal.replace(":30 "," "));}else{setPickupDueVal(pickupDueVal.replace(/(\d+) (AM|PM)/,"$1:30 $2"));}}} style={{padding:"5px 8px",borderRadius:6,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,background:pickupDueVal.includes(":30")?"#f59e0b":"#fef3c7",color:pickupDueVal.includes(":30")?"#fff":"#92400e"}}>{pickupDueVal.includes(":30")?"− :30":"+:30"}</button>}
+{!pickupDueVal&&<button style={{padding:"5px 8px",borderRadius:6,border:"none",fontSize:11,fontWeight:700,background:"#f5f5f4",color:"#d6d3d1",cursor:"default"}}>+:30</button>}
 {pickupDueVal&&<button onClick={e=>{e.stopPropagation();setPickupDueVal("");}} style={{padding:"5px 8px",borderRadius:6,border:"1px solid #d6d3d1",cursor:"pointer",fontSize:10,background:"#fff",color:"#78716c"}}>Clear</button>}
 </div>
 {pickupDueLabel&&<div style={{fontSize:11,fontWeight:700,color:"#16a34a",marginTop:4}}>{pickupDueLabel}</div>}
@@ -3953,15 +3956,20 @@ style={{background:isDrgOver?"#dcfce7":isDrgSrc?"#fef9c3":done?"#f0fdf4":onSite?
 {entry.departedAt&&<div style={{fontSize:9,color:"#16a34a"}}>Departed: {entry.departedAt}</div>}
 {entry.signature&&<div style={{fontSize:9,color:"#16a34a",marginTop:1}}>✍ {entry.signature}</div>}
 {entry.photos&&entry.photos.length>0&&<div style={{display:"flex",gap:3,marginTop:3}}>{entry.photos.map((p,pi)=><img key={pi} src={p} alt="" style={{width:24,height:24,objectFit:"cover",borderRadius:4,border:"1px solid #e7e5e4"}}/>)}</div>}
-<div style={{display:"flex",gap:3,marginTop:4,flexWrap:"wrap"}}>
+<div style={{display:"flex",gap:3,marginTop:4,flexWrap:"wrap",alignItems:"center"}}>
 <select value={entry.driverId} onChange={e=>{e.stopPropagation();reassign(entry.id,Number(e.target.value));}} style={{background:"#f5f5f4",border:"1px solid #e7e5e4",borderRadius:5,padding:"2px 4px",fontSize:9,color:"#57534e",cursor:"pointer",maxWidth:70}}><option value={0}>Assign</option>{drivers.map(dd=><option key={dd.id} value={dd.id}>{dd.name}</option>)}</select>
 <button onClick={()=>moveInDriver(drv.id,eIdx,-1)} style={{background:"#f5f5f4",border:"1px solid #e7e5e4",borderRadius:4,padding:"1px 5px",cursor:"pointer",fontSize:9,color:"#78716c"}} title="Move up">▲</button>
 <button onClick={()=>moveInDriver(drv.id,eIdx,1)} style={{background:"#f5f5f4",border:"1px solid #e7e5e4",borderRadius:4,padding:"1px 5px",cursor:"pointer",fontSize:9,color:"#78716c"}} title="Move down">▼</button>
+<input type="number" inputMode="numeric" value={entry.weight||""} onChange={e=>setWeight(entry.id,e.target.value)} onClick={e=>e.stopPropagation()} placeholder="lbs" style={{width:52,border:"1px solid #d6d3d1",borderRadius:4,padding:"2px 4px",fontSize:9,fontWeight:700,outline:"none",textAlign:"center",background:entry.weight?"#f0f5fa":"#fff"}}/>
 {!isPU&&!entry.isHourly&&!entry.liftgateApplied&&<button onClick={()=>manualLiftgate(entry.id)} style={{background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:4,padding:"1px 6px",cursor:"pointer",fontSize:9,color:"#ea580c",fontWeight:700}}>+LG</button>}
 {entry.liftgateApplied&&<span style={{fontSize:8,color:"#16a34a",fontWeight:700,padding:"2px 4px"}}>✓LG</span>}
 {!isPU&&!entry.isHourly&&!entry.wasSplit&&<button onClick={()=>setSplitEntry({id:entry.id,totalWeight:entry.weight||0,ratio:50})} style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:4,padding:"1px 6px",cursor:"pointer",fontSize:9,color:"#2563eb",fontWeight:700}}>✂Split</button>}
 {entry.wasSplit&&<span style={{fontSize:8,color:"#2563eb",fontWeight:700,padding:"2px 4px"}}>L{entry.loadNum}</span>}
 <button onClick={()=>deleteDel(entry.id)} style={{background:"none",border:"none",color:"#dc2626",fontSize:9,cursor:"pointer",padding:"1px 4px"}}>✕</button>
+</div>
+{/* Inline notes edit */}
+<div style={{display:"flex",gap:3,marginTop:3,alignItems:"center"}}>
+<input value={entry.instructions||""} onChange={e=>updateInstructions(entry.id,e.target.value)} onClick={e=>e.stopPropagation()} placeholder="📋 Add notes..." style={{flex:1,border:"1px solid #e7e5e4",borderRadius:4,padding:"3px 6px",fontSize:9,outline:"none",background:entry.instructions?"#eff6ff":"#fafaf9",color:"#1c1917",fontFamily:"inherit"}}/>
 </div>
 {/* Inline split panel */}
 {splitEntry?.id===entry.id&&<div style={{marginTop:6,background:"#eff6ff",border:"2px solid #2563eb",borderRadius:8,padding:10}}>
@@ -4010,9 +4018,13 @@ style={{background:isDrgOver?"#dcfce7":isDrgSrc?"#fef9c3":done?"#f0fdf4":onSite?
 {entry.note&&<div style={{fontSize:9,color:"#a8a29e",marginTop:1}}>{entry.note}</div>}
 {hasInstr&&<div style={{fontSize:9,color:"#2563eb",marginTop:2,background:"#eff6ff",padding:"3px 6px",borderRadius:4}}>📋 {entry.instructions}</div>}
 {entry.weight>0&&<div style={{fontSize:9,color:BRAND.main,fontWeight:700,marginTop:1}}>{entry.weight.toLocaleString()} lbs</div>}
-<select value={entry.driverId} onChange={e=>reassign(entry.id,Number(e.target.value))} style={{marginTop:4,background:"#f5f5f4",border:"1px solid #e7e5e4",borderRadius:5,padding:"3px 6px",fontSize:10,color:"#57534e",cursor:"pointer"}}>
+<div style={{display:"flex",gap:3,marginTop:4,alignItems:"center"}}>
+<select value={entry.driverId} onChange={e=>reassign(entry.id,Number(e.target.value))} style={{background:"#f5f5f4",border:"1px solid #e7e5e4",borderRadius:5,padding:"3px 6px",fontSize:10,color:"#57534e",cursor:"pointer"}}>
 <option value={0}>Assign...</option>{drivers.map(dd=><option key={dd.id} value={dd.id}>{dd.name}</option>)}
 </select>
+<input type="number" inputMode="numeric" value={entry.weight||""} onChange={e=>setWeight(entry.id,e.target.value)} onClick={e=>e.stopPropagation()} placeholder="lbs" style={{width:52,border:"1px solid #d6d3d1",borderRadius:4,padding:"3px 4px",fontSize:9,fontWeight:700,outline:"none",textAlign:"center",background:entry.weight?"#f0f5fa":"#fff"}}/>
+</div>
+<input value={entry.instructions||""} onChange={e=>updateInstructions(entry.id,e.target.value)} onClick={e=>e.stopPropagation()} placeholder="📋 Add notes..." style={{width:"100%",marginTop:3,border:"1px solid #e7e5e4",borderRadius:4,padding:"3px 6px",fontSize:9,outline:"none",background:entry.instructions?"#eff6ff":"#fafaf9",color:"#1c1917",fontFamily:"inherit"}}/>
 </div>);})}
 </div>
 </div>}
@@ -4053,7 +4065,7 @@ style={{display:"flex",alignItems:"center",gap:5,padding:"4px 10px",borderRadius
 {mapActiveDrv&&<button onClick={()=>setMapActiveDrv(null)} style={{fontSize:10,color:"#78716c",background:"none",border:"none",cursor:"pointer",padding:"4px 6px"}}>✕ Clear</button>}
 {!mapActiveDrv&&<span style={{fontSize:10,color:"#a8a29e",fontStyle:"italic"}}>or click any stop to see details</span>}
 </div>
-<GoogleMapView stops={stopsWithCoords2} drivers={drivers} height={380} showSearch={true} searchLabel="Search address on map…"
+<GoogleMapView stops={stopsWithCoords2} drivers={drivers} height={Math.max(500,window.innerHeight-280)} showSearch={true} searchLabel="Search address on map…"
 activeDriver={mapActiveDrv}
 onAssignStop={mapActiveDrv?(stopId,drvId)=>{assignInOrder(stopId,mapActiveDrv);}:null}/>
 </div>);
