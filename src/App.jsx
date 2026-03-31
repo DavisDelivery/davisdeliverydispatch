@@ -289,7 +289,7 @@ const DAYS = ["Monday","Tuesday","Wednesday","Thursday","Friday"];
 
 /* -- BRAND COLORS -- */
 const BRAND={main:"#1e5b92",dark:"#134b7f",light:"#357bb7",pale:"#e8f0f8",bg:"#f0f5fa"};
-const APP_VERSION="3.9.6";
+const APP_VERSION="3.9.13";
 const LOGO_URI="data:image/png;base64,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";
 const LOGO_WHITE="data:image/png;base64,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";
 
@@ -366,6 +366,7 @@ const ADDR={
   "Vanguard - Norcross":"1750 Corporate Drive, Suite 700, Norcross, GA 30093",
   "SE Commercial - Woodstock":"193 Stockwood Drive, Woodstock, GA 30188",
   "Construction Resources - Decatur":"196 Rio Circle, Decatur, GA 30030",
+  "Builders Floor Coverings - Decatur":"196 Rio Circle, Decatur, GA 30030",
   "Madison Flooring Group":"1167 Eatonton Road, Madison, GA 30650",
   "American Flooring Services":"783 Metromont Road, Hiram, GA 30141",
   "Peachwood Floor Covering":"400 Northfield Way, Roswell, GA 30075",
@@ -482,9 +483,9 @@ const getDefaultInstr=(s)=>DEFAULT_INSTRUCTIONS[s]||"";
 /* ── CUSTOMERS ── */
 const CUSTOMERS={
 "Emser Tile":{rate_type:"hourly",rate:102.50,min_hours:4,pickup:"Norcross &/or Roswell",note:"$102.50/hr, 4hr min",
-deliveries:["Advanced Flooring Design - Mableton","American Flooring Services","Atlanta Flooring - Suwanee","Atlanta West - Lithia Springs","BEC - Alpharetta","Britts - Lawrenceville","Construction Resources - Decatur","D3 - Woodstock","Dalton Carpet Outlet - Smyrna","DCO Athens","DCO Eatonton","DCO Lakes Pkwy","DCO Smyrna","DCO Tech Dr - Lawrenceville","Drop Ship Liftgate","Elite Flooring - Norcross","Flooring Design Group - Doraville","Floorworx - Norcross","Gel & Associates - Atlanta","Hillman - Sugar Hill","Idlewood - Norcross","JSJ/ProSource - Marietta","Madison Flooring Group","NE Corner - Flowery Branch","NOCO Contracting","Peachwood Floor Covering","Precision Flooring - Norcross","Premier - Suwanee","Prestigious - Alpharetta","ProSource - Marietta","ProSource - Norcross","SE Commercial - Woodstock","Sherwin Williams - Norcross","Sherwin Williams - Smyrna","Stocco - Alpharetta","Strathmore - Atlanta","Transfer - Norcross","Transfer - Roswell","Valufloor - Doraville","Vanguard - Norcross"]},
+deliveries:["Advanced Flooring Design - Mableton","American Flooring Services","Atlanta Flooring - Suwanee","Atlanta West - Lithia Springs","BEC - Alpharetta","Britts - Lawrenceville","Builders Floor Coverings - Decatur","Construction Resources - Decatur","D3 - Woodstock","Dalton Carpet Outlet - Smyrna","DCO Athens","DCO Eatonton","DCO Lakes Pkwy","DCO Smyrna","DCO Tech Dr - Lawrenceville","Drop Ship Liftgate","Elite Flooring - Norcross","Flooring Design Group - Doraville","Floorworx - Norcross","Gel & Associates - Atlanta","Hillman - Sugar Hill","Idlewood - Norcross","JSJ/ProSource - Marietta","Madison Flooring Group","NE Corner - Flowery Branch","NOCO Contracting","Peachwood Floor Covering","Precision Flooring - Norcross","Premier - Suwanee","Prestigious - Alpharetta","ProSource - Marietta","ProSource - Norcross","SE Commercial - Woodstock","Sherwin Williams - Norcross","Sherwin Williams - Smyrna","Stocco - Alpharetta","Strathmore - Atlanta","Transfer - Norcross","Transfer - Roswell","Valufloor - Doraville","Vanguard - Norcross"]},
 "Florida Tile":{rate_type:"flat",pickup:"Norcross",fuel_surcharge:0.15,note:"Flat rate + 15% fuel (separate)",
-deliveries:[{s:"3 Little Dogs - Cumming",r:200},{s:"Atlanta West - Lithia Springs",r:200},{s:"BEC - Alpharetta",r:175},{s:"Britts - Lawrenceville",r:125},{s:"Construction Resources - Decatur",r:175},{s:"DCO Lakes Pkwy - Lawrenceville",r:125},{s:"DCO Tech Dr - Lawrenceville",r:125},{s:"Floor Works - Dallas",r:250},{s:"Hillman - Sugar Hill",r:150},{s:"JSJ/ProSource - Marietta",r:150},{s:"Moda",r:150},{s:"NE Corner - Flowery Branch",r:150},{s:"Precision Flooring - Norcross",r:125},{s:"Premier - Suwanee",r:125},{s:"ProSource - Norcross",r:125},{s:"Remodel Republic",r:150},{s:"SE Commercial - Woodstock",r:175},{s:"Tile House",r:175},{s:"Vanguard - Norcross",r:125}]},
+deliveries:[{s:"3 Little Dogs - Cumming",r:200},{s:"Atlanta West - Lithia Springs",r:200},{s:"BEC - Alpharetta",r:175},{s:"Britts - Lawrenceville",r:125},{s:"Builders Floor Coverings - Decatur",r:175},{s:"Construction Resources - Decatur",r:175},{s:"DCO Lakes Pkwy - Lawrenceville",r:125},{s:"DCO Tech Dr - Lawrenceville",r:125},{s:"Floor Works - Dallas",r:250},{s:"Hillman - Sugar Hill",r:150},{s:"JSJ/ProSource - Marietta",r:150},{s:"Moda",r:150},{s:"NE Corner - Flowery Branch",r:150},{s:"Precision Flooring - Norcross",r:125},{s:"Premier - Suwanee",r:125},{s:"ProSource - Norcross",r:125},{s:"Remodel Republic",r:150},{s:"SE Commercial - Woodstock",r:175},{s:"Tile House",r:175},{s:"Vanguard - Norcross",r:125}]},
 "Specialty":{rate_type:"flat",pickup:"Norcross",fuel_included:true,note:"Flat rate (15% fuel included)",priority:true,priorityNote:"Be on dock first thing",
 deliveries:[{s:"D3 - Woodstock",r:201.25},{s:"DCO Lakes Pkwy",r:143.75},{s:"DCO Tech Dr",r:143.75},{s:"H&R Commercial",r:201.25},{s:"Hillman - Sugar Hill",r:172.50},{s:"Horizon - Alpharetta",r:201.25},{s:"LaVista/Waffle House",r:143.75},{s:"Perimeter Floors - Marietta",r:201.25},{s:"Premier - Suwanee",r:143.75},{s:"ProFloors - Doraville",r:143.75},{s:"Real Floors - Marietta",r:201.25},{s:"SE Commercial - Woodstock",r:201.25},{s:"Spectra",r:143.75},{s:"US Pool",r:143.75},{s:"Vanguard - Norcross",r:143.75},{s:"Vision Flooring",r:143.75}]},
 "IMETCO":{rate_type:"flat",pickup:"Norcross",note:"All Deliveries Require a **Ship Plan #**",noteHighlight:"Ship Plan #",
@@ -1390,7 +1391,7 @@ function getCoords(addr){
 }
 
 /* ── ROUTE BUILDER COMPONENT ── */
-function RouteBuilder({entries,drivers,onAssign,onReorder,onBack}){
+function RouteBuilder({entries,drivers,onAssign,onAssignBulk,onReorder,onBack}){
 const[activeDriver,setActiveDriver]=useState(null);
 /* Filter out pickups — routing only cares about deliveries */
 const deliveryEntries=entries.filter(e=>e.stopType!=="pickup");
@@ -1458,24 +1459,33 @@ const handleStopClick=(entryId)=>{
 if(!activeDriver)return;
 const entry=deliveryEntries.find(e=>e.id===entryId);
 if(!entry)return;
-
-/* If already in this driver's route, remove it */
-if(driverRoute.includes(entryId)){
-setRouteOrders(p=>({...p,[activeDriver]:(p[activeDriver]||[]).filter(id=>id!==entryId)}));
-onAssign(entryId,0); /* unassign */
-return;
-}
-
-/* If assigned to another driver, remove from that route first */
-Object.entries(routeOrders).forEach(([did,ids])=>{
-if(ids.includes(entryId)&&Number(did)!==activeDriver){
-setRouteOrders(p=>({...p,[did]:(p[did]||[]).filter(id=>id!==entryId)}));
-}
+const addr=entry.addr||getAddr(entry.stop);
+const siblings=deliveryEntries.filter(e=>{
+  const ea=e.addr||getAddr(e.stop);
+  return e.stop===entry.stop&&ea===addr;
 });
-
-/* Add to active driver's route */
-setRouteOrders(p=>({...p,[activeDriver]:[...(p[activeDriver]||[]),entryId]}));
-onAssign(entryId,activeDriver);
+const idsToAdd=siblings.map(e=>e.id);
+if(driverRoute.includes(entryId)){
+  setRouteOrders(p=>({...p,[activeDriver]:(p[activeDriver]||[]).filter(id=>!idsToAdd.includes(id))}));
+  if(onAssignBulk)onAssignBulk(idsToAdd,0);
+  else idsToAdd.forEach(id=>onAssign(id,0));
+  return;
+}
+setRouteOrders(p=>{
+  const updated={...p};
+  Object.entries(updated).forEach(([did,ids])=>{
+    if(Number(did)!==activeDriver){updated[did]=ids.filter(id=>!idsToAdd.includes(id));}
+  });
+  const cur=updated[activeDriver]||[];
+  const ni=idsToAdd.filter(id=>!cur.includes(id));
+  updated[activeDriver]=[...cur,...ni];
+  return updated;
+});
+const newIds=idsToAdd.filter(id=>!(routeOrders[activeDriver]||[]).includes(id));
+if(newIds.length>0){
+  if(onAssignBulk)onAssignBulk(newIds,activeDriver);
+  else newIds.forEach(id=>onAssign(id,activeDriver));
+}
 };
 
 /* Apply route orders to manifest */
@@ -1594,6 +1604,15 @@ return(
 </div></>}
 </div>}
 </div>
+{/* Weight counter */}
+{(()=>{const totalW=ids.reduce((sum,id)=>{const s=deliveryEntries.find(e=>e.id===id);return sum+(s?.weight||0);},0);const cap=10000;const pct=Math.min(100,totalW/cap*100);const col=totalW>cap?"#dc2626":totalW>cap*0.8?"#d97706":"#16a34a";return totalW>0?(
+<div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6}}>
+<div style={{flex:1,height:6,background:"#e7e5e4",borderRadius:3,overflow:"hidden"}}>
+<div style={{height:"100%",width:pct+"%",background:col,borderRadius:3,transition:"width 0.3s"}}/>
+</div>
+<span style={{fontSize:10,fontWeight:700,color:col,fontVariantNumeric:"tabular-nums",flexShrink:0}}>{totalW.toLocaleString()}<span style={{fontSize:8,color:"#a8a29e"}}>/{(cap/1000).toFixed(0)}k</span></span>
+{totalW>cap&&<span style={{fontSize:7,background:"#dc2626",color:"#fff",padding:"0px 3px",borderRadius:2,fontWeight:700}}>OVER</span>}
+</div>):null;})()}
 <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
 {ids.map((id,oi)=>{
 const s=deliveryEntries.find(e=>e.id===id);
@@ -1602,6 +1621,7 @@ return(
 <div key={id} style={{display:"flex",alignItems:"center",gap:4,background:"#f5f5f4",borderRadius:6,padding:"3px 8px"}}>
 <span style={{fontSize:10,fontWeight:700,color:DCOL[di]}}>{oi+1}.</span>
 <span style={{fontSize:10,color:"#57534e"}}>{s.stop.length>20?s.stop.slice(0,20)+"…":s.stop}</span>
+{s.weight>0&&<span style={{fontSize:8,color:BRAND.main,fontWeight:700}}>{(s.weight/1000).toFixed(s.weight%1000?1:0)}k</span>}
 <button onClick={()=>{
 setRouteOrders(p=>({...p,[drv.id]:(p[drv.id]||[]).filter(x=>x!==id)}));
 onAssign(id,0);
@@ -1817,6 +1837,7 @@ const[showCustomHrs,setShowCustomHrs]=useState(false);const[customHrsInput,setCu
 const[insertPickupFor,setInsertPickupFor]=useState(null);
 const[pickupCustomer,setPickupCustomer]=useState("");const[pickupStop,setPickupStop]=useState("");const[pickupAddr,setPickupAddr]=useState("");const[pickupForDel,setPickupForDel]=useState("");const[pickupNote,setPickupNote]=useState("");
 const[dragSrc,setDragSrc]=useState(null);const[dragOver,setDragOver]=useState(null);
+const[splitEntry,setSplitEntry]=useState(null); /* {id, totalWeight, ratio} */
 const[showDatePicker,setShowDatePicker]=useState(false);
 const[preAssignDriver,setPreAssignDriver]=useState(null);
 const[multiSelect,setMultiSelect]=useState(false);const[multiChecked,setMultiChecked]=useState([]);
@@ -1847,6 +1868,8 @@ const[customDelName,setCustomDelName]=useState("");
 const[customDelAddr,setCustomDelAddr]=useState("");
 const[customDelRate,setCustomDelRate]=useState("");
 const[customDelNote,setCustomDelNote]=useState("");
+const[customDelPermanent,setCustomDelPermanent]=useState(true);
+const[oneOffCust,setOneOffCust]=useState("");
 const[notifyDriver,setNotifyDriver]=useState(null); /* driver id for notify modal */
 const[notifyCustomMsg,setNotifyCustomMsg]=useState("");
 const[notifications,setNotifications]=useState({}); /* {driverId: [{msg,time,type},...]} */
@@ -1913,6 +1936,7 @@ const calcQuoteMiles=()=>{
 const[qPushDay,setQPushDay]=useState(null); /* {quoteId, targetDk} */
 
 const wd=getWeekDates(wo);const dk=`${wo}-${sd}`;const dl=log[dk]||[];
+const emDk=getFbKey(wo,sd); /* date-based key for Emser hours/shifts */
 const showToast=useCallback(m=>{setToast(m);setTimeout(()=>setToast(null),2000);},[]);
 
 /* Sync rpOrders from live manifest whenever Routes tab is opened */
@@ -2030,42 +2054,41 @@ useEffect(()=>{
 
 useEffect(()=>{
   if(!firebaseReady.current)return;
-  const emKey=`${dk}-emser`;
+  const emKey=`${emDk}-emser`;
   const val=emH[emKey];
   if(val===undefined)return;
-  /* Skip if same as what Firebase sent */
   if(prevEmHRef.current[emKey]===val)return;
   prevEmHRef.current[emKey]=val;
   const timer=setTimeout(()=>{
     saveEmserHours(emKey,val).catch(e=>console.error("EmH save:",e));
   },500);
   return()=>clearTimeout(timer);
-},[emH,dk]);
+},[emH,emDk]);
 
 useEffect(()=>{
   if(!firebaseReady.current)return;
-  const val=dispNotes[dk];
+  const val=dispNotes[emDk];
   if(val===undefined)return;
-  if(prevNotesRef.current[dk]===val)return;
-  prevNotesRef.current[dk]=val;
+  if(prevNotesRef.current[emDk]===val)return;
+  prevNotesRef.current[emDk]=val;
   const timer=setTimeout(()=>{
-    saveDispatchNote(dk,val||"").catch(e=>console.error("Note save:",e));
+    saveDispatchNote(emDk,val||"").catch(e=>console.error("Note save:",e));
   },500);
   return()=>clearTimeout(timer);
-},[dispNotes,dk]);
+},[dispNotes,emDk]);
 
 useEffect(()=>{
   if(!firebaseReady.current)return;
-  const shifts=emserShifts[dk];
+  const shifts=emserShifts[emDk];
   if(shifts===undefined)return;
   const json=JSON.stringify(shifts);
-  if(prevShiftsRef.current[dk]===json)return;
-  prevShiftsRef.current[dk]=json;
+  if(prevShiftsRef.current[emDk]===json)return;
+  prevShiftsRef.current[emDk]=json;
   const timer=setTimeout(()=>{
-    saveEmserShifts(dk,shifts||[]).catch(e=>console.error("Shifts save:",e));
+    saveEmserShifts(emDk,shifts||[]).catch(e=>console.error("Shifts save:",e));
   },500);
   return()=>clearTimeout(timer);
-},[emserShifts,dk]);
+},[emserShifts,emDk]);
 
 /* ── LOCALSTORAGE PERSISTENCE (offline fallback — active until Firebase connected) ── */
 useEffect(()=>{lsSet(LS_DRIVERS,drivers);},[drivers]);
@@ -2140,7 +2163,7 @@ const entry={id:Date.now()+Math.random(),customer:cust,stop,baseRate:rate,fuelPc
 
 setLog(p=>({...p,[dk]:[...(p[dk]||[]),entry]}));
 if(stop==="DCO Eatonton"&&cust==="Emser Tile"){
-setEmH(p=>{const key=`${dk}-emser`;const cur=p[key]||4;return{...p,[key]:cur+1,[`${dk}-eatonton-bonus`]:true};});
+setEmH(p=>{const key=`${emDk}-emser`;const cur=p[key]||4;return{...p,[key]:cur+1,[`${emDk}-eatonton-bonus`]:true};});
 showToast("DCO Eatonton added — +1 bonus hr applied");
 }else if(stop==="Atlanta Flooring - Suwanee"){
 showToast("Atlanta Flooring added — 9:30 AM–1 PM window");
@@ -2222,6 +2245,19 @@ sendNotificationToDriver(did,"🔄 ROUTE CHANGED\nNew stop added to your route:\
 if(oldDid>0)sendNotificationToDriver(oldDid,"🔄 ROUTE CHANGED\nStop removed from your route:\n"+entry.stop+(entry.customer?" ("+entry.customer+")":""),"route_change").catch(()=>{});
 }
 };
+/* Bulk reassign multiple entries at once — ensures pickups rebuild correctly */
+const reassignBulk=(eids,did)=>{
+setLog(p=>{
+let all=[...(p[dk]||[])];
+const custs=new Set();
+eids.forEach(eid=>{
+  const idx=all.findIndex(e=>e.id===eid);
+  if(idx>=0){all[idx]={...all[idx],driverId:did};if(all[idx].stopType==="delivery")custs.add(all[idx].customer);}
+});
+custs.forEach(c=>{all=rebuildPickupsFor(all,c);});
+return{...p,[dk]:all};
+});
+};
 const assignInOrder=(eid,did)=>{
 const entry=dl.find(e=>e.id===eid);
 if(!entry)return;
@@ -2275,6 +2311,24 @@ const manualLiftgate=(entryId)=>{
 setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===entryId?{...e,baseRate:(e.baseRate||0)+75,liftgateApplied:true}:e)}));
 showToast("Liftgate +$75 added");
 };
+const confirmSplit=(entryId,totalWeight,ratio)=>{
+setLog(p=>{
+  const all=[...(p[dk]||[])];
+  const idx=all.findIndex(e=>e.id===entryId);
+  if(idx<0)return p;
+  const orig=all[idx];
+  const w1=Math.round(totalWeight*(ratio/100));
+  const w2=totalWeight-w1;
+  /* Update original with load 1 */
+  all[idx]={...orig,weight:w1,loadNum:1,wasSplit:true,note:(orig.note?orig.note+" | ":"")+"Split 1/2: "+w1+" lbs"};
+  /* Create load 2 right after */
+  const load2={...orig,id:Date.now()+Math.random(),weight:w2,loadNum:2,wasSplit:true,note:(orig.note?orig.note+" | ":"")+"Split 2/2: "+w2+" lbs",status:null,arrivedAt:null,departedAt:null,photos:[],signature:null};
+  all.splice(idx+1,0,load2);
+  return{...p,[dk]:all};
+});
+setSplitEntry(null);
+showToast("Shipment split into 2 loads");
+};
 const updateStatus=(eid,status)=>{const now=new Date().toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,status,arrivedAt:status==="arrived"?now:e.arrivedAt,departedAt:status==="departed"?now:e.departedAt}:e)}));};
 const addPhoto=(eid,dataUrl)=>setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,photos:[...(e.photos||[]),dataUrl]}:e)}));
 const addSignature=(eid,dataUrl)=>setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,signature:dataUrl}:e)}));
@@ -2312,7 +2366,7 @@ const parseTime=(str)=>{
 const presetTo24=(t)=>{const m=t.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);if(!m)return t;let h=parseInt(m[1]);const min=m[2];const ap=m[3].toUpperCase();if(ap==="PM"&&h!==12)h+=12;if(ap==="AM"&&h===12)h=0;return String(h).padStart(2,"0")+":"+min;};
 const formatMins=(totalMins)=>{const h=Math.floor(totalMins/60);const m=totalMins%60;return m>0?`${h}h ${m}m`:`${h}h`;};
 const calcShiftMins=(shift)=>{const s=parseTime(shift.start);const e=parseTime(shift.end);if(s===null||e===null||e<=s)return 0;return e-s;};
-const getEmserDayShifts=()=>emserShifts[dk]||[];
+const getEmserDayShifts=()=>emserShifts[emDk]||[];
 
 /* Returns {byDriver:{driverId:mins}, totalMins} for any dayKey */
 const getShiftSummary=(dayKey)=>{
@@ -2326,21 +2380,21 @@ const getShiftSummary=(dayKey)=>{
   return{byDriver,totalMins};
 };
 
-const addEmserShift=(driverId)=>{const shifts=getEmserDayShifts();setEmserShifts(p=>({...p,[dk]:[...shifts,{id:Date.now()+Math.random(),driverId,start:"",end:""}]}));};
-const updateEmserShift=(shiftId,field,val)=>{setEmserShifts(p=>({...p,[dk]:(p[dk]||[]).map(s=>s.id===shiftId?{...s,[field]:val}:s)}));};
-const removeEmserShift=(shiftId)=>{setEmserShifts(p=>({...p,[dk]:(p[dk]||[]).filter(s=>s.id!==shiftId)}));};
-const calcAndApplyEmserHours=useCallback(()=>{const shifts=emserShifts[dk]||[];const totalMins=shifts.reduce((sum,s)=>sum+calcShiftMins(s),0);const hours=Math.round(totalMins/15)*15/60;if(hours>0){setEmH(p=>({...p,[`${dk}-emser`]:hours}));return hours;}return emH[`${dk}-emser`]||4;},[emserShifts,dk,emH]);
+const addEmserShift=(driverId)=>{const shifts=getEmserDayShifts();setEmserShifts(p=>({...p,[emDk]:[...shifts,{id:Date.now()+Math.random(),driverId,start:"",end:""}]}));};
+const updateEmserShift=(shiftId,field,val)=>{setEmserShifts(p=>({...p,[emDk]:(p[emDk]||[]).map(s=>s.id===shiftId?{...s,[field]:val}:s)}));};
+const removeEmserShift=(shiftId)=>{setEmserShifts(p=>({...p,[emDk]:(p[emDk]||[]).filter(s=>s.id!==shiftId)}));};
+const calcAndApplyEmserHours=useCallback(()=>{const shifts=emserShifts[emDk]||[];const totalMins=shifts.reduce((sum,s)=>sum+calcShiftMins(s),0);const hours=Math.round(totalMins/15)*15/60;if(hours>0){setEmH(p=>({...p,[`${emDk}-emser`]:hours}));return hours;}return emH[`${emDk}-emser`]||4;},[emserShifts,emDk,emH]);
 
 /* Auto-apply shift totals to emH whenever shifts change for this day */
 useEffect(()=>{
-  const shifts=emserShifts[dk]||[];
+  const shifts=emserShifts[emDk]||[];
   if(!shifts.length)return;
   const totalMins=shifts.reduce((sum,s)=>sum+calcShiftMins(s),0);
   if(totalMins>0){
     const hours=Math.round(totalMins/15)*15/60;
-    setEmH(p=>{if(p[`${dk}-emser`]===hours)return p;return{...p,[`${dk}-emser`]:hours};});
+    setEmH(p=>{if(p[`${emDk}-emser`]===hours)return p;return{...p,[`${emDk}-emser`]:hours};});
   }
-},[emserShifts,dk]);
+},[emserShifts,emDk]);
 
 /* ── 2-WAY MESSAGING (Firestore real-time) ── */
 const getMsgKey=(ch)=>ch?"dm-"+ch:"group";
@@ -2417,7 +2471,7 @@ const SORT_OPTIONS=[
 ];
 const insertPickup=(drvId,afterIdx)=>{if(!pickupStop)return;const forLabel=pickupForDel?` → ${pickupForDel}`:"";const entry={id:Date.now()+Math.random(),customer:pickupCustomer||"Pickup",stop:`${pickupCustomer||"Pickup"}${forLabel}`,baseRate:0,fuelPct:0,isHourly:false,note:pickupNote||(pickupForDel?`Picking up for ${pickupForDel}`:null),driverId:drvId,addr:pickupAddr||"",stopType:"pickup",priority:false,pickupFrom:pickupStop,pickupFor:pickupForDel,instructions:"",status:null,arrivedAt:null,departedAt:null,eta:null,photos:[],signature:null};setLog(p=>{const all=[...(p[dk]||[])];const de=all.filter(e=>e.driverId===drvId);const rest=all.filter(e=>e.driverId!==drvId);de.splice(afterIdx+1,0,entry);return{...p,[dk]:[...rest,...de]};});setInsertPickupFor(null);setPickupCustomer("");setPickupStop("");setPickupAddr("");setPickupForDel("");setPickupNote("");showToast(`Pickup added`);};
 
-const computeDay=key=>{const entries=log[key]||[];let base=0;if(entries.some(e=>e.isHourly))base+=102.50*(emH[`${key}-emser`]||4);const fBC={};entries.forEach(e=>{if(e.isHourly)return;base+=e.baseRate;if(e.fuelPct>0){if(!fBC[e.customer])fBC[e.customer]={pct:e.fuelPct,base:0};fBC[e.customer].base+=e.baseRate;}});let fuel=0;Object.values(fBC).forEach(c=>{fuel+=c.base*c.pct;});return{base,fuel,total:base+fuel,fBC};};
+const computeDay=(key,emKey)=>{const entries=log[key]||[];let base=0;if(entries.some(e=>e.isHourly))base+=102.50*(emH[`${emKey||key}-emser`]||4);const fBC={};entries.forEach(e=>{if(e.isHourly)return;base+=e.baseRate;if(e.fuelPct>0){if(!fBC[e.customer])fBC[e.customer]={pct:e.fuelPct,base:0};fBC[e.customer].base+=e.baseRate;}});let fuel=0;Object.values(fBC).forEach(c=>{fuel+=c.base*c.pct;});return{base,fuel,total:base+fuel,fBC};};
 
 /* ── PER-DRIVER ROUTE MILEAGE ── */
 const getDriverMiles=(drvId,dayKey)=>{const entries=(log[dayKey||dk]||[]).filter(e=>e.driverId===drvId);return calcRouteMiles(entries);};
@@ -2433,7 +2487,7 @@ const dayEntries=(log[`${wo}-${i}`]||[]).filter(e=>e.customer===custName);
 if(!dayEntries.length)return;
 if(cd.rate_type==="hourly"){
 /* Emser: hourly billing per day */
-const hrs=emH[`${wo}-${i}-emser`]||4;
+const hrs=emH[`${getFbKey(wo,i)}-emser`]||4;
 const amt=102.50*hrs;
 lines.push({day:weekDates[i].name,date:weekDates[i].date,desc:`Hourly: ${hrs}h × $102.50`,stops:dayEntries.map(e=>e.stop).join(", "),base:amt,fuel:0});
 grandBase+=amt;
@@ -2458,9 +2512,9 @@ setInvoices(p=>[inv,...p]);
 setShowInvoice(inv.id);
 showToast("Invoice generated for "+custName);
 };
-const dc=computeDay(dk);const wkD=DAYS.map((_,i)=>{const k=`${wo}-${i}`;return{entries:log[k]||[],calc:computeDay(k)};});const wkT=wkD.reduce((s,d)=>s+d.calc.total,0);
+const dc=computeDay(dk,emDk);const wkD=DAYS.map((_,i)=>{const k=`${wo}-${i}`;return{entries:log[k]||[],calc:computeDay(k,getFbKey(wo,i))};});const wkT=wkD.reduce((s,d)=>s+d.calc.total,0);
 const wkF={};wkD.forEach(d=>{Object.entries(d.calc.fBC).forEach(([c,cf])=>{if(!wkF[c])wkF[c]={pct:cf.pct,base:0};wkF[c].base+=cf.base;});});
-const prevWkD=DAYS.map((_,i)=>{const k=`${wo-1}-${i}`;return{entries:log[k]||[],calc:computeDay(k)};});
+const prevWkD=DAYS.map((_,i)=>{const k=`${wo-1}-${i}`;return{entries:log[k]||[],calc:computeDay(k,getFbKey(wo-1,i))};});
 const prevWkT=prevWkD.reduce((s,d)=>s+d.calc.total,0);
 const wowDelta=wkT-prevWkT;
 const wowPct=prevWkT>0?((wowDelta/prevWkT)*100):0;
@@ -2597,7 +2651,7 @@ You can help with:
 \`\`\`json
 {"stops":[{"stop":"Customer Name","weight":5000,"note":"from Norcross"},{"stop":"Another Customer","weight":8000,"note":"from Roswell"}]}
 \`\`\`
-Match stop names to known customers: AFD = "Atlanta Flooring - Suwanee", ELITE = "Elite Flooring - Norcross", FWORX = "Floorworx - Norcross", IDLEWOOD = "Idlewood - Norcross", VALUFLOR = "Valufloor - Doraville", BEC = "BEC - Alpharetta", PEACHWOOD = "Peachwood Floor Covering", AMERICAN FLOORING = "American Flooring Services", DCO = varies by location, HILLMAN = "Hillman - Sugar Hill", BRITTS = "Britts - Lawrenceville", STOCCO = "Stocco - Alpharetta", NE CORNER = "NE Corner - Flowery Branch", PREMIER = "Premier - Suwanee", PROSOURCE = varies by location, VANGUARD = "Vanguard - Norcross", SE COMMERCIAL = "SE Commercial - Woodstock", PRECISION = "Precision Flooring - Norcross", ATL WEST = "Atlanta West - Lithia Springs", ATL FLOORING = "Atlanta Flooring - Suwanee", SHERWIN = varies by location, GEL = "Gel & Associates - Atlanta", STRATHMORE = "Strathmore - Atlanta", FLOORING DESIGN = "Flooring Design Group - Doraville", D3 = "D3 - Woodstock", PRESTIGIOUS = "Prestigious - Alpharetta", MADISON = "Madison Flooring Group", CONSTRUCTION RESOURCES = "Construction Resources - Decatur", NOCO = "NOCO Contracting", PEACHWOOD SUWANEE = "Peachwood Floor Covering", ADVANCE = "Advanced Flooring Design - Mableton", ADV FLOORING = "Advanced Flooring Design - Mableton".
+Match stop names to known customers: AFD = "Atlanta Flooring - Suwanee", ELITE = "Elite Flooring - Norcross", FWORX = "Floorworx - Norcross", IDLEWOOD = "Idlewood - Norcross", VALUFLOR = "Valufloor - Doraville", BEC = "BEC - Alpharetta", PEACHWOOD = "Peachwood Floor Covering", AMERICAN FLOORING = "American Flooring Services", DCO = varies by location, HILLMAN = "Hillman - Sugar Hill", BRITTS = "Britts - Lawrenceville", STOCCO = "Stocco - Alpharetta", NE CORNER = "NE Corner - Flowery Branch", PREMIER = "Premier - Suwanee", PROSOURCE = varies by location, VANGUARD = "Vanguard - Norcross", SE COMMERCIAL = "SE Commercial - Woodstock", PRECISION = "Precision Flooring - Norcross", ATL WEST = "Atlanta West - Lithia Springs", ATL FLOORING = "Atlanta Flooring - Suwanee", SHERWIN = varies by location, GEL = "Gel & Associates - Atlanta", STRATHMORE = "Strathmore - Atlanta", FLOORING DESIGN = "Flooring Design Group - Doraville", D3 = "D3 - Woodstock", PRESTIGIOUS = "Prestigious - Alpharetta", MADISON = "Madison Flooring Group", CONSTRUCTION RESOURCES = "Construction Resources - Decatur", BFC = "Builders Floor Coverings - Decatur", BUILDERS = "Builders Floor Coverings - Decatur", NOCO = "NOCO Contracting", PEACHWOOD SUWANEE = "Peachwood Floor Covering", ADVANCE = "Advanced Flooring Design - Mableton", ADV FLOORING = "Advanced Flooring Design - Mableton".
 Include weight in lbs. When weight is listed as a number followed by K (e.g. 8K), multiply by 1000 (8K = 8000 lbs). When weight is listed with LBS (e.g. 500 LBS), use as-is (500 LBS = 500 lbs). Do NOT convert LBS values to thousands. Note which pickup location (Norcross or Roswell) each stop comes from. Stops listed under "ROSWELL:" are from Roswell pickup; all others default to Norcross. If a stop appears under BOTH Norcross and Roswell sections, list it twice with the appropriate pickup noted.
 
 When suggesting route orders, ALWAYS show time constraints first, then order remaining stops by geographic proximity in the Atlanta metro.
@@ -2691,11 +2745,11 @@ onStatusUpdate={updateStatus} onPhotoUpload={addPhoto} onSignature={addSignature
 /* ═══════════════ DESKTOP LAYOUT ═══════════════ */
 /* For add/selCust/quoteMode on desktop, fall through to the shared mobile layout below */
 if(isDesktop&&view!=="add"&&!selCust&&!quoteMode){
-const dkNote=dispNotes[dk]||"";
+const dkNote=dispNotes[emDk]||"";
 const allDriverEntries=drivers.map((drv,di)=>({drv,di,entries:drvEntries(drv.id)}));
 const uaEntries=dl.filter(e=>e.driverId===0);
 const custRevenue={};dl.forEach(e=>{if(!e.isHourly){if(!custRevenue[e.customer])custRevenue[e.customer]=0;custRevenue[e.customer]+=e.baseRate;}});
-if(dl.some(e=>e.isHourly)){custRevenue["Emser Tile"]=(custRevenue["Emser Tile"]||0)+102.50*(emH[`${dk}-emser`]||4);}
+if(dl.some(e=>e.isHourly)){custRevenue["Emser Tile"]=(custRevenue["Emser Tile"]||0)+102.50*(emH[`${emDk}-emser`]||4);}
 const custRevArr=Object.entries(custRevenue).sort((a,b)=>b[1]-a[1]);
 const maxCustRev=Math.max(...custRevArr.map(c=>c[1]),1);
 const statusCounts={pending:0,arrived:0,departed:0};
@@ -2837,9 +2891,21 @@ const np=es.filter(e=>!pu.includes(e));np.reverse();
 rpSet(did,[...pu,...np],"🔄 Route Reversed");};
 
 /* ── Route Planner actions ── */
-const rpClick=(entryId)=>{if(!rpActive)return;const ids=rpOrders[rpActive]||[];
-if(ids.includes(entryId)){setRpOrders(p=>({...p,[rpActive]:ids.filter(x=>x!==entryId)}));}
-else{const cl={};Object.entries(rpOrders).forEach(([d,a])=>{cl[d]=a.filter(x=>x!==entryId);});cl[rpActive]=[...(cl[rpActive]||[]),entryId];setRpOrders(cl);}};
+const rpClick=(entryId)=>{if(!rpActive)return;
+/* Find all entries at the same stop name + address */
+const entry=dl.find(e=>e.id===entryId);
+const addr=entry?(entry.addr||getAddr(entry.stop)):"";
+const siblings=entry?dl.filter(e=>(e.addr||getAddr(e.stop))===addr&&e.stop===entry.stop).map(e=>e.id):[entryId];
+const ids=rpOrders[rpActive]||[];
+if(ids.includes(entryId)){
+  /* Remove all siblings */
+  setRpOrders(p=>({...p,[rpActive]:ids.filter(x=>!siblings.includes(x))}));
+}else{
+  /* Add all siblings not already assigned */
+  const cl={};Object.entries(rpOrders).forEach(([d,a])=>{cl[d]=a.filter(x=>!siblings.includes(x));});
+  cl[rpActive]=[...(cl[rpActive]||[]),...siblings.filter(s=>!(cl[rpActive]||[]).includes(s))];
+  setRpOrders(cl);
+}};
 
 const rpApply=()=>{Object.entries(rpOrders).forEach(([did,ids])=>{ids.forEach(id=>reassign(id,Number(did)));if(ids.length>0)reorderDriver(Number(did),ids);});rpUnassigned.forEach(e=>{if(e.driverId!==0)reassign(e.id,0);});showToast("Routes applied");setView("manifest");};
 
@@ -3111,25 +3177,25 @@ activeDriver={rpActive} onStopClick={rpClick} onAssignStop={rpActive?(sid)=>rpCl
 </div>
 </div>
 {/* Dispatcher notes */}
-{!editingNote?<div onClick={()=>{setEditingNote(true);setNoteText(dispNotes[dk]||"");}} style={{background:dispNotes[dk]?"#faf5ff":"#fafaf9",border:dispNotes[dk]?"2px solid #d8b4fe":"1px dashed #d6d3d1",borderRadius:12,padding:"12px 16px",marginBottom:16,cursor:"pointer",display:"flex",alignItems:"flex-start",gap:10}}>
+{!editingNote?<div onClick={()=>{setEditingNote(true);setNoteText(dispNotes[emDk]||"");}} style={{background:dispNotes[emDk]?"#faf5ff":"#fafaf9",border:dispNotes[emDk]?"2px solid #d8b4fe":"1px dashed #d6d3d1",borderRadius:12,padding:"12px 16px",marginBottom:16,cursor:"pointer",display:"flex",alignItems:"flex-start",gap:10}}>
 <span style={{fontSize:16}}>📝</span>
-{dispNotes[dk]?<div><div style={{fontSize:10,fontWeight:700,color:"#7c3aed",textTransform:"uppercase",marginBottom:2}}>Dispatcher Notes</div><div style={{fontSize:13,color:"#1c1917",whiteSpace:"pre-wrap",lineHeight:1.4}}>{dispNotes[dk]}</div></div>
+{dispNotes[emDk]?<div><div style={{fontSize:10,fontWeight:700,color:"#7c3aed",textTransform:"uppercase",marginBottom:2}}>Dispatcher Notes</div><div style={{fontSize:13,color:"#1c1917",whiteSpace:"pre-wrap",lineHeight:1.4}}>{dispNotes[emDk]}</div></div>
 :<div style={{fontSize:12,color:"#a8a29e",paddingTop:2}}>Click to add dispatcher notes for this day</div>}
 </div>
 :<div style={{background:"#fff",border:"2px solid #7c3aed",borderRadius:12,padding:"14px 16px",marginBottom:16}}>
 <div style={{fontSize:11,fontWeight:700,color:"#7c3aed",textTransform:"uppercase",marginBottom:6}}>Dispatcher Notes</div>
 <textarea value={noteText} onChange={e=>setNoteText(e.target.value)} autoFocus placeholder="Route changes, special instructions, notes for the day…" rows={3} style={{width:"100%",border:"1px solid #d8b4fe",borderRadius:8,padding:"10px 12px",fontSize:13,outline:"none",resize:"vertical",fontFamily:"inherit",background:"#faf5ff"}}/>
 <div style={{display:"flex",gap:6,marginTop:6,justifyContent:"flex-end"}}>
-{dispNotes[dk]&&<button onClick={()=>{setDispNotes(p=>{const n={...p};delete n[dk];return n;});setEditingNote(false);setNoteText("");}} style={{background:"#fef2f2",border:"none",borderRadius:6,padding:"5px 10px",cursor:"pointer",fontSize:11,color:"#dc2626",fontWeight:600}}>Clear</button>}
+{dispNotes[emDk]&&<button onClick={()=>{setDispNotes(p=>{const n={...p};delete n[emDk];return n;});setEditingNote(false);setNoteText("");}} style={{background:"#fef2f2",border:"none",borderRadius:6,padding:"5px 10px",cursor:"pointer",fontSize:11,color:"#dc2626",fontWeight:600}}>Clear</button>}
 <button onClick={()=>setEditingNote(false)} style={{background:"#e7e5e4",border:"none",borderRadius:6,padding:"5px 10px",cursor:"pointer",fontSize:11,fontWeight:600}}>Cancel</button>
 <button onClick={()=>{setDispNotes(p=>({...p,[dk]:noteText.trim()}));setEditingNote(false);showToast("Notes saved");}} style={{background:"#7c3aed",color:"#fff",border:"none",borderRadius:6,padding:"5px 14px",cursor:"pointer",fontSize:11,fontWeight:600}}>Save</button>
 </div>
 </div>}
 {/* Emser hours */}
 {dl.some(e=>e.isHourly)&&(()=>{
-const {byDriver,totalMins}=getShiftSummary(dk);
-const hasEatontonBonus=!!emH[`${dk}-eatonton-bonus`];
-const hoursUsed=totalMins>0?Math.round(totalMins/15)*15/60:(emH[`${dk}-emser`]||4);
+const {byDriver,totalMins}=getShiftSummary(emDk);
+const hasEatontonBonus=!!emH[`${emDk}-eatonton-bonus`];
+const hoursUsed=totalMins>0?Math.round(totalMins/15)*15/60:(emH[`${emDk}-emser`]||4);
 /* Find which driver has DCO Eatonton */
 const eatontonEntry=dl.find(e=>e.stop==="DCO Eatonton"&&e.customer==="Emser Tile");
 const eatontonDrv=eatontonEntry?drivers.find(d=>d.id===eatontonEntry.driverId):null;
@@ -3160,10 +3226,10 @@ return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius
 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
 <span style={{fontSize:12,color:"#64748b"}}>{hoursUsed}h × $102.50</span>
 <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
-{[4,5,6,7,8,9,10].map(h=><button key={h} onClick={()=>setEmH(p=>({...p,[`${dk}-emser`]:h}))} style={{width:32,height:30,borderRadius:8,border:"none",cursor:"pointer",fontSize:13,fontWeight:600,background:hoursUsed===h&&!totalMins?"#2563eb":"#e7e5e4",color:hoursUsed===h&&!totalMins?"#fff":"#78716c"}}>{h}</button>)}
+{[4,5,6,7,8,9,10].map(h=><button key={h} onClick={()=>setEmH(p=>({...p,[`${emDk}-emser`]:h}))} style={{width:32,height:30,borderRadius:8,border:"none",cursor:"pointer",fontSize:13,fontWeight:600,background:hoursUsed===h&&!totalMins?"#2563eb":"#e7e5e4",color:hoursUsed===h&&!totalMins?"#fff":"#78716c"}}>{h}</button>)}
 <button onClick={()=>setShowCustomHrs(!showCustomHrs)} style={{height:30,borderRadius:8,border:"none",cursor:"pointer",fontSize:11,fontWeight:600,padding:"0 10px",background:showCustomHrs?"#2563eb":"#dbeafe",color:showCustomHrs?"#fff":"#2563eb"}}>Other</button>
 </div></div>
-{showCustomHrs&&<div style={{display:"flex",gap:6,alignItems:"center",marginTop:8}}><input value={customHrsInput} onChange={e=>setCustomHrsInput(e.target.value)} placeholder="e.g. 4.5" type="number" step="0.25" min="1" style={{width:80,border:"1px solid #bfdbfe",borderRadius:8,padding:"6px 10px",fontSize:14,fontWeight:700,outline:"none",textAlign:"center"}}/><span style={{fontSize:12,color:"#64748b"}}>hrs</span><button onClick={()=>{const v=parseFloat(customHrsInput);if(v>0){setEmH(p=>({...p,[`${dk}-emser`]:v}));setShowCustomHrs(false);setCustomHrsInput("");}}} style={{background:"#2563eb",color:"#fff",border:"none",borderRadius:8,padding:"6px 14px",fontSize:12,fontWeight:600,cursor:"pointer"}}>Set</button></div>}
+{showCustomHrs&&<div style={{display:"flex",gap:6,alignItems:"center",marginTop:8}}><input value={customHrsInput} onChange={e=>setCustomHrsInput(e.target.value)} placeholder="e.g. 4.5" type="number" step="0.25" min="1" style={{width:80,border:"1px solid #bfdbfe",borderRadius:8,padding:"6px 10px",fontSize:14,fontWeight:700,outline:"none",textAlign:"center"}}/><span style={{fontSize:12,color:"#64748b"}}>hrs</span><button onClick={()=>{const v=parseFloat(customHrsInput);if(v>0){setEmH(p=>({...p,[`${emDk}-emser`]:v}));setShowCustomHrs(false);setCustomHrsInput("");}}} style={{background:"#2563eb",color:"#fff",border:"none",borderRadius:8,padding:"6px 14px",fontSize:12,fontWeight:600,cursor:"pointer"}}>Set</button></div>}
 </div>);})()}
 {/* Entry list */}
 {dl.length===0?<div style={{textAlign:"center",padding:"60px 20px",color:"#a8a29e"}}><div style={{fontSize:40,marginBottom:12}}>🚚</div><p style={{fontSize:14,margin:0}}>No deliveries logged for this day</p></div>
@@ -3187,11 +3253,34 @@ return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius
 </div>
 <div style={{textAlign:"right",marginLeft:10,flexShrink:0}}>
 <div style={{fontSize:15,fontWeight:700,fontVariantNumeric:"tabular-nums"}}><InlineRate value={entry.baseRate} isHourly={entry.isHourly} onSave={r=>updateRate(entry.id,r)}/></div>
-{!entry.liftgateApplied&&!entry.isHourly&&<button onClick={()=>manualLiftgate(entry.id)} style={{background:"none",border:"none",color:"#ea580c",fontSize:9,cursor:"pointer",padding:"2px 0",opacity:0.7}}>+LG $75</button>}
-{entry.liftgateApplied&&<div style={{fontSize:8,color:"#16a34a",fontWeight:700}}>✓ LG</div>}
-<button onClick={()=>deleteDel(entry.id)} style={{background:"none",border:"none",color:"#dc2626",fontSize:10,cursor:"pointer",padding:"2px 0 0",opacity:0.7}}>Delete</button>
+{!entry.liftgateApplied&&!entry.isHourly&&<button onClick={()=>manualLiftgate(entry.id)} style={{background:"#fff7ed",border:"1px solid #fed7aa",color:"#ea580c",fontSize:10,cursor:"pointer",padding:"3px 8px",borderRadius:6,fontWeight:700,marginTop:4,display:"block"}}>+LG $75</button>}
+{entry.liftgateApplied&&<div style={{fontSize:9,color:"#16a34a",fontWeight:700,marginTop:4}}>✓ LG +$75</div>}
+{!entry.isHourly&&!entry.wasSplit&&<button onClick={()=>setSplitEntry({id:entry.id,totalWeight:entry.weight||10000,ratio:50})} style={{background:"#eff6ff",border:"1px solid #bfdbfe",color:"#2563eb",fontSize:9,cursor:"pointer",padding:"3px 8px",borderRadius:6,fontWeight:700,marginTop:4,display:"block"}}>✂ Split</button>}
+{entry.weight>0&&<div style={{fontSize:8,color:"#78716c",marginTop:2}}>{entry.weight.toLocaleString()} lbs</div>}
+{entry.wasSplit&&<div style={{fontSize:8,color:"#2563eb",fontWeight:700,marginTop:2}}>Load {entry.loadNum}</div>}
+<button onClick={()=>deleteDel(entry.id)} style={{background:"none",border:"none",color:"#dc2626",fontSize:9,cursor:"pointer",padding:"0",opacity:0.5,marginTop:10,display:"block"}}>Delete</button>
 </div>
 </div>
+{/* Split shipment panel */}
+{splitEntry?.id===entry.id&&<div style={{marginTop:8,background:"#eff6ff",border:"2px solid #2563eb",borderRadius:10,padding:14}}>
+<div style={{fontSize:13,fontWeight:700,color:"#1e40af",marginBottom:10}}>✂ Split Shipment</div>
+<div style={{marginBottom:10}}>
+<label style={{fontSize:11,fontWeight:600,color:"#57534e",display:"block",marginBottom:4}}>Total Weight (lbs)</label>
+<input type="number" value={splitEntry.totalWeight} onChange={e=>setSplitEntry(p=>({...p,totalWeight:parseInt(e.target.value)||0}))} style={{width:"100%",border:"1px solid #bfdbfe",borderRadius:8,padding:"8px 12px",fontSize:14,fontWeight:700,outline:"none"}}/>
+</div>
+<div style={{marginBottom:8}}>
+<div style={{display:"flex",justifyContent:"space-between",fontSize:11,fontWeight:600,color:"#57534e",marginBottom:4}}>
+<span>Truck 1: {Math.round(splitEntry.totalWeight*(splitEntry.ratio/100)).toLocaleString()} lbs</span>
+<span>Truck 2: {(splitEntry.totalWeight-Math.round(splitEntry.totalWeight*(splitEntry.ratio/100))).toLocaleString()} lbs</span>
+</div>
+<input type="range" min="10" max="90" value={splitEntry.ratio} onChange={e=>setSplitEntry(p=>({...p,ratio:parseInt(e.target.value)}))} style={{width:"100%",accentColor:"#2563eb"}}/>
+<div style={{textAlign:"center",fontSize:12,fontWeight:700,color:"#2563eb",marginTop:2}}>{splitEntry.ratio}% / {100-splitEntry.ratio}%</div>
+</div>
+<div style={{display:"flex",gap:8}}>
+<button onClick={()=>confirmSplit(entry.id,splitEntry.totalWeight,splitEntry.ratio)} style={{flex:1,background:"#2563eb",color:"#fff",border:"none",borderRadius:8,padding:"10px",fontSize:13,fontWeight:700,cursor:"pointer"}}>✂ Split into 2 Loads</button>
+<button onClick={()=>setSplitEntry(null)} style={{background:"#e7e5e4",border:"none",borderRadius:8,padding:"10px 14px",fontSize:12,cursor:"pointer",color:"#57534e"}}>Cancel</button>
+</div>
+</div>}
 {isImetco&&<div style={{marginTop:8,display:"flex",alignItems:"center",gap:6}}>
 <span style={{fontSize:11,fontWeight:700,color:"#ea580c",flexShrink:0}}>Ship Plan #:</span>
 <input value={entry.shipPlan||""} onChange={e=>setShipPlan(entry.id,e.target.value)} placeholder="Enter #" style={{flex:1,border:entry.shipPlan?"1px solid #bbf7d0":"1px solid #fca5a5",borderRadius:8,padding:"5px 10px",fontSize:13,fontWeight:700,outline:"none",background:entry.shipPlan?"#f0fdf4":"#fff7ed",textAlign:"center"}}/>
@@ -3248,7 +3337,7 @@ return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius
 {/* Week fuel */}
 {Object.keys(wkF).length>0&&<div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:14,padding:"14px 16px",marginBottom:16}}><div style={{fontSize:12,fontWeight:700,color:"#d97706",textTransform:"uppercase",marginBottom:8}}>Week Fuel Surcharges</div>{Object.entries(wkF).map(([cu,cf])=><div key={cu} style={{display:"flex",justifyContent:"space-between",padding:"4px 0"}}><span style={{fontSize:13}}>{cu} <span style={{fontSize:11,color:"#a8a29e"}}>{fmt(cf.base)} × {Math.round(cf.pct*100)}%</span></span><span style={{fontSize:14,fontWeight:700,color:"#d97706",fontVariantNumeric:"tabular-nums"}}>{fmt(cf.base*cf.pct)}</span></div>)}</div>}
 {/* Day-by-day breakdown */}
-{DAYS.map((day,i)=>{const{entries,calc}=wkD[i];const dayKey=`${wo}-${i}`;const{byDriver:shiftByDrv,totalMins:shiftMins}=getShiftSummary(dayKey);if(!entries.length&&!shiftMins)return null;return(<div key={day} style={{marginBottom:14}}>
+{DAYS.map((day,i)=>{const{entries,calc}=wkD[i];const dayKey=`${wo}-${i}`;const{byDriver:shiftByDrv,totalMins:shiftMins}=getShiftSummary(getFbKey(wo,i));if(!entries.length&&!shiftMins)return null;return(<div key={day} style={{marginBottom:14}}>
 <div style={{display:"flex",justifyContent:"space-between",padding:"8px 4px",borderBottom:"1px solid #e7e5e4",marginBottom:6}}><span style={{fontSize:14,fontWeight:700}}>{day} — {wd[i].date}</span><span style={{fontVariantNumeric:"tabular-nums",fontWeight:700,color:"#16a34a",fontSize:14}}>{fmt(calc.total)}</span></div>
 {shiftMins>0&&<div style={{display:"flex",alignItems:"center",gap:6,padding:"5px 8px 5px 14px",borderLeft:"3px solid #2563eb",marginBottom:3,background:"#eff6ff",borderRadius:"0 8px 8px 0",flexWrap:"wrap"}}>
 <span style={{fontSize:11,color:"#2563eb",fontWeight:700,flexShrink:0}}>⏱ Emser</span>
@@ -3266,7 +3355,7 @@ return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius
 </div>);})}
 </div>);})}
 {wkD.every(d=>!d.entries.length)&&<div style={{textAlign:"center",padding:"60px 20px",color:"#a8a29e"}}><p>No deliveries this week</p></div>}
-{(()=>{const wkShiftByDrv={};let wkShiftTotal=0;DAYS.forEach((_,i)=>{const{byDriver,totalMins}=getShiftSummary(`${wo}-${i}`);wkShiftTotal+=totalMins;Object.entries(byDriver).forEach(([did,mins])=>{wkShiftByDrv[did]=(wkShiftByDrv[did]||0)+mins;});});if(!wkShiftTotal)return null;const wkShiftHrs=Math.round(wkShiftTotal/15)*15/60;return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:14,padding:"16px 18px",marginBottom:16}}>
+{(()=>{const wkShiftByDrv={};let wkShiftTotal=0;DAYS.forEach((_,i)=>{const{byDriver,totalMins}=getShiftSummary(getFbKey(wo,i));wkShiftTotal+=totalMins;Object.entries(byDriver).forEach(([did,mins])=>{wkShiftByDrv[did]=(wkShiftByDrv[did]||0)+mins;});});if(!wkShiftTotal)return null;const wkShiftHrs=Math.round(wkShiftTotal/15)*15/60;return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:14,padding:"16px 18px",marginBottom:16}}>
 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
 <span style={{fontSize:14,fontWeight:700,color:"#2563eb"}}>⏱ Week Emser Hours</span>
 <span style={{fontSize:18,fontWeight:700,fontVariantNumeric:"tabular-nums",color:"#1d4ed8"}}>{fmt(102.50*wkShiftHrs)}</span>
@@ -3303,8 +3392,8 @@ return(<div>
 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
 <span style={{fontSize:15,fontWeight:700}}>{wd[sd].name} — {wd[sd].date}</span>
 <div style={{textAlign:"right"}}>
-<div style={{fontSize:22,fontWeight:800,color:BRAND.main,fontVariantNumeric:"tabular-nums"}}>{totalMins>0?formatMins(totalMins):(emH[`${dk}-emser`]||4)+"h"}</div>
-<div style={{fontSize:12,color:"#78716c"}}>{totalMins>0?fmt(102.50*totalHrs):fmt(102.50*(emH[`${dk}-emser`]||4))}</div>
+<div style={{fontSize:22,fontWeight:800,color:BRAND.main,fontVariantNumeric:"tabular-nums"}}>{totalMins>0?formatMins(totalMins):(emH[`${emDk}-emser`]||4)+"h"}</div>
+<div style={{fontSize:12,color:"#78716c"}}>{totalMins>0?fmt(102.50*totalHrs):fmt(102.50*(emH[`${emDk}-emser`]||4))}</div>
 </div>
 </div>
 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
@@ -3600,9 +3689,9 @@ else{showToast("Pick a weekday (Mon-Fri)");}
 <button onClick={()=>{setView("add");setSelCust(null);setQuoteMode(null);}} style={{background:"#16a34a",border:"none",borderRadius:6,padding:"5px 14px",cursor:"pointer",fontSize:11,fontWeight:600,color:"#fff"}}>+ Add</button>
 </div>
 
-{!editingNote?<div onClick={()=>{setEditingNote(true);setNoteText(dispNotes[dk]||"");}} style={{background:dispNotes[dk]?"#faf5ff":"#fafaf9",border:dispNotes[dk]?"1px solid #d8b4fe":"1px dashed #d6d3d1",borderRadius:10,padding:"8px 12px",marginBottom:12,cursor:"pointer",minHeight:32,display:"flex",alignItems:"flex-start",gap:8}}>
+{!editingNote?<div onClick={()=>{setEditingNote(true);setNoteText(dispNotes[emDk]||"");}} style={{background:dispNotes[emDk]?"#faf5ff":"#fafaf9",border:dispNotes[emDk]?"1px solid #d8b4fe":"1px dashed #d6d3d1",borderRadius:10,padding:"8px 12px",marginBottom:12,cursor:"pointer",minHeight:32,display:"flex",alignItems:"flex-start",gap:8}}>
 <span style={{fontSize:13,flexShrink:0}}>{"📝"}</span>
-{dispNotes[dk]?<div style={{flex:1}}><div style={{fontSize:9,fontWeight:700,color:"#7c3aed",textTransform:"uppercase"}}>Notes</div><div style={{fontSize:12,color:"#57534e",whiteSpace:"pre-wrap",marginTop:2}}>{dispNotes[dk]}</div></div>
+{dispNotes[emDk]?<div style={{flex:1}}><div style={{fontSize:9,fontWeight:700,color:"#7c3aed",textTransform:"uppercase"}}>Notes</div><div style={{fontSize:12,color:"#57534e",whiteSpace:"pre-wrap",marginTop:2}}>{dispNotes[emDk]}</div></div>
 :<div style={{fontSize:11,color:"#a8a29e",paddingTop:2}}>Click to add dispatcher notes</div>}
 </div>
 :<div style={{background:"#fff",border:"2px solid #7c3aed",borderRadius:10,padding:"10px 12px",marginBottom:12}}>
@@ -3610,7 +3699,7 @@ else{showToast("Pick a weekday (Mon-Fri)");}
 <textarea value={noteText} onChange={e=>setNoteText(e.target.value)} autoFocus placeholder="Route changes, special instructions…" rows={2}
 style={{width:"100%",border:"1px solid #d8b4fe",borderRadius:8,padding:"8px 10px",fontSize:12,outline:"none",resize:"vertical",fontFamily:"inherit",background:"#faf5ff"}}/>
 <div style={{display:"flex",gap:6,marginTop:6,justifyContent:"flex-end"}}>
-{dispNotes[dk]&&<button onClick={()=>{setDispNotes(p=>{const n={...p};delete n[dk];return n;});setEditingNote(false);setNoteText("");}} style={{background:"#fef2f2",border:"none",borderRadius:6,padding:"4px 8px",cursor:"pointer",fontSize:10,color:"#dc2626",fontWeight:600}}>Clear</button>}
+{dispNotes[emDk]&&<button onClick={()=>{setDispNotes(p=>{const n={...p};delete n[emDk];return n;});setEditingNote(false);setNoteText("");}} style={{background:"#fef2f2",border:"none",borderRadius:6,padding:"4px 8px",cursor:"pointer",fontSize:10,color:"#dc2626",fontWeight:600}}>Clear</button>}
 <button onClick={()=>setEditingNote(false)} style={{background:"#e7e5e4",border:"none",borderRadius:6,padding:"4px 8px",cursor:"pointer",fontSize:10,fontWeight:600}}>Cancel</button>
 <button onClick={()=>{setDispNotes(p=>({...p,[dk]:noteText.trim()}));setEditingNote(false);showToast("Notes saved");}} style={{background:"#7c3aed",color:"#fff",border:"none",borderRadius:6,padding:"4px 12px",cursor:"pointer",fontSize:10,fontWeight:600}}>Save</button>
 </div>
@@ -3695,8 +3784,30 @@ style={{background:isDrgOver?"#dcfce7":isDrgSrc?"#fef9c3":done?"#f0fdf4":onSite?
 <select value={entry.driverId} onChange={e=>{e.stopPropagation();reassign(entry.id,Number(e.target.value));}} style={{background:"#f5f5f4",border:"1px solid #e7e5e4",borderRadius:5,padding:"2px 4px",fontSize:9,color:"#57534e",cursor:"pointer",maxWidth:70}}><option value={0}>Assign</option>{drivers.map(dd=><option key={dd.id} value={dd.id}>{dd.name}</option>)}</select>
 <button onClick={()=>moveInDriver(drv.id,eIdx,-1)} style={{background:"#f5f5f4",border:"1px solid #e7e5e4",borderRadius:4,padding:"1px 5px",cursor:"pointer",fontSize:9,color:"#78716c"}} title="Move up">▲</button>
 <button onClick={()=>moveInDriver(drv.id,eIdx,1)} style={{background:"#f5f5f4",border:"1px solid #e7e5e4",borderRadius:4,padding:"1px 5px",cursor:"pointer",fontSize:9,color:"#78716c"}} title="Move down">▼</button>
+{!isPU&&!entry.isHourly&&!entry.liftgateApplied&&<button onClick={()=>manualLiftgate(entry.id)} style={{background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:4,padding:"1px 6px",cursor:"pointer",fontSize:9,color:"#ea580c",fontWeight:700}}>+LG</button>}
+{entry.liftgateApplied&&<span style={{fontSize:8,color:"#16a34a",fontWeight:700,padding:"2px 4px"}}>✓LG</span>}
+{!isPU&&!entry.isHourly&&!entry.wasSplit&&<button onClick={()=>setSplitEntry({id:entry.id,totalWeight:entry.weight||10000,ratio:50})} style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:4,padding:"1px 6px",cursor:"pointer",fontSize:9,color:"#2563eb",fontWeight:700}}>✂Split</button>}
+{entry.wasSplit&&<span style={{fontSize:8,color:"#2563eb",fontWeight:700,padding:"2px 4px"}}>L{entry.loadNum}</span>}
 <button onClick={()=>deleteDel(entry.id)} style={{background:"none",border:"none",color:"#dc2626",fontSize:9,cursor:"pointer",padding:"1px 4px"}}>✕</button>
 </div>
+{/* Inline split panel */}
+{splitEntry?.id===entry.id&&<div style={{marginTop:6,background:"#eff6ff",border:"2px solid #2563eb",borderRadius:8,padding:10}}>
+<div style={{fontSize:11,fontWeight:700,color:"#1e40af",marginBottom:8}}>✂ Split Shipment</div>
+<div style={{marginBottom:8}}>
+<label style={{fontSize:10,fontWeight:600,color:"#57534e",display:"block",marginBottom:3}}>Total Weight (lbs)</label>
+<input type="number" value={splitEntry.totalWeight} onChange={e=>setSplitEntry(p=>({...p,totalWeight:parseInt(e.target.value)||0}))} style={{width:"100%",border:"1px solid #bfdbfe",borderRadius:6,padding:"6px 10px",fontSize:13,fontWeight:700,outline:"none"}}/>
+</div>
+<div style={{display:"flex",justifyContent:"space-between",fontSize:10,fontWeight:600,color:"#57534e",marginBottom:3}}>
+<span>Truck 1: {Math.round(splitEntry.totalWeight*(splitEntry.ratio/100)).toLocaleString()} lbs</span>
+<span>Truck 2: {(splitEntry.totalWeight-Math.round(splitEntry.totalWeight*(splitEntry.ratio/100))).toLocaleString()} lbs</span>
+</div>
+<input type="range" min="10" max="90" value={splitEntry.ratio} onChange={e=>setSplitEntry(p=>({...p,ratio:parseInt(e.target.value)}))} style={{width:"100%",accentColor:"#2563eb"}}/>
+<div style={{textAlign:"center",fontSize:11,fontWeight:700,color:"#2563eb",marginTop:2,marginBottom:8}}>{splitEntry.ratio}% / {100-splitEntry.ratio}%</div>
+<div style={{display:"flex",gap:6}}>
+<button onClick={()=>confirmSplit(entry.id,splitEntry.totalWeight,splitEntry.ratio)} style={{flex:1,background:"#2563eb",color:"#fff",border:"none",borderRadius:6,padding:"8px",fontSize:12,fontWeight:700,cursor:"pointer"}}>✂ Split</button>
+<button onClick={()=>setSplitEntry(null)} style={{background:"#e7e5e4",border:"none",borderRadius:6,padding:"8px 12px",fontSize:11,cursor:"pointer",color:"#57534e"}}>Cancel</button>
+</div>
+</div>}
 </div>
 <button onClick={()=>setInsertPickupFor({driverId:drv.id,afterIdx:eIdx})} style={{display:"block",width:"100%",background:"none",border:"none",borderRadius:0,padding:"2px 0",cursor:"pointer",fontSize:8,color:"#bfdbfe",textAlign:"center",opacity:0.6}}>+ pickup</button>
 </div>);})}
@@ -3829,7 +3940,7 @@ onAssignStop={mapActiveDrv?(stopId,drvId)=>{assignInOrder(stopId,mapActiveDrv);}
 </div>
 </div>
 
-{dl.some(e=>e.isHourly)&&(()=>{const {byDriver,totalMins}=getShiftSummary(dk);const hoursUsed=totalMins>0?Math.round(totalMins/15)*15/60:(emH[`${dk}-emser`]||4);return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:10,padding:"10px 14px",marginBottom:12}}>
+{dl.some(e=>e.isHourly)&&(()=>{const {byDriver,totalMins}=getShiftSummary(emDk);const hoursUsed=totalMins>0?Math.round(totalMins/15)*15/60:(emH[`${emDk}-emser`]||4);return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:10,padding:"10px 14px",marginBottom:12}}>
 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
 <span style={{fontSize:12,color:"#2563eb",fontWeight:600}}>Emser Hours</span>
 <span style={{fontSize:14,fontWeight:700,fontVariantNumeric:"tabular-nums"}}>{fmt(102.50*hoursUsed)}</span>
@@ -3844,7 +3955,7 @@ onAssignStop={mapActiveDrv?(stopId,drvId)=>{assignInOrder(stopId,mapActiveDrv);}
 </div>
 </div>}
 <div style={{display:"flex",gap:3}}>
-{[4,5,6,7,8,9,10].map(h=><button key={h} onClick={()=>setEmH(p=>({...p,[`${dk}-emser`]:h}))} style={{width:28,height:26,borderRadius:6,border:"none",cursor:"pointer",fontSize:12,fontWeight:600,background:hoursUsed===h?"#2563eb":"#e7e5e4",color:hoursUsed===h?"#fff":"#78716c"}}>{h}</button>)}
+{[4,5,6,7,8,9,10].map(h=><button key={h} onClick={()=>setEmH(p=>({...p,[`${emDk}-emser`]:h}))} style={{width:28,height:26,borderRadius:6,border:"none",cursor:"pointer",fontSize:12,fontWeight:600,background:hoursUsed===h?"#2563eb":"#e7e5e4",color:hoursUsed===h?"#fff":"#78716c"}}>{h}</button>)}
 </div>
 </div>);})()}
 
@@ -4320,9 +4431,9 @@ style={{alignSelf:"flex-end",background:notifyCustomMsg.trim()?"#1c1917":"#e7e5e
 {view==="manifest"&&<div
 onDragEnd={()=>{setDragSrc(null);setDragOver(null);}}>
 <div style={{padding:"16px 4px 8px"}}><h2 style={{margin:0,fontSize:16,fontWeight:600}}>Load Manifests — {wd[sd].name}</h2><p style={{margin:"4px 0 0",fontSize:12,color:"#78716c"}}>Use ▲▼ to reorder. Tap driver initials to reassign.</p></div>
-{dispNotes[dk]&&<div onClick={()=>{setView("daily");setEditingNote(true);setNoteText(dispNotes[dk]);}} style={{background:"#faf5ff",border:"1px solid #d8b4fe",borderRadius:10,padding:"8px 12px",marginBottom:10,cursor:"pointer",display:"flex",alignItems:"flex-start",gap:6}}>
+{dispNotes[emDk]&&<div onClick={()=>{setView("daily");setEditingNote(true);setNoteText(dispNotes[emDk]);}} style={{background:"#faf5ff",border:"1px solid #d8b4fe",borderRadius:10,padding:"8px 12px",marginBottom:10,cursor:"pointer",display:"flex",alignItems:"flex-start",gap:6}}>
 <span style={{fontSize:12,flexShrink:0}}>📝</span>
-<div style={{flex:1}}><div style={{fontSize:10,fontWeight:700,color:"#7c3aed",textTransform:"uppercase"}}>Day Notes</div><div style={{fontSize:12,color:"#57534e",whiteSpace:"pre-wrap",lineHeight:1.3}}>{dispNotes[dk].length>120?dispNotes[dk].slice(0,120)+"…":dispNotes[dk]}</div></div>
+<div style={{flex:1}}><div style={{fontSize:10,fontWeight:700,color:"#7c3aed",textTransform:"uppercase"}}>Day Notes</div><div style={{fontSize:12,color:"#57534e",whiteSpace:"pre-wrap",lineHeight:1.3}}>{dispNotes[emDk].length>120?dispNotes[emDk].slice(0,120)+"…":dispNotes[emDk]}</div></div>
 </div>}
 {drivers.map((drv,di)=>{const de=drvEntries(drv.id);const isDrvDropTarget=dragSrc&&dragSrc.drvId!==drv.id&&dragOver?.drvId===drv.id;return(
 <div key={drv.id}
@@ -4394,6 +4505,7 @@ style={{display:"flex",alignItems:"center",gap:12,width:"100%",textAlign:"left",
 {dl.length===0?<div style={{textAlign:"center",padding:"48px 20px",color:"#a8a29e"}}><div style={{fontSize:48,marginBottom:12}}>🗺️</div><p style={{fontSize:16,fontWeight:600,margin:"0 0 8px"}}>No stops to route</p><p style={{fontSize:13,margin:0}}>Add deliveries first via the + Add tab,<br/>then come here to build routes on the map.</p></div>
 :<RouteBuilder entries={dl} drivers={drivers}
 onAssign={(eid,did)=>reassign(eid,did)}
+onAssignBulk={(eids,did)=>reassignBulk(eids,did)}
 onReorder={(drvId,orderedIds)=>reorderDriver(drvId,orderedIds)}
 onBack={()=>setView("manifest")}/>}
 </div>}
@@ -4401,9 +4513,9 @@ onBack={()=>setView("manifest")}/>}
 {/* ═══ DAILY ═══ */}
 {view==="daily"&&<div>
 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"16px 4px 8px"}}><h2 style={{margin:0,fontSize:16,fontWeight:600}}>{wd[sd].name} — {wd[sd].date}</h2><div style={{display:"flex",alignItems:"center",gap:8}}>{dl.length>0&&<button onClick={printDailyLog} style={{background:"#e7e5e4",border:"none",borderRadius:8,padding:"5px 10px",cursor:"pointer",fontSize:11,fontWeight:600,color:"#57534e"}}>Print</button>}<span style={{fontVariantNumeric:"tabular-nums",fontSize:15,fontWeight:700,color:"#16a34a"}}>{fmt(dc.total)}</span></div></div>
-{!editingNote?<div onClick={()=>{setEditingNote(true);setNoteText(dispNotes[dk]||"");}} style={{background:"#fff",border:dispNotes[dk]?"2px solid #7c3aed":"1px solid #e7e5e4",borderRadius:12,padding:"10px 14px",marginBottom:12,cursor:"pointer",minHeight:28,display:"flex",alignItems:"flex-start",gap:8}}>
+{!editingNote?<div onClick={()=>{setEditingNote(true);setNoteText(dispNotes[emDk]||"");}} style={{background:"#fff",border:dispNotes[emDk]?"2px solid #7c3aed":"1px solid #e7e5e4",borderRadius:12,padding:"10px 14px",marginBottom:12,cursor:"pointer",minHeight:28,display:"flex",alignItems:"flex-start",gap:8}}>
 <span style={{fontSize:14,flexShrink:0}}>{"📝"}</span>
-{dispNotes[dk]?<div style={{flex:1}}><div style={{fontSize:10,fontWeight:700,color:"#7c3aed",textTransform:"uppercase",marginBottom:2}}>Dispatcher Notes</div><div style={{fontSize:13,color:"#1c1917",whiteSpace:"pre-wrap",lineHeight:1.4}}>{dispNotes[dk]}</div></div>
+{dispNotes[emDk]?<div style={{flex:1}}><div style={{fontSize:10,fontWeight:700,color:"#7c3aed",textTransform:"uppercase",marginBottom:2}}>Dispatcher Notes</div><div style={{fontSize:13,color:"#1c1917",whiteSpace:"pre-wrap",lineHeight:1.4}}>{dispNotes[emDk]}</div></div>
 :<div style={{fontSize:12,color:"#a8a29e",paddingTop:2}}>Tap to add dispatcher notes for this day</div>}
 </div>
 :<div style={{background:"#fff",border:"2px solid #7c3aed",borderRadius:12,padding:"10px 14px",marginBottom:12}}>
@@ -4411,15 +4523,15 @@ onBack={()=>setView("manifest")}/>}
 <textarea value={noteText} onChange={e=>setNoteText(e.target.value)} autoFocus placeholder="Route changes, special instructions, notes for the day…" rows={3}
 style={{width:"100%",border:"1px solid #d8b4fe",borderRadius:8,padding:"10px 12px",fontSize:13,outline:"none",resize:"vertical",fontFamily:"inherit",background:"#faf5ff"}}/>
 <div style={{display:"flex",gap:6,marginTop:6,justifyContent:"flex-end"}}>
-{dispNotes[dk]&&<button onClick={()=>{setDispNotes(p=>{const n={...p};delete n[dk];return n;});setEditingNote(false);setNoteText("");}} style={{background:"#fef2f2",border:"none",borderRadius:6,padding:"5px 10px",cursor:"pointer",fontSize:11,color:"#dc2626",fontWeight:600}}>Clear</button>}
+{dispNotes[emDk]&&<button onClick={()=>{setDispNotes(p=>{const n={...p};delete n[emDk];return n;});setEditingNote(false);setNoteText("");}} style={{background:"#fef2f2",border:"none",borderRadius:6,padding:"5px 10px",cursor:"pointer",fontSize:11,color:"#dc2626",fontWeight:600}}>Clear</button>}
 <button onClick={()=>setEditingNote(false)} style={{background:"#e7e5e4",border:"none",borderRadius:6,padding:"5px 10px",cursor:"pointer",fontSize:11,fontWeight:600}}>Cancel</button>
 <button onClick={()=>{setDispNotes(p=>({...p,[dk]:noteText.trim()}));setEditingNote(false);showToast("Notes saved");}} style={{background:"#7c3aed",color:"#fff",border:"none",borderRadius:6,padding:"5px 14px",cursor:"pointer",fontSize:11,fontWeight:600}}>Save</button>
 </div>
 </div>}
 {dl.some(e=>e.isHourly)&&(()=>{
-const{byDriver,totalMins}=getShiftSummary(dk);
+const{byDriver,totalMins}=getShiftSummary(emDk);
 const hasShifts=totalMins>0;
-const hrs=emH[`${dk}-emser`]||4;
+const hrs=emH[`${emDk}-emser`]||4;
 return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:12,padding:"12px 16px",marginBottom:12}}>
 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
 <span style={{fontSize:13,color:"#2563eb",fontWeight:600}}>Emser Hours</span>
@@ -4440,10 +4552,10 @@ return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius
 </>):(<>
 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><span style={{fontSize:12,color:"#64748b"}}>{hrs}h × $102.50</span>
 <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
-{[4,5,6,7,8,9,10].map(h=><button key={h} onClick={()=>{setEmH(p=>({...p,[`${dk}-emser`]:h}));setShowCustomHrs(false);}} style={{width:30,height:30,borderRadius:8,border:"none",cursor:"pointer",fontSize:13,fontWeight:600,background:!showCustomHrs&&hrs===h?"#2563eb":"#e7e5e4",color:!showCustomHrs&&hrs===h?"#fff":"#78716c"}}>{h}</button>)}
+{[4,5,6,7,8,9,10].map(h=><button key={h} onClick={()=>{setEmH(p=>({...p,[`${emDk}-emser`]:h}));setShowCustomHrs(false);}} style={{width:30,height:30,borderRadius:8,border:"none",cursor:"pointer",fontSize:13,fontWeight:600,background:!showCustomHrs&&hrs===h?"#2563eb":"#e7e5e4",color:!showCustomHrs&&hrs===h?"#fff":"#78716c"}}>{h}</button>)}
 <button onClick={()=>setShowCustomHrs(!showCustomHrs)} style={{height:30,borderRadius:8,border:"none",cursor:"pointer",fontSize:11,fontWeight:600,padding:"0 8px",background:showCustomHrs?"#2563eb":"#dbeafe",color:showCustomHrs?"#fff":"#2563eb"}}>Other</button>
 </div></div>
-{showCustomHrs&&<div style={{display:"flex",gap:6,alignItems:"center",marginTop:8}}><input value={customHrsInput} onChange={e=>setCustomHrsInput(e.target.value)} placeholder="e.g. 4.5" type="number" step="0.25" min="1" style={{width:80,border:"1px solid #bfdbfe",borderRadius:8,padding:"6px 10px",fontSize:14,fontWeight:700,outline:"none",textAlign:"center",background:"#fff"}}/><span style={{fontSize:12,color:"#64748b"}}>hrs</span><button onClick={()=>{const v=parseFloat(customHrsInput);if(v>0){setEmH(p=>({...p,[`${dk}-emser`]:v}));setShowCustomHrs(false);setCustomHrsInput("");}}} style={{background:"#2563eb",color:"#fff",border:"none",borderRadius:8,padding:"6px 14px",fontSize:12,fontWeight:600,cursor:"pointer"}}>Set</button></div>}
+{showCustomHrs&&<div style={{display:"flex",gap:6,alignItems:"center",marginTop:8}}><input value={customHrsInput} onChange={e=>setCustomHrsInput(e.target.value)} placeholder="e.g. 4.5" type="number" step="0.25" min="1" style={{width:80,border:"1px solid #bfdbfe",borderRadius:8,padding:"6px 10px",fontSize:14,fontWeight:700,outline:"none",textAlign:"center",background:"#fff"}}/><span style={{fontSize:12,color:"#64748b"}}>hrs</span><button onClick={()=>{const v=parseFloat(customHrsInput);if(v>0){setEmH(p=>({...p,[`${emDk}-emser`]:v}));setShowCustomHrs(false);setCustomHrsInput("");}}} style={{background:"#2563eb",color:"#fff",border:"none",borderRadius:8,padding:"6px 14px",fontSize:12,fontWeight:600,cursor:"pointer"}}>Set</button></div>}
 <div style={{fontSize:11,color:"#64748b",marginTop:6}}>💡 Log shifts in History → ⏱ Emser Hours for auto-calculation</div>
 </>)}
 </div>);
@@ -4465,11 +4577,35 @@ return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius
 </div>
 <div style={{textAlign:"right",marginLeft:12}}>
 <div style={{fontSize:16,fontWeight:700,fontVariantNumeric:"tabular-nums"}}><InlineRate value={entry.baseRate} isHourly={entry.isHourly} onSave={r=>updateRate(entry.id,r)}/></div>
-{!entry.liftgateApplied&&!entry.isHourly&&<button onClick={()=>manualLiftgate(entry.id)} style={{background:"none",border:"none",color:"#ea580c",fontSize:10,cursor:"pointer",padding:"2px 0"}}>+LG $75</button>}
-{entry.liftgateApplied&&<div style={{fontSize:9,color:"#16a34a",fontWeight:700}}>✓ LG</div>}
-<button onClick={()=>deleteDel(entry.id)} style={{background:"none",border:"none",color:"#dc2626",fontSize:11,cursor:"pointer",padding:"2px 0 0",opacity:0.7}}>Delete</button>
+{!entry.liftgateApplied&&!entry.isHourly&&<button onClick={()=>manualLiftgate(entry.id)} style={{background:"#fff7ed",border:"1px solid #fed7aa",color:"#ea580c",fontSize:10,cursor:"pointer",padding:"3px 8px",borderRadius:6,fontWeight:700,marginTop:4,display:"block"}}>+LG $75</button>}
+{entry.liftgateApplied&&<div style={{fontSize:9,color:"#16a34a",fontWeight:700,marginTop:4}}>✓ LG +$75</div>}
+{!entry.isHourly&&!entry.wasSplit&&<button onClick={()=>setSplitEntry({id:entry.id,totalWeight:entry.weight||10000,ratio:50})} style={{background:"#eff6ff",border:"1px solid #bfdbfe",color:"#2563eb",fontSize:9,cursor:"pointer",padding:"3px 8px",borderRadius:6,fontWeight:700,marginTop:4,display:"block"}}>✂ Split</button>}
+{entry.weight>0&&<div style={{fontSize:8,color:"#78716c",marginTop:2}}>{entry.weight.toLocaleString()} lbs</div>}
+{entry.wasSplit&&<div style={{fontSize:8,color:"#2563eb",fontWeight:700,marginTop:2}}>Load {entry.loadNum}</div>}
+<button onClick={()=>deleteDel(entry.id)} style={{background:"none",border:"none",color:"#dc2626",fontSize:9,cursor:"pointer",padding:"0",opacity:0.5,marginTop:10,display:"block"}}>Delete</button>
 </div>
 </div>
+{splitEntry?.id===entry.id&&<div style={{marginTop:8,background:"#eff6ff",border:"2px solid #2563eb",borderRadius:10,padding:14}}>
+<div style={{fontSize:13,fontWeight:700,color:"#1e40af",marginBottom:10}}>✂ Split Shipment</div>
+<div style={{display:"flex",gap:16,alignItems:"flex-start"}}>
+<div style={{flex:1}}>
+<label style={{fontSize:11,fontWeight:600,color:"#57534e",display:"block",marginBottom:4}}>Total Weight (lbs)</label>
+<input type="number" value={splitEntry.totalWeight} onChange={e=>setSplitEntry(p=>({...p,totalWeight:parseInt(e.target.value)||0}))} style={{width:"100%",border:"1px solid #bfdbfe",borderRadius:8,padding:"8px 12px",fontSize:14,fontWeight:700,outline:"none"}}/>
+</div>
+<div style={{flex:2}}>
+<div style={{display:"flex",justifyContent:"space-between",fontSize:11,fontWeight:600,color:"#57534e",marginBottom:4}}>
+<span>Truck 1: {Math.round(splitEntry.totalWeight*(splitEntry.ratio/100)).toLocaleString()} lbs</span>
+<span>Truck 2: {(splitEntry.totalWeight-Math.round(splitEntry.totalWeight*(splitEntry.ratio/100))).toLocaleString()} lbs</span>
+</div>
+<input type="range" min="10" max="90" value={splitEntry.ratio} onChange={e=>setSplitEntry(p=>({...p,ratio:parseInt(e.target.value)}))} style={{width:"100%",accentColor:"#2563eb"}}/>
+<div style={{textAlign:"center",fontSize:12,fontWeight:700,color:"#2563eb",marginTop:2}}>{splitEntry.ratio}% / {100-splitEntry.ratio}%</div>
+</div>
+<div style={{display:"flex",gap:8,paddingTop:18}}>
+<button onClick={()=>confirmSplit(entry.id,splitEntry.totalWeight,splitEntry.ratio)} style={{background:"#2563eb",color:"#fff",border:"none",borderRadius:8,padding:"10px 16px",fontSize:12,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>✂ Split</button>
+<button onClick={()=>setSplitEntry(null)} style={{background:"#e7e5e4",border:"none",borderRadius:8,padding:"10px 12px",fontSize:12,cursor:"pointer",color:"#57534e"}}>Cancel</button>
+</div>
+</div>
+</div>}
 {isImetco&&<div style={{marginTop:8,display:"flex",alignItems:"center",gap:6}}>
 <span style={{fontSize:11,fontWeight:700,color:"#ea580c",flexShrink:0}}>Ship Plan #:</span>
 <input value={entry.shipPlan||""} onChange={e=>setShipPlan(entry.id,e.target.value)} placeholder="Enter #"
@@ -4514,7 +4650,7 @@ style={{flex:1,border:entry.shipPlan?"1px solid #bbf7d0":"1px solid #fca5a5",bor
 <div style={{display:"flex",alignItems:"center",gap:4}}><div style={{width:8,height:8,borderRadius:2,background:"#16a34a"}}/><span style={{fontSize:9,color:"#a8a29e"}}>This wk</span></div>
 </div>
 </div>
-{DAYS.map((day,i)=>{const{entries,calc}=wkD[i];const wk2=`${wo}-${i}`;const{byDriver:shiftByDrv,totalMins:shiftMins}=getShiftSummary(`${wo}-${i}`);if(!entries.length&&!shiftMins)return null;return(<div key={day} style={{marginBottom:16}}><div style={{display:"flex",justifyContent:"space-between",padding:"8px 4px",borderBottom:"1px solid #e7e5e4"}}><span style={{fontSize:14,fontWeight:700}}>{day} — {wd[i].date}</span><span style={{fontVariantNumeric:"tabular-nums",fontWeight:700,color:"#16a34a",fontSize:14}}>{fmt(calc.total)}</span></div>
+{DAYS.map((day,i)=>{const{entries,calc}=wkD[i];const wk2=`${wo}-${i}`;const{byDriver:shiftByDrv,totalMins:shiftMins}=getShiftSummary(getFbKey(wo,i));if(!entries.length&&!shiftMins)return null;return(<div key={day} style={{marginBottom:16}}><div style={{display:"flex",justifyContent:"space-between",padding:"8px 4px",borderBottom:"1px solid #e7e5e4"}}><span style={{fontSize:14,fontWeight:700}}>{day} — {wd[i].date}</span><span style={{fontVariantNumeric:"tabular-nums",fontWeight:700,color:"#16a34a",fontSize:14}}>{fmt(calc.total)}</span></div>
 {shiftMins>0&&<div style={{display:"flex",alignItems:"center",gap:5,padding:"5px 8px 5px 14px",borderLeft:"3px solid #2563eb",marginTop:4,background:"#eff6ff",borderRadius:"0 8px 8px 0",flexWrap:"wrap"}}>
 <span style={{fontSize:11,color:"#2563eb",fontWeight:700,flexShrink:0}}>⏱ Emser</span>
 {drivers.map((drv,di)=>{const mins=shiftByDrv[drv.id]||0;if(!mins)return null;const initials=drv.name.split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase();return(<span key={drv.id} style={{fontSize:11,background:DCOL[di],color:"#fff",padding:"1px 6px",borderRadius:4,fontWeight:600}}>{initials} {formatMins(mins)}</span>);})}
@@ -4528,7 +4664,7 @@ style={{width:80,border:"1px solid #e7e5e4",borderRadius:6,padding:"3px 6px",fon
 </div>}
 </div>);})}</div>);})}
 {wkD.every(d=>!d.entries.length)&&<div style={{textAlign:"center",padding:"48px 20px",color:"#a8a29e"}}><p>No deliveries this week</p></div>}
-{(()=>{const wkShiftByDrv={};let wkShiftTotal=0;DAYS.forEach((_,i)=>{const{byDriver,totalMins}=getShiftSummary(`${wo}-${i}`);wkShiftTotal+=totalMins;Object.entries(byDriver).forEach(([did,mins])=>{wkShiftByDrv[did]=(wkShiftByDrv[did]||0)+mins;});});if(!wkShiftTotal)return null;const wkShiftHrs=Math.round(wkShiftTotal/15)*15/60;return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:14,padding:"14px 16px",marginBottom:12}}>
+{(()=>{const wkShiftByDrv={};let wkShiftTotal=0;DAYS.forEach((_,i)=>{const{byDriver,totalMins}=getShiftSummary(getFbKey(wo,i));wkShiftTotal+=totalMins;Object.entries(byDriver).forEach(([did,mins])=>{wkShiftByDrv[did]=(wkShiftByDrv[did]||0)+mins;});});if(!wkShiftTotal)return null;const wkShiftHrs=Math.round(wkShiftTotal/15)*15/60;return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:14,padding:"14px 16px",marginBottom:12}}>
 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
 <span style={{fontSize:13,fontWeight:700,color:"#2563eb"}}>⏱ Week Emser Hours</span>
 <span style={{fontSize:16,fontWeight:700,fontVariantNumeric:"tabular-nums",color:"#1d4ed8"}}>{fmt(102.50*wkShiftHrs)}</span>
@@ -4561,8 +4697,8 @@ return(<div>
 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"0 4px",marginBottom:12}}>
 <span style={{fontSize:14,fontWeight:700}}>{wd[sd].name} — {wd[sd].date}</span>
 <div style={{textAlign:"right"}}>
-<div style={{fontSize:18,fontWeight:800,color:BRAND.main,fontVariantNumeric:"tabular-nums"}}>{totalMins>0?formatMins(totalMins):(emH[`${dk}-emser`]||4)+"h"}</div>
-<div style={{fontSize:10,color:"#78716c"}}>{totalMins>0?fmt(102.50*totalHrs):fmt(102.50*(emH[`${dk}-emser`]||4))}</div>
+<div style={{fontSize:18,fontWeight:800,color:BRAND.main,fontVariantNumeric:"tabular-nums"}}>{totalMins>0?formatMins(totalMins):(emH[`${emDk}-emser`]||4)+"h"}</div>
+<div style={{fontSize:10,color:"#78716c"}}>{totalMins>0?fmt(102.50*totalHrs):fmt(102.50*(emH[`${emDk}-emser`]||4))}</div>
 </div>
 </div>
 
@@ -4873,6 +5009,19 @@ else{showToast("Pick a weekday (Mon-Fri)");}
 {QUOTE_CUSTOMERS.map(qc=><button key={qc.name} onClick={()=>setQuoteMode(qc)} style={{background:"#78350f",border:"none",borderRadius:14,padding:"16px 14px",cursor:"pointer",textAlign:"left"}}><div style={{fontSize:13,fontWeight:700,color:"#fff"}}>{qc.name}</div><div style={{fontSize:10,color:"rgba(255,255,255,0.6)",marginTop:4}}>{qc.pickups.map(p=>p.label).join(" / ")}</div></button>)}
 </div>
 <button onClick={()=>setQuoteMode({name:"One-Off Delivery",pickups:[]})} style={{display:"block",width:"calc(100% - 8px)",margin:"0 4px",background:"#374151",border:"none",borderRadius:14,padding:"18px 14px",cursor:"pointer",textAlign:"left"}}><div style={{fontSize:14,fontWeight:700,color:"#fff"}}>New Customer / One-Off</div><div style={{fontSize:10,color:"rgba(255,255,255,0.6)",marginTop:4}}>Mileage calculator + add-ons</div></button>
+
+{/* One-off with customer association */}
+<div style={{margin:"12px 4px 0",background:"#f5f5f4",border:"1px solid #e7e5e4",borderRadius:14,padding:14}}>
+<div style={{fontSize:13,fontWeight:700,marginBottom:8}}>One-Off for a Customer</div>
+<div style={{fontSize:11,color:"#78716c",marginBottom:10}}>Add a one-time delivery tied to a contract customer</div>
+<select value={oneOffCust} onChange={e=>setOneOffCust(e.target.value)} style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:10,padding:"10px 14px",fontSize:14,outline:"none",marginBottom:8,background:"#fff"}}>
+<option value="">Select customer...</option>
+{Object.keys(CUSTOMERS).map(c=><option key={c} value={c}>{c}</option>)}
+</select>
+{oneOffCust&&<button onClick={()=>{setSelCust(oneOffCust);setOneOffCust("");setShowAddCustomDel(true);setCustomDelPermanent(false);}} style={{width:"100%",background:CC[oneOffCust]?.bg||"#374151",color:"#fff",border:"none",borderRadius:10,padding:"12px",fontSize:13,fontWeight:700,cursor:"pointer"}}>
++ Add One-Time Stop for {oneOffCust}
+</button>}
+</div>
 </div>}
 
 
@@ -4905,13 +5054,17 @@ else{showToast("Pick a weekday (Mon-Fri)");}
 </div>
 {CUSTOMERS[selCust].roundTrip&&<button onClick={()=>{const cd=CUSTOMERS[selCust];addDel(selCust,CUSTOMERS[selCust].roundTrip.label,CUSTOMERS[selCust].roundTrip.rate,preAssignDriver||0,{fuelPct:(cd.fuel_surcharge&&!cd.fuel_included)?cd.fuel_surcharge:0,priority:cd.priority});}} style={{display:"block",width:"100%",textAlign:"left",background:"#fef3c7",border:"2px solid #fbbf24",borderRadius:12,padding:"14px 16px",marginBottom:12,cursor:"pointer"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><div><div style={{fontSize:14,fontWeight:700,color:"#92400e"}}>🔄 {CUSTOMERS[selCust].roundTrip.label}</div></div><span style={{fontVariantNumeric:"tabular-nums",fontSize:17,fontWeight:700,color:"#ea580c"}}>{fmt(CUSTOMERS[selCust].roundTrip.rate)}</span></div></button>}
 {/* Merge hardcoded + custom stops for this customer */}
-{(()=>{const allDels=[...CUSTOMERS[selCust].deliveries,...(customStops[selCust]||[])];
+{(()=>{const hardcoded=CUSTOMERS[selCust].deliveries;const custom=customStops[selCust]||[];const allDels=[...hardcoded,...custom];
 return allDels.map((d,idx)=>{const isStr=typeof d==="string";const stop=isStr?d:d.s;const rate=isStr?0:d.r;const note=isStr?null:d.n;const addr=d.addr||getAddr(stop);const curInstr=customInstr[stop]!==undefined?customInstr[stop]:getDefaultInstr(stop);const checked=multiChecked.includes(idx);
-return(<DeliveryListItem key={idx} stop={stop} rate={rate} note={note} addr={addr} curInstr={curInstr} checked={checked} multiSelect={multiSelect} accent={CC[selCust].accent}
+const isCustom=idx>=hardcoded.length;
+return(<div key={idx} style={{position:"relative"}}>
+<DeliveryListItem stop={stop} rate={rate} note={note} addr={addr} curInstr={curInstr} checked={checked} multiSelect={multiSelect} accent={CC[selCust].accent}
 onCheck={()=>setMultiChecked(p=>p.includes(idx)?p.filter(x=>x!==idx):[...p,idx])}
 onAdd={(dueBy,weight)=>{const cd=CUSTOMERS[selCust];addDel(selCust,stop,rate||0,preAssignDriver||0,{isHourly:cd.rate_type==="hourly",fuelPct:(cd.fuel_surcharge&&!cd.fuel_included)?cd.fuel_surcharge:0,note:note||null,addr,priority:cd.priority,dueBy:dueBy||null,weight:weight||0});}}
 onSaveInstr={text=>setCustomInstr(p=>({...p,[stop]:text}))}
-/>);});
+/>
+{isCustom&&<button onClick={()=>{const ci=idx-hardcoded.length;setCustomStops(p=>({...p,[selCust]:(p[selCust]||[]).filter((_,i)=>i!==ci)}));showToast(stop+" removed from "+selCust);}} style={{position:"absolute",top:8,right:8,background:"#fef2f2",border:"1px solid #fecaca",color:"#dc2626",borderRadius:6,padding:"2px 8px",cursor:"pointer",fontSize:9,fontWeight:700,zIndex:2}}>✕ Remove</button>}
+</div>);});
 })()}
 {/* Add new delivery location for this customer */}
 {!showAddCustomDel?<button onClick={()=>{setShowAddCustomDel(true);setCustomDelName("");setCustomDelAddr("");setCustomDelRate("");setCustomDelNote("");}} style={{display:"block",width:"100%",marginTop:8,background:"#fafaf9",border:"2px dashed #d6d3d1",borderRadius:12,padding:"14px 16px",cursor:"pointer",textAlign:"center",color:"#78716c",fontSize:13,fontWeight:600}}>+ Add New Delivery Location</button>
@@ -4936,16 +5089,24 @@ style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:10,padding:"10px 14
 style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:10,padding:"10px 14px",fontSize:13,outline:"none"}}/>
 </div>
 </div>
+{/* Permanent vs One-Time toggle */}
+<div style={{display:"flex",gap:8,marginTop:4}}>
+<button onClick={()=>setCustomDelPermanent(true)} style={{flex:1,padding:"10px",borderRadius:10,border:customDelPermanent?"2px solid #16a34a":"1px solid #d6d3d1",background:customDelPermanent?"#f0fdf4":"#fff",cursor:"pointer",fontSize:12,fontWeight:600,color:customDelPermanent?"#16a34a":"#78716c"}}>
+✓ Permanent
+</button>
+<button onClick={()=>setCustomDelPermanent(false)} style={{flex:1,padding:"10px",borderRadius:10,border:!customDelPermanent?"2px solid #d97706":"1px solid #d6d3d1",background:!customDelPermanent?"#fffbeb":"#fff",cursor:"pointer",fontSize:12,fontWeight:600,color:!customDelPermanent?"#d97706":"#78716c"}}>
+One-Time Only
+</button>
+</div>
 <button onClick={()=>{
 if(!customDelName.trim())return;
 const cd=CUSTOMERS[selCust];
 const rate=parseFloat(customDelRate)||0;
-/* Save to persistent custom stops */
 const newStop={s:customDelName.trim(),r:rate,addr:customDelAddr.trim(),n:customDelNote.trim()||null};
-setCustomStops(p=>({...p,[selCust]:[...(p[selCust]||[]),newStop]}));
-/* Cache address for getAddr lookups */
+if(customDelPermanent){
+  setCustomStops(p=>({...p,[selCust]:[...(p[selCust]||[]),newStop]}));
+}
 if(customDelAddr.trim())_customAddrCache[customDelName.trim()]=customDelAddr.trim();
-/* Also add to today's manifest */
 addDel(selCust,customDelName.trim(),rate,preAssignDriver||0,{
 isHourly:cd.rate_type==="hourly",
 fuelPct:(cd.fuel_surcharge&&!cd.fuel_included)?cd.fuel_surcharge:0,
@@ -4953,8 +5114,8 @@ note:customDelNote.trim()||null,
 addr:customDelAddr.trim(),
 priority:cd.priority,
 });
-setShowAddCustomDel(false);setCustomDelName("");setCustomDelAddr("");setCustomDelRate("");setCustomDelNote("");
-showToast(customDelName.trim()+" saved to "+selCust);
+setShowAddCustomDel(false);setCustomDelName("");setCustomDelAddr("");setCustomDelRate("");setCustomDelNote("");setCustomDelPermanent(true);
+showToast(customDelName.trim()+(customDelPermanent?" saved to ":" added for ")+selCust);
 }} disabled={!customDelName.trim()}
 style={{background:customDelName.trim()?CC[selCust].accent:"#e7e5e4",color:customDelName.trim()?"#fff":"#a8a29e",border:"none",borderRadius:10,padding:"12px",fontSize:14,fontWeight:600,cursor:customDelName.trim()?"pointer":"default"}}>
 Add {customDelName.trim()||"Delivery"} to {selCust}
