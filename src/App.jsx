@@ -2643,22 +2643,24 @@ reassign(eid,0);
 showToast("Removed from route");
 return;
 }
-/* Use reassign for splitting logic + notifications, then reorder */
+/* Use reassign for splitting logic + notifications, then reorder + set loadNum */
 reassign(eid,did);
-/* Set loadNum + move to end of driver's stops */
 setTimeout(()=>{
 setLog(p=>{
-const all=[...(p[dk]||[])];
+let all=[...(p[dk]||[])];
 const ent=all.find(e=>e.id===eid);
 if(!ent||ent.driverId!==did)return p;
 if(loadNum)ent.loadNum=loadNum;
-const without=all.filter(e=>e.id!==eid);
-let insertIdx=without.length;
-for(let i=without.length-1;i>=0;i--){
-if(without[i].driverId===did){insertIdx=i+1;break;}
+/* Reorder: move to end of this driver's stops */
+all=all.filter(e=>e.id!==eid);
+let insertIdx=all.length;
+for(let i=all.length-1;i>=0;i--){
+if(all[i].driverId===did){insertIdx=i+1;break;}
 }
-without.splice(insertIdx,0,ent);
-return{...p,[dk]:without};
+all.splice(insertIdx,0,ent);
+/* Rebuild pickups so load-specific pickup cards are created */
+if(ent.stopType==="delivery")all=rebuildPickupsFor(all,ent.customer);
+return{...p,[dk]:all};
 });
 },50);
 showToast("Stop #"+(dl.filter(e=>e.driverId===did).length+1)+" added"+(loadNum>1?" (Load "+loadNum+")":""));
@@ -2716,7 +2718,7 @@ const setShipPlan=(eid,num)=>setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===eid
 const setEta=(eid,mins,dest)=>setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,eta:mins,etaDest:dest||null}:e)}));
 const setDueBy=(eid,time)=>setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,dueBy:time||null}:e)}));
 const setWeight=(eid,w)=>setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,weight:parseFloat(w)||0}:e)}));
-const setLoadNum=(eid,n)=>setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,loadNum:n}:e)}));
+const setLoadNum=(eid,n)=>setLog(p=>{let all=[...(p[dk]||[])].map(e=>e.id===eid?{...e,loadNum:n}:e);const entry=all.find(e=>e.id===eid);if(entry&&entry.stopType==="delivery")all=rebuildPickupsFor(all,entry.customer);return{...p,[dk]:all};});
 
 
 const TRUCK_LIMITS={default:10000,heavy:13500};
