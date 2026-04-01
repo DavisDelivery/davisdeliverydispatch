@@ -2695,7 +2695,7 @@ const confirmSplit=(entryId,totalWeight,ratio,truck1Weight)=>{
 const w1=truck1Weight!==undefined?truck1Weight:Math.round(totalWeight*(ratio/100));
 const w2=totalWeight-w1;
 setLog(p=>{
-  let all=[...(p[dk]||[])];
+  const all=[...(p[dk]||[])];
   const idx=all.findIndex(e=>e.id===entryId);
   if(idx<0)return p;
   const orig=all[idx];
@@ -2718,7 +2718,7 @@ const setShipPlan=(eid,num)=>setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===eid
 const setEta=(eid,mins,dest)=>setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,eta:mins,etaDest:dest||null}:e)}));
 const setDueBy=(eid,time)=>setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,dueBy:time||null}:e)}));
 const setWeight=(eid,w)=>setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,weight:parseFloat(w)||0}:e)}));
-const setLoadNum=(eid,n)=>setLog(p=>{let all=[...(p[dk]||[])].map(e=>e.id===eid?{...e,loadNum:n}:e);const entry=all.find(e=>e.id===eid);if(entry&&entry.stopType==="delivery")all=rebuildPickupsFor(all,entry.customer);return{...p,[dk]:all};});
+const setLoadNum=(eid,n)=>setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,loadNum:n}:e)}));
 
 
 const TRUCK_LIMITS={default:10000,heavy:13500};
@@ -4320,7 +4320,7 @@ style={{background:isDrgOver?"#dcfce7":isDrgSrc?"#fef9c3":done?"#f0fdf4":onSite?
 {entry.signature&&<div style={{fontSize:9,color:"#16a34a",marginTop:1}}>✍ {entry.signature}</div>}
 {entry.photos&&entry.photos.length>0&&<div style={{display:"flex",gap:3,marginTop:3}}>{entry.photos.map((p,pi)=><img key={pi} src={p} alt="" style={{width:24,height:24,objectFit:"cover",borderRadius:4,border:"1px solid #e7e5e4"}}/>)}</div>}
 <div style={_s.flexG3Mt4}>
-<select value={entry.driverId} onChange={e=>{e.stopPropagation();const v=e.target.value;if(v.includes("-")){const[did,ln]=v.split("-").map(Number);reassign(entry.id,did);if(ln>0)setLoadNum(entry.id,ln);}else{reassign(entry.id,Number(v));}}} style={{background:"#f5f5f4",border:"1px solid #e7e5e4",borderRadius:5,padding:"2px 4px",fontSize:9,color:"#57534e",cursor:"pointer",maxWidth:70}}><option value={0}>Assign</option>{drivers.map(dd=>{const nl=getDriverLoadOptions(dd.id);return nl>1?[<option key={dd.id} value={dd.id}>{dd.name}</option>,...Array.from({length:nl-1},(_,i)=>i+2).map(ln=><option key={dd.id+"-"+ln} value={dd.id+"-"+ln}>{dd.name.split(" ").map(w=>w[0]).join("")+" L"+ln}</option>)]:[<option key={dd.id} value={dd.id}>{dd.name}</option>];}).flat()}</select>
+<select value={entry.driverId} onChange={e=>{e.stopPropagation();const v=e.target.value;if(v.includes("-")){const p=v.split("-");reassign(entry.id,Number(p[0]));setLoadNum(entry.id,Number(p[1]));}else{reassign(entry.id,Number(v));}}} style={{background:"#f5f5f4",border:"1px solid #e7e5e4",borderRadius:5,padding:"2px 4px",fontSize:9,color:"#57534e",cursor:"pointer",maxWidth:70}}><option value={0}>Assign</option>{drivers.flatMap(dd=>{const nl=getDriverLoadOptions(dd.id);const opts=[<option key={dd.id} value={dd.id}>{dd.name}</option>];for(let ln=2;ln<=nl;ln++)opts.push(<option key={dd.id+"-"+ln} value={dd.id+"-"+ln}>{dd.name.split(" ").map(w=>w[0]).join("")+" L"+ln}</option>);return opts;})}</select>
 <button onClick={()=>moveInDriver(drv.id,eIdx,-1)} style={{background:"#f5f5f4",border:"1px solid #e7e5e4",borderRadius:4,padding:"1px 5px",cursor:"pointer",fontSize:9,color:"#78716c"}} title="Move up">▲</button>
 <button onClick={()=>moveInDriver(drv.id,eIdx,1)} style={{background:"#f5f5f4",border:"1px solid #e7e5e4",borderRadius:4,padding:"1px 5px",cursor:"pointer",fontSize:9,color:"#78716c"}} title="Move down">▼</button>
 <input type="number" inputMode="numeric" value={entry.weight||""} onChange={e=>setWeight(entry.id,e.target.value)} onClick={e=>e.stopPropagation()} placeholder="lbs" style={{width:52,border:"1px solid #d6d3d1",borderRadius:4,padding:"2px 4px",fontSize:9,fontWeight:700,outline:"none",textAlign:"center",background:entry.weight?"#f0f5fa":"#fff"}}/>
@@ -4383,8 +4383,8 @@ style={{background:isDrgOver?"#dcfce7":isDrgSrc?"#fef9c3":done?"#f0fdf4":onSite?
 {entry.note&&<div style={{fontSize:9,color:"#a8a29e",marginTop:1}}>{entry.note}</div>}
 {entry.weight>0&&<div style={{fontSize:9,color:BRAND.main,fontWeight:700,marginTop:1}}>{entry.weight.toLocaleString()} lbs</div>}
 <div style={{display:"flex",gap:3,marginTop:4,alignItems:"center"}}>
-<select value={entry.driverId} onChange={e=>{const v=e.target.value;if(v.includes("-")){const[did,ln]=v.split("-").map(Number);reassign(entry.id,did);if(ln>0)setLoadNum(entry.id,ln);}else{reassign(entry.id,Number(v));}}} style={{background:"#f5f5f4",border:"1px solid #e7e5e4",borderRadius:5,padding:"3px 6px",fontSize:10,color:"#57534e",cursor:"pointer"}}>
-<option value={0}>Assign...</option>{drivers.map(dd=>{const nl=getDriverLoadOptions(dd.id);return nl>1?[<option key={dd.id} value={dd.id}>{dd.name}</option>,...Array.from({length:nl-1},(_,i)=>i+2).map(ln=><option key={dd.id+"-"+ln} value={dd.id+"-"+ln}>{dd.name.split(" ").map(w=>w[0]).join("")+" L"+ln}</option>)]:[<option key={dd.id} value={dd.id}>{dd.name}</option>];}).flat()}
+<select value={entry.driverId} onChange={e=>{const v=e.target.value;if(v.includes("-")){const p=v.split("-");reassign(entry.id,Number(p[0]));setLoadNum(entry.id,Number(p[1]));}else{reassign(entry.id,Number(v));}}} style={{background:"#f5f5f4",border:"1px solid #e7e5e4",borderRadius:5,padding:"3px 6px",fontSize:10,color:"#57534e",cursor:"pointer"}}>
+<option value={0}>Assign...</option>{drivers.flatMap(dd=>{const nl=getDriverLoadOptions(dd.id);const opts=[<option key={dd.id} value={dd.id}>{dd.name}</option>];for(let ln=2;ln<=nl;ln++)opts.push(<option key={dd.id+"-"+ln} value={dd.id+"-"+ln}>{dd.name.split(" ").map(w=>w[0]).join("")+" L"+ln}</option>);return opts;})}
 </select>
 <input type="number" inputMode="numeric" value={entry.weight||""} onChange={e=>setWeight(entry.id,e.target.value)} onClick={e=>e.stopPropagation()} placeholder="lbs" style={{width:52,border:"1px solid #d6d3d1",borderRadius:4,padding:"3px 4px",fontSize:9,fontWeight:700,outline:"none",textAlign:"center",background:entry.weight?"#f0f5fa":"#fff"}}/>
 <button onClick={()=>deleteDel(entry.id)} style={{marginLeft:"auto",background:"none",border:"none",color:"#dc2626",fontSize:9,cursor:"pointer",padding:"2px 4px"}}>✕</button>
