@@ -2695,7 +2695,7 @@ const confirmSplit=(entryId,totalWeight,ratio,truck1Weight)=>{
 const w1=truck1Weight!==undefined?truck1Weight:Math.round(totalWeight*(ratio/100));
 const w2=totalWeight-w1;
 setLog(p=>{
-  const all=[...(p[dk]||[])];
+  let all=[...(p[dk]||[])];
   const idx=all.findIndex(e=>e.id===entryId);
   if(idx<0)return p;
   const orig=all[idx];
