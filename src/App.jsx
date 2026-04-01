@@ -1,17 +1,64 @@
+
+const _s={
+label:{fontSize:11,fontWeight:600,color:"#57534e",display:"block",marginBottom:4},
+labelSm:{fontSize:9,fontWeight:600,color:"#57534e",display:"block",marginBottom:2},
+labelBlue:{fontSize:9,fontWeight:600,color:"#2563eb",display:"block",marginBottom:2},
+labelGray:{fontSize:9,fontWeight:600,color:"#78716c",display:"block",marginBottom:2},
+flexBtwMb16:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16},
+flexBtwMb8:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8},
+flexBtwMb10:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10},
+flexBtw:{display:"flex",justifyContent:"space-between",alignItems:"center"},
+flexC8:{display:"flex",alignItems:"center",gap:8},
+tagGreen:{fontSize:8,background:"#16a34a",color:"#fff",padding:"1px 4px",borderRadius:2,fontWeight:700},
+tagAmber:{fontSize:8,background:"#f59e0b",color:"#fff",padding:"1px 4px",borderRadius:2,fontWeight:700},
+tagBlue:{fontSize:8,background:"#2563eb",color:"#fff",padding:"1px 4px",borderRadius:2,fontWeight:700},
+tag9Amber:{fontSize:9,background:"#f59e0b",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700},
+tag9Green:{fontSize:9,background:"#16a34a",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700},
+sub:{fontSize:10,color:"#78716c"},
+sub11:{fontSize:11,color:"#78716c"},
+bold14:{fontSize:14,fontWeight:700},
+loadTitle:{fontSize:12,fontWeight:700,color:"#d97706",textTransform:"uppercase",marginBottom:8},
+loadWeight:{fontSize:14,fontWeight:700,color:"#d97706",fontVariantNumeric:"tabular-nums"},
+splitInput:{width:"100%",border:"2px solid #2563eb",borderRadius:6,padding:"5px 8px",fontSize:13,fontWeight:700,outline:"none",textAlign:"center",background:"#eff6ff"},
+splitTotal:{width:"100%",border:"1px solid #bfdbfe",borderRadius:6,padding:"5px 8px",fontSize:13,fontWeight:700,outline:"none",textAlign:"center"},
+splitT2:{border:"1px solid #e7e5e4",borderRadius:6,padding:"5px 8px",fontSize:13,fontWeight:700,textAlign:"center",background:"#f5f5f4",color:"#57534e"},
+f1:{flex:1},
+f1m:{flex:1,minWidth:0},
+iconBtn:{background:"none",border:"none",fontSize:20,cursor:"pointer",color:"#78716c"},
+delBtn:{marginLeft:"auto",background:"none",border:"none",color:"#dc2626",fontSize:10,cursor:"pointer",padding:"0 2px"},
+flexG6Mb6:{display:"flex",gap:6,marginBottom:6,alignItems:"center"},
+flexG6:{display:"flex",gap:6},
+flexG4W:{display:"flex",gap:4,flexWrap:"wrap",alignItems:"center"},
+flexG4Mt4:{display:"flex",gap:4,marginTop:4,flexWrap:"wrap",alignItems:"center"},
+flexG3Mt4:{display:"flex",gap:3,marginTop:4,flexWrap:"wrap",alignItems:"center"},
+flexC4Mb2W:{display:"flex",alignItems:"center",gap:4,marginBottom:2,flexWrap:"wrap"},
+slider:{width:"100%",accentColor:"#2563eb",marginBottom:6},
+splitTitle:{fontSize:12,fontWeight:700,color:"#1e40af",marginBottom:8},
+loadBadge:{fontSize:8,color:"#2563eb",fontWeight:700,padding:"2px 4px"},
+menuItem:{display:"flex",alignItems:"center",gap:10,width:"100%",textAlign:"left",padding:"12px 14px",borderRadius:12,cursor:"pointer"},
+menuBtn:{display:"flex",alignItems:"center",gap:8,width:"100%",textAlign:"left",background:"none",border:"none",padding:"10px",cursor:"pointer",borderRadius:8,fontSize:12,fontWeight:600,color:"#1c1917"},
+flexC10:{display:"flex",alignItems:"center",gap:10},
+flexC4:{display:"flex",alignItems:"center",gap:4},
+flexBtwP4:{display:"flex",justifyContent:"space-between",padding:"4px 0"},
+flexBtwMb12:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12},
+emptyState:{textAlign:"center",padding:"48px 20px",color:"#a8a29e"},
+emptyState2:{textAlign:"center",padding:"60px 20px",color:"#a8a29e"},
+truncate:{fontSize:12,color:"#57534e",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"},
+input12:{flex:1,border:"1px solid #d6d3d1",borderRadius:8,padding:"7px 10px",fontSize:12,outline:"none"},
+inputFull12:{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"7px 10px",fontSize:12,outline:"none"},
+inputFull13:{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px",fontSize:13,outline:"none"},
+splitBtn:{flex:1,background:"#2563eb",color:"#fff",border:"none",borderRadius:6,padding:"8px",fontSize:12,fontWeight:700,cursor:"pointer"},
+cancelBtn:{background:"#e7e5e4",border:"none",borderRadius:6,padding:"8px 12px",fontSize:11,cursor:"pointer",color:"#57534e"},
+cancelBtn2:{background:"#e7e5e4",border:"none",borderRadius:8,padding:"6px 12px",cursor:"pointer",fontSize:12,fontWeight:600},
+greenBtn:{background:"#16a34a",color:"#fff",border:"none",borderRadius:8,padding:"6px 12px",cursor:"pointer",fontSize:12,fontWeight:700},
+inputMb4:{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"7px 10px",fontSize:12,outline:"none",marginBottom:4},
+};
 import { useState, useCallback, useEffect, useRef } from "react";
 
-/* ══════════════════════════════════════════════════════════════
-   FIREBASE — glorybounddispatch project
-   Loaded via CDN so no npm install needed on Netlify.
-   All data syncs in real-time across every device.
-══════════════════════════════════════════════════════════════ */
+
 const _fbCfg={apiKey:"AIzaSyDY2OceDzBWMHPR3C3O1oxktrCIy3mKMqU",authDomain:"glorybounddispatch.firebaseapp.com",projectId:"glorybounddispatch",storageBucket:"glorybounddispatch.firebasestorage.app",messagingSenderId:"114912216623",appId:"1:114912216623:web:a835cd6054d3e1707668da"};
 
-/* ══════════════════════════════════════════════════════════════
-   FIREBASE v2 — ALL operations inside the module script.
-   Functions on window._fbOps are closures with direct SDK access.
-   No cross-module function passing. No broken bindings.
-══════════════════════════════════════════════════════════════ */
+
 (()=>{
   if(window._fbLoaded)return;
   const s=document.createElement("script");
@@ -84,8 +131,8 @@ const _whenFB=(cb)=>{
   setTimeout(()=>clearInterval(id),15000);
 };
 
-/* ── Manifest ── */
-/* ── AUTO-BACKUP SYSTEM ── */
+
+
 const AUTO_BACKUP_KEY="dd_auto_backups";
 const MAX_AUTO_BACKUPS=14; /* Keep last 14 snapshots */
 const autoBackup=(label,data)=>{
@@ -109,7 +156,7 @@ const saveManifestDay=async(wo,sd,entries)=>{
     console.error("[SAVE] ABORT: window._fbOps not available");
     throw new Error("Firebase not loaded — _fbOps missing");
   }
-  /* ── WRITE PROTECTION: Never overwrite existing data with empty array ── */
+  
   if((!entries||entries.length===0)){
     /* Check if Firebase currently has data for this key */
     try{
@@ -162,7 +209,7 @@ const subscribeManifests=(wo,cb)=>{
   return()=>{cancelled=true;unsubs.forEach(u=>u());};
 };
 
-/* ── Drivers ── */
+
 const saveDrivers=async(drivers)=>{
   if(!window._fbOps)return;
   await window._fbOps.write("config/drivers",{drivers,updatedAt:Date.now()});
@@ -175,7 +222,7 @@ const subscribeDrivers=(cb)=>{
   return()=>{if(unsub)unsub();};
 };
 
-/* ── Emser hours ── */
+
 const saveEmserHours=async(key,hours)=>{
   if(!window._fbOps)return;
   await window._fbOps.write("emserHours/"+key,{hours,updatedAt:Date.now()});
@@ -188,7 +235,7 @@ const subscribeEmserHours=(cb)=>{
   return()=>{if(unsub)unsub();};
 };
 
-/* ── Emser shifts ── */
+
 const saveEmserShifts=async(dayKey,shifts)=>{
   if(!window._fbOps)return;
   await window._fbOps.write("emserShifts/"+dayKey,{shifts,updatedAt:Date.now()});
@@ -201,7 +248,7 @@ const subscribeEmserShifts=(cb)=>{
   return()=>{if(unsub)unsub();};
 };
 
-/* ── Dispatch notes ── */
+
 const saveDispatchNote=async(dayKey,note)=>{
   if(!window._fbOps)return;
   await window._fbOps.write("dispatchNotes/"+dayKey,{note,updatedAt:Date.now()});
@@ -214,7 +261,7 @@ const subscribeDispatchNotes=(cb)=>{
   return()=>{if(unsub)unsub();};
 };
 
-/* ── Notifications ── */
+
 const sendNotificationToDriver=async(driverId,msg,type)=>{
   if(!window._fbOps)return;
   await window._fbOps.add("notifications/"+String(driverId)+"/items",{msg,type,time:Date.now(),read:false});
@@ -229,7 +276,7 @@ const markNotificationRead=async(driverId,notifId)=>{
   await window._fbOps.update("notifications/"+String(driverId)+"/items/"+notifId,{read:true});
 };
 
-/* ── Quotes ── */
+
 const saveQuoteToFB=async(quote)=>{
   if(!window._fbOps)return;
   await window._fbOps.write("quotes/"+String(quote.id),{...quote,updatedAt:Date.now()});
@@ -246,7 +293,7 @@ const subscribeQuotes=(cb)=>{
   return()=>{if(unsub)unsub();};
 };
 
-/* ── Messages ── */
+
 const saveMessage=async(channelKey,msg)=>{
   if(!window._fbOps)throw new Error("Firebase not loaded");
 
@@ -265,7 +312,7 @@ const markMessageRead=async(channelKey,msgId)=>{
   await window._fbOps.update("messages/"+channelKey+"/items/"+msgId,{read:true});
 };
 
-/* ── Driver Live Location ── */
+
 const saveDriverLocation=async(driverId,lat,lng)=>{
   if(!window._fbOps)return;
   await window._fbOps.write("driverLocations/"+String(driverId),{lat,lng,updatedAt:Date.now()});
@@ -278,7 +325,7 @@ const subscribeDriverLocations=(cb)=>{
   return()=>{if(unsub)unsub();};
 };
 
-/* ── Invoices ── */
+
 const saveInvoice=async(invoice)=>{
   if(!window._fbOps)return;
   await window._fbOps.write("invoices/"+String(invoice.id),{...invoice,updatedAt:Date.now()});
@@ -291,7 +338,7 @@ const subscribeInvoices=(cb)=>{
   return()=>{if(unsub)unsub();};
 };
 
-/* ── Custom Delivery Stops ── */
+
 const saveCustomStops=async(data)=>{
   if(!window._fbOps)return;
   await window._fbOps.write("config/customStops",{data,updatedAt:Date.now()});
@@ -304,7 +351,7 @@ const subscribeCustomStops=(cb)=>{
   return()=>{if(unsub)unsub();};
 };
 
-/* ── Stop Overrides (permanent edits to built-in stops) ── */
+
 const saveStopOverrides=async(data)=>{
   if(!window._fbOps)return;
   await window._fbOps.write("config/stopOverrides",{data,updatedAt:Date.now()});
@@ -317,7 +364,7 @@ const subscribeStopOverrides=(cb)=>{
   return()=>{if(unsub)unsub();};
 };
 
-/* ── Hidden Stops (permanently deleted built-in stops) ── */
+
 const saveHiddenStops=async(data)=>{
   if(!window._fbOps)return;
   await window._fbOps.write("config/hiddenStops",{data,updatedAt:Date.now()});
@@ -330,7 +377,7 @@ const subscribeHiddenStops=(cb)=>{
   return()=>{if(unsub)unsub();};
 };
 
-/* ── Mileage helper (shared) ── */
+
 const calcRouteMiles=(entries)=>{
   const origin={lat:33.93,lng:-84.21};
   const pts=[origin];
@@ -348,11 +395,11 @@ const DAYS = ["Monday","Tuesday","Wednesday","Thursday","Friday"];
 
 /* -- BRAND COLORS -- */
 const BRAND={main:"#1e5b92",dark:"#134b7f",light:"#357bb7",pale:"#e8f0f8",bg:"#f0f5fa"};
-const APP_VERSION="3.10.38";
+const APP_VERSION="3.10.40";
 const LOGO_URI="data:image/png;base64,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";
 const LOGO_WHITE="data:image/png;base64,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";
 
-/* ── SIMPLE HASH ROUTER ── */
+
 function useHashRoute(){
 const[hash,setHash]=useState(window.location.hash);
 useEffect(()=>{const h=()=>setHash(window.location.hash);window.addEventListener("hashchange",h);return()=>window.removeEventListener("hashchange",h);},[]);
@@ -379,7 +426,7 @@ function resolveDriverSlug(slug,driversArr){
   if(found)return found.id;
   return DRIVER_SLUGS[slug.toLowerCase()]||null;
 }
-/* ── CORRECTED ADDRESSES (from spreadsheet warehouse addresses) ── */
+
 const ADDR={
   // EMSER PICKUPS
   "Emser Norcross":"5981 Live Oak Parkway, Norcross, GA 30093",
@@ -496,7 +543,7 @@ const ADDR={
 const _customAddrCache={};
 const getAddr=(s)=>ADDR[s]||_customAddrCache[s]||"";
 
-/* ── DEFAULT INSTRUCTIONS (from spreadsheet, editable per-stop) ── */
+
 const DEFAULT_INSTRUCTIONS={
   // EMSER
   "Atlanta West - Lithia Springs":"Product pick up at either or both Emser locations",
@@ -539,7 +586,7 @@ const DEFAULT_INSTRUCTIONS={
 };
 const getDefaultInstr=(s)=>DEFAULT_INSTRUCTIONS[s]||"";
 
-/* ── CUSTOMERS ── */
+
 const CUSTOMERS={
 "Emser Tile":{rate_type:"hourly",rate:102.50,min_hours:4,pickup:"Norcross &/or Roswell",note:"$102.50/hr, 4hr min",
 deliveries:["Advanced Flooring Design - Mableton","American Flooring Services","Atlanta Flooring - Suwanee","Atlanta West - Lithia Springs","BEC - Alpharetta","Britts - Lawrenceville","Builders Floor Coverings - Decatur","Construction Resources - Decatur","D3 - Woodstock","Dalton Carpet Outlet - Smyrna","DCO Athens","DCO Eatonton","DCO Lakes Pkwy","DCO Smyrna","DCO Tech Dr - Lawrenceville","Drop Ship Liftgate","Elite Flooring - Norcross","Flooring Design Group - Doraville","Floorworx - Norcross","Gel & Associates - Atlanta","Hillman - Sugar Hill","Idlewood - Norcross","JSJ/ProSource - Marietta","Madison Flooring Group","NE Corner - Flowery Branch","NOCO Contracting","Peachwood Floor Covering","Precision Flooring - Norcross","Premier - Suwanee","Prestigious - Alpharetta","ProSource - Marietta","ProSource - Norcross","SE Commercial - Woodstock","Sherwin Williams - Norcross","Sherwin Williams - Smyrna","Stocco - Alpharetta","Strathmore - Atlanta","Transfer - Norcross","Transfer - Roswell","Valufloor - Doraville","Vanguard - Norcross"]},
@@ -597,8 +644,8 @@ function getWeekDates(off=0){const now=new Date();const d=now.getDay();const mon
 function getFbKey(wo,dayIdx){const now=new Date();const d=now.getDay();const mon=new Date(now);mon.setDate(now.getDate()-(d===0?6:d-1)+wo*7+dayIdx);const y=mon.getFullYear();const m=String(mon.getMonth()+1).padStart(2,'0');const dd=String(mon.getDate()).padStart(2,'0');return y+'-'+m+'-'+dd;}
 function fmt(n){return "$"+n.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g,",");}
 
-/* ── DELIVERY CONFIRMATION (typed name) ── */
-/* ── INLINE RATE EDITOR ── */
+
+
 function InlineRate({value,isHourly,onSave,accent}){
 const[editing,setEditing]=useState(false);
 const[val,setVal]=useState("");
@@ -637,7 +684,7 @@ style={{background:name.trim()?"#1c1917":"#e7e5e4",color:name.trim()?"#fff":"#a8
 );
 }
 
-/* ── PARSED STOPS CARD (from AI photo parsing) ── */
+
 function ParsedStopsCard({stops,onAddSelected}){
 const[checked,setChecked]=useState(()=>stops.map((_,i)=>i));
 const toggle=(idx)=>setChecked(p=>p.includes(idx)?p.filter(x=>x!==idx):[...p,idx]);
@@ -652,9 +699,9 @@ return(
 {stops.map((s,si)=>{const isChecked=checked.includes(si);return(
 <div key={si} onClick={()=>toggle(si)} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 4px",borderBottom:si<stops.length-1?"1px solid #dcfce7":"none",cursor:"pointer"}}>
 <div style={{width:20,height:20,borderRadius:5,border:`2px solid ${isChecked?"#16a34a":"#d6d3d1"}`,background:isChecked?"#16a34a":"#fff",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:12,fontWeight:700,flexShrink:0}}>{isChecked?"✓":""}</div>
-<div style={{flex:1,minWidth:0}}>
+<div style={_s.f1m}>
 <div style={{fontSize:12,fontWeight:600,color:"#1c1917"}}>{s.stop}</div>
-{(s.weight||s.note)&&<div style={{fontSize:10,color:"#78716c"}}>{s.weight?Math.round(s.weight/1000)+"K lbs":""}{s.weight&&s.note?" · ":""}{s.note||""}</div>}
+{(s.weight||s.note)&&<div style={_s.sub}>{s.weight?Math.round(s.weight/1000)+"K lbs":""}{s.weight&&s.note?" · ":""}{s.note||""}</div>}
 </div>
 </div>);})}
 {selected.length>0&&<button onClick={()=>onAddSelected(selected)} style={{display:"block",width:"100%",marginTop:8,background:"#16a34a",color:"#fff",border:"none",borderRadius:10,padding:"12px",cursor:"pointer",fontSize:14,fontWeight:700}}>
@@ -665,7 +712,7 @@ return(
 );
 }
 
-/* ── ADDRESS AUTOCOMPLETE INPUT ── */
+
 /* Uses Google Places API when available, falls back to plain input gracefully */
 let _gmpState="idle"; /* idle | loading | ready | failed */
 let _gmpRetries=0;
@@ -685,7 +732,7 @@ document.head.appendChild(s);
 }catch(e){_gmpState="failed";}
 }
 
-/* ── INTERACTIVE GOOGLE MAP COMPONENT ── */
+
 function GoogleMapView({stops,drivers,height,onStopClick,activeDriver,showSearch,searchLabel,onAssignStop}){
 const containerRef=useRef(null);
 const mapInstanceRef=useRef(null);
@@ -1029,7 +1076,7 @@ return(
 );
 }
 
-/* ── DRIVER VIEW ── */
+
 function DriverView({driver,entries,dayLabel,onStatusUpdate,onPhotoUpload,onSignature,onEta,onShipPlan,onLiftgate}){
 const [sigStop,setSigStop]=useState(null);
 const [shipPlanInputs,setShipPlanInputs]=useState({});
@@ -1045,14 +1092,14 @@ return(
 <p style={{margin:"2px 0 0",fontSize:11,color:"#93c5fd",letterSpacing:"0.08em"}}>DRIVER MANIFEST</p>
 </div>
 <div style={{padding:"16px 16px 0"}}>
-<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+<div style={_s.flexBtwMb8}>
 <div>
 <h2 style={{margin:0,fontSize:18,fontWeight:700}}>{driver.name}</h2>
 <p style={{margin:0,fontSize:13,color:"#78716c"}}>{dayLabel}</p>
 </div>
 <div style={{textAlign:"right"}}>
 <div style={{fontSize:22,fontWeight:700,color:"#16a34a"}}>{completed}/{total}</div>
-<div style={{fontSize:11,color:"#78716c"}}>completed</div>
+<div style={_s.sub11}>completed</div>
 </div>
 </div>
 <div style={{height:6,background:"#e7e5e4",borderRadius:3,marginBottom:16,overflow:"hidden"}}>
@@ -1067,7 +1114,7 @@ return(
 <span style={{fontSize:18}}>{"🏠"}</span>
 <div>
 <div style={{fontSize:14,fontWeight:700,color:BRAND.main}}>Leaving Warehouse</div>
-<div style={{fontSize:11,color:"#78716c"}}>ETA to first stop: {entries[0].stop}</div>
+<div style={_s.sub11}>ETA to first stop: {entries[0].stop}</div>
 </div>
 </div>
 <div style={{display:"flex",gap:6,alignItems:"center"}}>
@@ -1094,10 +1141,10 @@ return(
 <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4,flexWrap:"wrap"}}>
 <span style={{fontSize:13,fontWeight:700,color:"#a8a29e",fontVariantNumeric:"tabular-nums"}}>{i+1}.</span>
 {isPickup&&<span style={{fontSize:9,background:"#2563eb",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700}}>PICKUP</span>}
-{!isPickup&&<span style={{fontSize:9,background:"#16a34a",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700}}>DELIVERY</span>}
-{entry.priority&&<span style={{fontSize:9,background:"#f59e0b",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700}}>PRIORITY</span>}
-{departed&&<span style={{fontSize:9,background:"#16a34a",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700}}>DONE</span>}
-{arrived&&!departed&&<span style={{fontSize:9,background:"#f59e0b",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700}}>ON SITE</span>}
+{!isPickup&&<span style={_s.tag9Green}>DELIVERY</span>}
+{entry.priority&&<span style={_s.tag9Amber}>PRIORITY</span>}
+{departed&&<span style={_s.tag9Green}>DONE</span>}
+{arrived&&!departed&&<span style={_s.tag9Amber}>ON SITE</span>}
 {wantsShipPlan&&<span style={{fontSize:9,background:"#ea580c",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700}}>SHIP PLAN REQ</span>}
 {entry.dueBy&&<span style={{fontSize:9,background:entry.dueBy.includes("-")?"#7c3aed":entry.dueBy.startsWith("After")?"#2563eb":"#dc2626",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700,display:"inline-flex",alignItems:"center",gap:2}}>{"\u23F0"} {entry.dueBy}</span>}
 </div>
@@ -1121,7 +1168,7 @@ style={{width:"100%",border:isReturn&&!shipVal.trim()?"2px solid #dc2626":"1px s
 {shipVal.trim()&&<button onClick={()=>{onShipPlan(entry.id,shipVal.trim());}} style={{display:"block",width:"100%",marginTop:6,background:"#16a34a",color:"#fff",border:"none",borderRadius:8,padding:"8px",fontSize:12,fontWeight:600,cursor:"pointer"}}>Save Ship Plan #{shipVal.trim()?"": " — Required"}</button>}
 </div>
 )}
-{entry.shipPlan&&<div style={{marginTop:6,background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:8,padding:"6px 12px"}}><span style={{fontSize:10,color:"#16a34a",fontWeight:600}}>Ship Plan #:</span> <span style={{fontSize:14,fontWeight:700}}>{entry.shipPlan}</span></div>}
+{entry.shipPlan&&<div style={{marginTop:6,background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:8,padding:"6px 12px"}}><span style={{fontSize:10,color:"#16a34a",fontWeight:600}}>Ship Plan #:</span> <span style={_s.bold14}>{entry.shipPlan}</span></div>}
 {entry.note&&<div style={{fontSize:11,color:"#78716c",marginTop:2}}>{entry.note}</div>}
 {addr&&<a href={`https://maps.google.com/maps/dir/?api=1&destination=${encodeURIComponent(addr)}`} target="_blank" rel="noopener"
 style={{display:"inline-flex",alignItems:"center",gap:6,background:BRAND.main,color:"#fff",border:"none",borderRadius:10,padding:"10px 16px",cursor:"pointer",fontSize:13,fontWeight:600,marginTop:8,textDecoration:"none",width:"100%",justifyContent:"center"}}>
@@ -1145,7 +1192,7 @@ style={{flex:1,border:"1px solid #d6d3d1",borderRadius:8,padding:"8px",fontSize:
 <input placeholder="mins" type="number" inputMode="numeric" defaultValue={entry.eta||""} style={{width:70,border:"1px solid #d6d3d1",borderRadius:8,padding:"8px",fontSize:13,fontWeight:700,outline:"none",textAlign:"center"}}
 onBlur={e=>{if(e.target.value){const select=e.target.parentElement.querySelector("select");const dest=select?select.value:"";onEta(entry.id,e.target.value,dest||entry.etaDest);}}}/>
 </div>
-<div style={{display:"flex",gap:6}}>
+<div style={_s.flexG6}>
 <label style={{display:"flex",alignItems:"center",gap:4,background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:8,padding:"8px 12px",cursor:"pointer",fontSize:12,fontWeight:600,color:"#2563eb",flex:1,justifyContent:"center"}}>
 {"📷"} Photo
 <input type="file" accept="image/*" capture="environment" style={{display:"none"}}
@@ -1171,7 +1218,7 @@ onChange={e=>{if(e.target.files[0]){const r=new FileReader();r.onload=ev=>onPhot
 {entry.photos.map((p,pi)=><img key={pi} src={p} alt="delivery" style={{width:60,height:60,objectFit:"cover",borderRadius:8,border:"1px solid #e7e5e4"}}/>)}
 </div>
 )}
-{entry.signature&&<div style={{marginTop:8,background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:8,padding:"8px 12px"}}><span style={{fontSize:10,color:"#16a34a",fontWeight:600}}>Received by:</span> <span style={{fontSize:14,fontWeight:700}}>{entry.signature}</span></div>}
+{entry.signature&&<div style={{marginTop:8,background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:8,padding:"8px 12px"}}><span style={{fontSize:10,color:"#16a34a",fontWeight:600}}>Received by:</span> <span style={_s.bold14}>{entry.signature}</span></div>}
 {sigStop===entry.id&&<div style={{marginTop:8}}><SignaturePad onSave={d=>{onSignature(entry.id,d);setSigStop(null);}} onCancel={()=>setSigStop(null)}/></div>}
 </div>
 );
@@ -1181,7 +1228,7 @@ onChange={e=>{if(e.target.files[0]){const r=new FileReader();r.onload=ev=>onPhot
 );
 }
 
-/* ── QUOTE BUILDER ── */
+
 function QuoteBuilder({customerName,pickupOptions,onAdd,onBack,drivers,drvEntries}){
 const hasMultiPickup=pickupOptions&&pickupOptions.length>1;
 const[miles,setMiles]=useState("");const[liftgate,setLiftgate]=useState(false);const[gravel,setGravel]=useState(false);const[extraPallets,setExtraPallets]=useState(false);const[customStop,setCustomStop]=useState("");const[originAddr,setOriginAddr]=useState(hasMultiPickup?"":pickupOptions?.[0]?.addr||"");const[selectedPickup,setSelectedPickup]=useState(hasMultiPickup?null:pickupOptions?.[0]?.label||"custom");const[destAddr,setDestAddr]=useState("");const[calcLoading,setCalcLoading]=useState(false);const[calcError,setCalcError]=useState("");const[apiKey,setApiKey]=useState(()=>{try{return window.__gbApiKey||"AIzaSyB29mVeZXedDhLVT3eMVgl07EsOneWCUu4";}catch{return"AIzaSyB29mVeZXedDhLVT3eMVgl07EsOneWCUu4";}});const[showApiInput,setShowApiInput]=useState(false);
@@ -1196,7 +1243,7 @@ return(
 <div style={{padding:"0 4px"}}><h2 style={{margin:"0 0 4px",fontSize:18,fontWeight:700,color:isOneOff?"#6b7280":"#d97706"}}>{customerName}</h2><p style={{margin:"0 0 16px",fontSize:12,color:"#78716c"}}>No liftgate = base + 15% fuel. Liftgate = base + $75, no fuel.</p></div>
 {isOneOff&&<div style={{padding:"0 4px",marginBottom:12}}><label style={{fontSize:12,fontWeight:600,color:"#57534e",display:"block",marginBottom:4}}>Customer / Stop Name</label><input value={customStop} onChange={e=>setCustomStop(e.target.value)} placeholder="e.g. Smith Residence" style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:10,padding:"10px 14px",fontSize:14,outline:"none",background:"#fff"}}/></div>}
 <div style={{background:"#fff",border:"1px solid #e7e5e4",borderRadius:14,padding:16,margin:"0 4px 12px"}}>
-<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}><span style={{fontSize:13,fontWeight:700}}>Distance</span><button onClick={()=>setShowApiInput(!showApiInput)} style={{background:"#f5f5f4",border:"none",borderRadius:6,padding:"4px 8px",fontSize:10,color:"#78716c",cursor:"pointer"}}>{apiKey?"API Key Set":"Set API Key"}</button></div>
+<div style={_s.flexBtwMb10}><span style={{fontSize:13,fontWeight:700}}>Distance</span><button onClick={()=>setShowApiInput(!showApiInput)} style={{background:"#f5f5f4",border:"none",borderRadius:6,padding:"4px 8px",fontSize:10,color:"#78716c",cursor:"pointer"}}>{apiKey?"API Key Set":"Set API Key"}</button></div>
 {showApiInput&&<div style={{marginBottom:10}}><input value={apiKey} onChange={e=>setApiKey(e.target.value)} placeholder="Google Maps API key" style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px",fontSize:12,outline:"none",marginBottom:6}}/><button onClick={()=>saveKey(apiKey)} style={{background:"#1c1917",color:"#fff",border:"none",borderRadius:8,padding:"6px 14px",fontSize:12,fontWeight:600,cursor:"pointer"}}>Save</button></div>}
 {pickupOptions&&pickupOptions.length>0&&<div style={{marginBottom:10}}>
 <label style={{fontSize:12,fontWeight:600,color:hasMultiPickup&&!selectedPickup?"#dc2626":"#57534e",display:"block",marginBottom:6}}>{hasMultiPickup?"⚠ Select Pickup Location":"Pickup From"}</label>
@@ -1204,28 +1251,28 @@ return(
 {pickupOptions.map(po=><button key={po.label} onClick={()=>{setSelectedPickup(po.label);setOriginAddr(po.addr);}} style={{padding:hasMultiPickup?"10px 16px":"6px 12px",borderRadius:10,border:selectedPickup===po.label?`2px solid #2563eb`:"2px solid #e7e5e4",cursor:"pointer",fontSize:hasMultiPickup?14:12,fontWeight:700,background:selectedPickup===po.label?"#2563eb":"#fff",color:selectedPickup===po.label?"#fff":"#57534e"}}>{po.label}</button>)}
 <button onClick={()=>{setSelectedPickup("custom");setOriginAddr("");}} style={{padding:hasMultiPickup?"10px 16px":"6px 12px",borderRadius:10,border:selectedPickup==="custom"?"2px solid #2563eb":"2px solid #e7e5e4",cursor:"pointer",fontSize:hasMultiPickup?14:12,fontWeight:700,background:selectedPickup==="custom"?"#2563eb":"#fff",color:selectedPickup==="custom"?"#fff":"#57534e"}}>Manual</button>
 </div>
-{selectedPickup&&selectedPickup!=="custom"&&<div style={{fontSize:11,color:"#78716c"}}>{originAddr}</div>}
+{selectedPickup&&selectedPickup!=="custom"&&<div style={_s.sub11}>{originAddr}</div>}
 </div>}
 <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:10}}>{(selectedPickup==="custom"||!pickupOptions?.length)&&<AddressInput value={originAddr} onChange={setOriginAddr} placeholder="Pickup address"/>}<AddressInput value={destAddr} onChange={setDestAddr} placeholder="Delivery address"/><button onClick={calcDistance} disabled={calcLoading} style={{background:"#1c1917",color:"#fff",border:"none",borderRadius:8,padding:"10px",fontSize:13,fontWeight:600,cursor:"pointer",opacity:calcLoading?0.6:1}}>{calcLoading?"Calculating…":"Calculate Distance"}</button></div>
 {calcError&&<p style={{fontSize:12,color:"#dc2626",margin:"0 0 8px"}}>{calcError}</p>}
-<div style={{display:"flex",alignItems:"center",gap:8}}><label style={{fontSize:13,fontWeight:600,color:"#57534e"}}>Miles:</label><input value={miles} onChange={e=>setMiles(e.target.value)} placeholder="0" type="number" inputMode="decimal" step="0.1" style={{width:80,border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 12px",fontSize:15,fontWeight:700,outline:"none",textAlign:"center"}}/>{mi>0&&<span style={{fontSize:13,fontVariantNumeric:"tabular-nums",color:"#57534e"}}>Base: {fmt(baseTier)}</span>}</div>
+<div style={_s.flexC8}><label style={{fontSize:13,fontWeight:600,color:"#57534e"}}>Miles:</label><input value={miles} onChange={e=>setMiles(e.target.value)} placeholder="0" type="number" inputMode="decimal" step="0.1" style={{width:80,border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 12px",fontSize:15,fontWeight:700,outline:"none",textAlign:"center"}}/>{mi>0&&<span style={{fontSize:13,fontVariantNumeric:"tabular-nums",color:"#57534e"}}>Base: {fmt(baseTier)}</span>}</div>
 </div>
 <div style={{background:"#fff",border:"1px solid #e7e5e4",borderRadius:14,padding:16,margin:"0 4px 12px"}}><span style={{fontSize:13,fontWeight:700,display:"block",marginBottom:10}}>Add-ons</span>
-{[{label:"Liftgate (+$75, replaces fuel)",val:liftgate,set:setLiftgate,color:"#dc2626"},{label:"Gravel / Uneven Driveway (+$25)",val:gravel,set:setGravel,color:"#d97706"},{label:"4-5 Pallets (+$25)",val:extraPallets,set:setExtraPallets,color:"#7c3aed"}].map((o,i)=><button key={i} onClick={()=>o.set(!o.val)} style={{display:"flex",justifyContent:"space-between",alignItems:"center",width:"100%",padding:"12px 14px",marginBottom:6,borderRadius:10,cursor:"pointer",background:o.val?`${o.color}11`:"#fafaf9",border:o.val?`2px solid ${o.color}`:"1px solid #e7e5e4"}}><div style={{display:"flex",alignItems:"center",gap:10}}><div style={{width:22,height:22,borderRadius:6,border:`2px solid ${o.val?o.color:"#d6d3d1"}`,background:o.val?o.color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:14,fontWeight:700}}>{o.val?"✓":""}</div><span style={{fontSize:13,fontWeight:600}}>{o.label}</span></div></button>)}
+{[{label:"Liftgate (+$75, replaces fuel)",val:liftgate,set:setLiftgate,color:"#dc2626"},{label:"Gravel / Uneven Driveway (+$25)",val:gravel,set:setGravel,color:"#d97706"},{label:"4-5 Pallets (+$25)",val:extraPallets,set:setExtraPallets,color:"#7c3aed"}].map((o,i)=><button key={i} onClick={()=>o.set(!o.val)} style={{display:"flex",justifyContent:"space-between",alignItems:"center",width:"100%",padding:"12px 14px",marginBottom:6,borderRadius:10,cursor:"pointer",background:o.val?`${o.color}11`:"#fafaf9",border:o.val?`2px solid ${o.color}`:"1px solid #e7e5e4"}}><div style={_s.flexC10}><div style={{width:22,height:22,borderRadius:6,border:`2px solid ${o.val?o.color:"#d6d3d1"}`,background:o.val?o.color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:14,fontWeight:700}}>{o.val?"✓":""}</div><span style={{fontSize:13,fontWeight:600}}>{o.label}</span></div></button>)}
 {!liftgate&&mi>0&&<div style={{display:"flex",justifyContent:"space-between",padding:"10px 14px",background:"#fffbeb",borderRadius:10,border:"1px solid #fde68a",marginTop:6}}><span style={{fontSize:13,color:"#92400e",fontWeight:600}}>15% Fuel</span><span style={{fontVariantNumeric:"tabular-nums",fontSize:13,fontWeight:700,color:"#d97706"}}>{fmt(fuelAmt)}</span></div>}
 {liftgate&&<div style={{padding:"10px 14px",background:"#fef2f2",borderRadius:10,border:"1px solid #fecaca",marginTop:6}}><span style={{fontSize:12,color:"#991b1b"}}>Liftgate = no fuel charge</span></div>}
 </div>
 {mi>0&&<div style={{background:"#fff",border:"1px solid #e7e5e4",borderRadius:14,padding:16,margin:"0 4px 12px"}}>
 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,paddingBottom:12,borderBottom:"2px solid #bbf7d0"}}><span style={{fontSize:15,fontWeight:700}}>Total</span><span style={{fontSize:22,fontWeight:700,fontVariantNumeric:"tabular-nums",color:"#16a34a"}}>{fmt(total)}</span></div>
 <span style={{fontSize:13,fontWeight:600,color:"#57534e",display:"block",marginBottom:10}}>Assign Driver</span>
-<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>{drivers.map((drv,di)=><button key={drv.id} onClick={()=>addQuote(drv.id)} style={{background:"#fff",border:`3px solid ${DCOL[di]}`,borderRadius:14,padding:"14px 10px",cursor:"pointer",textAlign:"center"}}><div style={{width:40,height:40,borderRadius:12,background:DCOL[di],margin:"0 auto 8px",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,color:"#fff",fontWeight:700}}>{drv.name.charAt(0)}</div><div style={{fontSize:14,fontWeight:700}}>{drv.name}</div></button>)}</div>
+<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>{drivers.map((drv,di)=><button key={drv.id} onClick={()=>addQuote(drv.id)} style={{background:"#fff",border:`3px solid ${DCOL[di]}`,borderRadius:14,padding:"14px 10px",cursor:"pointer",textAlign:"center"}}><div style={{width:40,height:40,borderRadius:12,background:DCOL[di],margin:"0 auto 8px",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,color:"#fff",fontWeight:700}}>{drv.name.charAt(0)}</div><div style={_s.bold14}>{drv.name}</div></button>)}</div>
 <button onClick={()=>addQuote(0)} style={{display:"block",width:"100%",marginTop:10,background:"#fafaf9",border:"2px dashed #d6d3d1",borderRadius:14,padding:"14px",cursor:"pointer",textAlign:"center",color:"#78716c",fontSize:14,fontWeight:600}}>Skip — Assign Later</button>
 </div>}
 </div>
 );
 }
 
-/* ── MANIFEST STOP ── */
+
 function ManifestStop({entry,eIdx,total,drivers,onMove,onReassign,onRemove,onDelete,onUpdateInstructions,onShipPlan,onDueBy,onWeight,onLoadNum,onRate,maxLoad,onDragStart,onDragOver,onDrop,isDragOver,isDragging,onLiftgate,onSplit,driverLoadCounts}){
 const[expanded,setExpanded]=useState(false);const[instrText,setInstrText]=useState(entry.instructions||"");const[dueByInput,setDueByInput]=useState(entry.dueBy||"");const[dueType,setDueType]=useState(entry.dueBy?(entry.dueBy.startsWith("After")?"after":"by"):"by");const[lastHour,setLastHour]=useState(()=>{if(entry.dueBy){const m=entry.dueBy.match(/(\d+(?::\d+)?\s*[AP]M)/);return m?m[1].replace(/:\d+/,""):""}return "";});
 const[showAssign,setShowAssign]=useState(false);
@@ -1245,13 +1292,13 @@ style={{display:"flex",alignItems:"center",gap:6,padding:"8px",marginBottom:expa
 <button draggable onDragStart={onDragStart} onClick={e=>{e.stopPropagation();onMove(-1);}} disabled={eIdx===0} style={{background:eIdx===0?"#f5f5f4":"#e7e5e4",border:"none",borderRadius:4,padding:"4px 6px",cursor:eIdx===0?"default":"pointer",fontSize:10,color:eIdx===0?"#d6d3d1":"#57534e",fontWeight:700,lineHeight:1}}>▲</button>
 <button onClick={e=>{e.stopPropagation();onMove(1);}} disabled={eIdx===total-1} style={{background:eIdx===total-1?"#f5f5f4":"#e7e5e4",border:"none",borderRadius:4,padding:"4px 6px",cursor:eIdx===total-1?"default":"pointer",fontSize:10,color:eIdx===total-1?"#d6d3d1":"#57534e",fontWeight:700,lineHeight:1}}>▼</button>
 </div>
-<div style={{flex:1,minWidth:0}} onClick={e=>{e.stopPropagation();setExpanded(!expanded);setInstrText(entry.instructions||"");setDueByInput(entry.dueBy||"");}}>
+<div style={_s.f1m} onClick={e=>{e.stopPropagation();setExpanded(!expanded);setInstrText(entry.instructions||"");setDueByInput(entry.dueBy||"");}}>
 <div style={{display:"flex",alignItems:"center",gap:4,flexWrap:"wrap"}}>
 <span style={{fontSize:11,fontVariantNumeric:"tabular-nums",color:"#a8a29e"}}>{eIdx+1}.</span>
 {isPU&&<span style={{fontSize:9,background:"#2563eb",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700}}>PICKUP</span>}
-{!isPU&&<span style={{fontSize:9,background:"#16a34a",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700}}>DELIVERY</span>}
-{isP&&<span style={{fontSize:9,background:"#f59e0b",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700}}>PRIORITY</span>}
-{entry.status==="departed"&&<span style={{fontSize:9,background:"#16a34a",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700}}>DONE</span>}
+{!isPU&&<span style={_s.tag9Green}>DELIVERY</span>}
+{isP&&<span style={_s.tag9Amber}>PRIORITY</span>}
+{entry.status==="departed"&&<span style={_s.tag9Green}>DONE</span>}
 {hasDue&&<span style={{fontSize:9,background:entry.dueBy.includes("-")?"#7c3aed":entry.dueBy.startsWith("After")?"#2563eb":"#dc2626",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700,display:"inline-flex",alignItems:"center",gap:2}}>{"\u23F0"} {entry.dueBy}</span>}
 {entry.pickupDueBy&&<span style={{fontSize:9,background:"#16a34a",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700,display:"inline-flex",alignItems:"center",gap:2}}>{"📦"} {entry.pickupDueBy}</span>}
 <span style={{fontSize:12,fontWeight:700,color:"#1c1917"}}>{entry.stop}</span>
@@ -1315,7 +1362,7 @@ style={{display:"flex",alignItems:"center",gap:8,width:"100%",padding:"10px 12px
 style={{flex:1,maxWidth:120,border:entry.shipPlan?"1px solid #bbf7d0":"1px solid #fca5a5",borderRadius:6,padding:"4px 8px",fontSize:12,fontWeight:700,outline:"none",background:entry.shipPlan?"#f0fdf4":"#fff",textAlign:"center"}}/>
 </div>}
 {expanded&&<div style={{padding:"8px 12px 10px",marginBottom:2,background:"#fff",border:"1px solid #e7e5e4",borderTop:"none",borderRadius:"0 0 10px 10px",borderLeft:`4px solid ${isPU?"#2563eb":isP?"#f59e0b":c.accent}`}}>
-<label style={{fontSize:11,fontWeight:600,color:"#57534e",display:"block",marginBottom:4}}>Special instructions / notes</label>
+<label style={_s.label}>Special instructions / notes</label>
 <textarea value={instrText} onChange={e=>setInstrText(e.target.value)} placeholder="Phone #, gate code, dock info…" rows={2} onClick={e=>e.stopPropagation()}
 style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px",fontSize:13,outline:"none",resize:"vertical",fontFamily:"inherit"}}/>
 <div style={{marginTop:8,background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:10,padding:"8px 10px"}}>
@@ -1347,12 +1394,12 @@ style={{flex:1,padding:"5px 2px",borderRadius:6,border:"none",cursor:disabled?"d
 {/* Weight & Load */}
 <div style={{marginTop:8,background:"#f0f5fa",border:"1px solid "+BRAND.light+"44",borderRadius:10,padding:"8px 10px"}}>
 <div style={{display:"flex",gap:8,alignItems:"center"}}>
-<div style={{flex:1}}>
+<div style={_s.f1}>
 <label style={{fontSize:10,fontWeight:600,color:"#57534e",display:"block",marginBottom:3}}>Weight (lbs)</label>
 <input type="number" inputMode="numeric" pattern="[0-9]*" value={entry.weight||""} onChange={e=>{e.stopPropagation();if(onWeight)onWeight(e.target.value);}} onClick={e=>e.stopPropagation()} placeholder="0"
 style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"6px 10px",fontSize:14,fontWeight:700,outline:"none",textAlign:"center"}}/>
 </div>
-<div style={{flex:1}}>
+<div style={_s.f1}>
 <label style={{fontSize:10,fontWeight:600,color:"#57534e",display:"block",marginBottom:3}}>Load #</label>
 <div style={{display:"flex",gap:3}}>
 {[1,2,3].filter(n=>n<=(Math.max(maxLoad||1,entry.loadNum||1)+1)&&n<=3).map(n=><button key={n} onClick={e=>{e.stopPropagation();if(onLoadNum)onLoadNum(n);}} style={{flex:1,padding:"6px",borderRadius:6,border:"none",cursor:"pointer",fontSize:12,fontWeight:700,background:(entry.loadNum||1)===n?BRAND.main:"#e7e5e4",color:(entry.loadNum||1)===n?"#fff":"#57534e"}}>{n}</button>)}
@@ -1370,7 +1417,7 @@ style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"6px 10px
 );
 }
 
-/* ── PRE-GEOCODED COORDINATES (Atlanta metro area) ── */
+
 /* These are approximate coords for map plotting. When deployed with Google Maps API, */
 /* real geocoding can replace these. For now they enable the route builder UI. */
 const COORDS={
@@ -1484,7 +1531,7 @@ function getCoords(addr){
   return null;
 }
 
-/* ── ROUTE BUILDER COMPONENT ── */
+
 function RouteBuilder({entries,drivers,onAssign,onAssignBulk,onReorder,onBack,getDriverCapacity:getDrvCap}){
 const[activeDriver,setActiveDriver]=useState(null);
 /* Filter out pickups — routing only cares about deliveries */
@@ -1518,7 +1565,7 @@ return!getCoords(addr);
 /* Build route order for active driver */
 const driverRoute=activeDriver?routeOrders[activeDriver]||[]:[];
 
-/* ── Route optimization functions for RouteBuilder ── */
+
 const[rbSortMenu,setRbSortMenu]=useState(null);
 const _rbCoord=(e)=>{if(!e)return null;const addr=e.addr||getAddr(e.stop);return getCoords(addr);};
 const _rbOrigin={lat:33.93,lng:-84.21};
@@ -1640,7 +1687,7 @@ const totalAssigned=Object.values(routeOrders).reduce((s,ids)=>s+ids.length,0);
 return(
 <div>
 <div style={{padding:"12px 4px 8px"}}>
-<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+<div style={_s.flexBtwMb8}>
 <h2 style={{margin:0,fontSize:16,fontWeight:600}}>Build Routes — {deliveryEntries.length} stops</h2>
 <button onClick={onBack} style={{background:"#e7e5e4",border:"none",borderRadius:8,padding:"6px 12px",cursor:"pointer",fontSize:12,fontWeight:600,color:"#57534e"}}>← Back</button>
 </div>
@@ -1744,17 +1791,17 @@ style={{display:"block",width:"calc(100% - 8px)",margin:"12px 4px",background:"#
 <div style={{fontSize:10,color:"#a8a29e",marginBottom:6}}>MAP LEGEND</div>
 <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
 {Object.entries(CC).filter(([k])=>k!=="One-Off Delivery"&&k!=="Quote Delivery").map(([name,c])=>(
-<div key={name} style={{display:"flex",alignItems:"center",gap:4}}>
+<div key={name} style={_s.flexC4}>
 <div style={{width:8,height:8,borderRadius:4,background:c.accent}}/>
-<span style={{fontSize:10,color:"#78716c"}}>{name}</span>
+<span style={_s.sub}>{name}</span>
 </div>
 ))}
 </div>
 <div style={{display:"flex",gap:8,marginTop:6}}>
 {drivers.map((d,di)=>(
-<div key={d.id} style={{display:"flex",alignItems:"center",gap:4}}>
+<div key={d.id} style={_s.flexC4}>
 <div style={{width:8,height:8,borderRadius:4,background:DCOL[di],border:"2px solid #fff",boxShadow:"0 0 0 1px "+DCOL[di]}}/>
-<span style={{fontSize:10,color:"#78716c"}}>{d.name.split(" ")[0]}</span>
+<span style={_s.sub}>{d.name.split(" ")[0]}</span>
 </div>
 ))}
 </div>
@@ -1763,7 +1810,7 @@ style={{display:"block",width:"calc(100% - 8px)",margin:"12px 4px",background:"#
 );
 }
 
-/* ── DELIVERY LIST ITEM (Add tab — editable instructions) ── */
+
 function DeliveryListItem({stop,rate,note,addr,curInstr,checked,multiSelect,accent,onCheck,onAdd,onSaveInstr,isCustom,onOpenEdit}){
 const[expanded,setExpanded]=useState(false);
 const[instrText,setInstrText]=useState(curInstr||"");
@@ -1799,7 +1846,7 @@ return(
 </div>
 </div>
 {expanded&&<div style={{padding:"8px 12px 10px",background:"#fff",border:"1px solid #e7e5e4",borderTop:"none",borderRadius:"0 0 12px 12px",borderLeft:`4px solid ${accent}`}}>
-<label style={{fontSize:11,fontWeight:600,color:"#57534e",display:"block",marginBottom:4}}>Instructions for {stop}</label>
+<label style={_s.label}>Instructions for {stop}</label>
 <textarea value={instrText} onChange={e=>setInstrText(e.target.value)} placeholder="Phone #, gate code, dock info…" rows={2}
 style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px",fontSize:13,outline:"none",resize:"vertical",fontFamily:"inherit"}}/>
 {/* Delivery time constraint */}
@@ -1832,11 +1879,11 @@ style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px
 </div>
 {/* Weight */}
 <div style={{marginTop:8,background:"#f0f5fa",border:"1px solid "+BRAND.light+"44",borderRadius:10,padding:"8px 10px"}}>
-<div style={{display:"flex",alignItems:"center",gap:8}}>
+<div style={_s.flexC8}>
 <label style={{fontSize:11,fontWeight:600,color:BRAND.main,flexShrink:0}}>Weight:</label>
 <input type="number" inputMode="numeric" pattern="[0-9]*" value={weightVal} onChange={e=>setWeightVal(e.target.value)} onClick={e=>e.stopPropagation()} placeholder="lbs"
 style={{flex:1,border:"1px solid #d6d3d1",borderRadius:8,padding:"6px 10px",fontSize:14,fontWeight:700,outline:"none",textAlign:"center",maxWidth:120}}/>
-<span style={{fontSize:11,color:"#78716c"}}>lbs</span>
+<span style={_s.sub11}>lbs</span>
 {weightVal&&<button onClick={e=>{e.stopPropagation();setWeightVal("");}} style={{background:"#fff",border:"1px solid #d6d3d1",borderRadius:5,padding:"2px 6px",cursor:"pointer",fontSize:10,color:"#78716c"}}>Clear</button>}
 </div>
 </div>
@@ -1844,7 +1891,7 @@ style={{flex:1,border:"1px solid #d6d3d1",borderRadius:8,padding:"6px 10px",font
 {/* Bottom-left: permanent edit gear */}
 {onOpenEdit&&<button onClick={e=>{e.stopPropagation();onOpenEdit();}} style={{background:"#f5f5f4",border:"1px solid #e7e5e4",borderRadius:8,padding:"5px 10px",cursor:"pointer",fontSize:10,fontWeight:700,color:"#57534e",display:"flex",alignItems:"center",gap:4}}>⚙ Edit Stop</button>}
 {!onOpenEdit&&<div/>}
-<div style={{display:"flex",gap:6}}>
+<div style={_s.flexG6}>
 <button onClick={e=>{e.stopPropagation();setExpanded(false);}} style={{background:"#e7e5e4",border:"none",borderRadius:6,padding:"5px 10px",cursor:"pointer",fontSize:11,fontWeight:600}}>Cancel</button>
 <button onClick={e=>{e.stopPropagation();onSaveInstr(instrText.trim());addWithExtras();setExpanded(false);}} style={{background:"#16a34a",color:"#fff",border:"none",borderRadius:6,padding:"5px 14px",cursor:"pointer",fontSize:11,fontWeight:700}}>+ Add to Manifest</button>
 </div>
@@ -1854,7 +1901,7 @@ style={{flex:1,border:"1px solid #d6d3d1",borderRadius:8,padding:"6px 10px",font
 );
 }
 
-/* ── LOCALSTORAGE HELPERS (offline persistence until Firebase connected) ── */
+
 const LS_DRIVERS="dd_drivers";
 const LS_LOG="dd_log";
 const LS_CUSTOM_INSTR="dd_custom_instr";
@@ -1864,7 +1911,7 @@ const DEFAULT_DRIVERS=[{id:1,name:"Trevor Seyers",phone:"404-394-9891"},{id:2,na
 function lsGet(key,fallback){try{const v=localStorage.getItem(key);if(v){const parsed=JSON.parse(v);return parsed;}return fallback;}catch{return fallback;}}
 function lsSet(key,val){try{localStorage.setItem(key,JSON.stringify(val));}catch{}}
 
-/* ══════════════ DISPATCH APP (owner view) ══════════════ */
+
 function DispatchApp(){
 const isDesktop=useIsDesktop();
 const[wo,setWo]=useState(0);
@@ -1940,7 +1987,7 @@ useEffect(()=>{
   },100);
 },[log]);
 
-/* ── Auto-backup full manifest state to localStorage every 5 minutes ── */
+
 const lastAutoBackupRef=useRef(0);
 useEffect(()=>{
   const now=Date.now();
@@ -1975,6 +2022,15 @@ const[multiSelect,setMultiSelect]=useState(false);const[multiChecked,setMultiChe
 const[driverViewId,setDriverViewId]=useState(null);
 const[customInstr,setCustomInstr]=useState(()=>lsGet(LS_CUSTOM_INSTR,{}));
 const[showAddCustomDel,setShowAddCustomDel]=useState(false);
+const[showAddPickup,setShowAddPickup]=useState(false);
+const[puCustomName,setPuCustomName]=useState("");
+const[puCustomAddr,setPuCustomAddr]=useState("");
+const[puWeight,setPuWeight]=useState("");
+const[puRate,setPuRate]=useState("");
+const[puMiles,setPuMiles]=useState("");
+const[puNote,setPuNote]=useState("");
+const[puDelName,setPuDelName]=useState("");
+const[puDelAddr,setPuDelAddr]=useState("");
 const[stopEditOpen,setStopEditOpen]=useState(null); /* {cust, idx, isCustom, stop, addr, rate, note} when editing a stop permanently */
 const[stopEditName,setStopEditName]=useState("");
 const[stopEditAddr,setStopEditAddr]=useState("");
@@ -1994,7 +2050,7 @@ const[mapActiveDrv,setMapActiveDrv]=useState(null); /* driver selected for click
 const[driverLocs,setDriverLocs]=useState({}); /* {driverId: {lat,lng,updatedAt}} */
 const[invoices,setInvoices]=useState([]);
 const[showInvoice,setShowInvoice]=useState(null); /* customer name to generate invoice for */
-/* ── ROUTE PLANNER STATE ── */
+
 const[rpActive,setRpActive]=useState(null);
 const[rpOrders,setRpOrders]=useState({});
 const[rpDragSrc,setRpDragSrc]=useState(null);
@@ -2035,7 +2091,7 @@ const[emserShifts,setEmserShifts]=useState(()=>lsGet("dd_emser_shifts",{})); /* 
 const[dispNotes,setDispNotes]=useState(()=>lsGet(LS_DISP_NOTES,{}));
 const[editingNote,setEditingNote]=useState(false);
 const[noteText,setNoteText]=useState("");
-/* ── QUOTES ── */
+
 const[savedQuotes,setSavedQuotes]=useState(()=>lsGet("dd_quotes",[]));
 const[quoteFormOpen,setQuoteFormOpen]=useState(false);
 const[qCust,setQCust]=useState("");
@@ -2076,6 +2132,19 @@ const calcQuoteMiles=()=>{
   }catch(e){setQCalcLoading(false);setQCalcError("Maps error");}
 };
 const[qPushDay,setQPushDay]=useState(null); /* {quoteId, targetDk} */
+const[puCalcLoading,setPuCalcLoading]=useState(false);
+const[puCalcError,setPuCalcError]=useState("");
+const calcPuMiles=(fromAddr,toAddr)=>{
+  if(!fromAddr||!toAddr){setPuCalcError("Enter both addresses");return;}
+  if(!window.google?.maps?.DistanceMatrixService){setPuCalcError("Google Maps not loaded");return;}
+  setPuCalcLoading(true);setPuCalcError("");
+  try{const svc=new window.google.maps.DistanceMatrixService();
+  svc.getDistanceMatrix({origins:[fromAddr],destinations:[toAddr],travelMode:window.google.maps.TravelMode.DRIVING,unitSystem:window.google.maps.UnitSystem.IMPERIAL},(resp,status)=>{
+    setPuCalcLoading(false);
+    if(status==="OK"&&resp.rows[0]?.elements[0]?.status==="OK"){setPuMiles(parseFloat(resp.rows[0].elements[0].distance.text.replace(/,/g,"")).toFixed(1));}
+    else{setPuCalcError("Could not calculate");}
+  });}catch(e){setPuCalcLoading(false);setPuCalcError("Maps error");}
+};
 
 const wd=getWeekDates(wo);const dk=`${wo}-${sd}`;const dl=log[dk]||[];
 const emDk=getFbKey(wo,sd); /* date-based key for Emser hours/shifts */
@@ -2100,7 +2169,7 @@ const prevShiftsRef=useRef({}); /* tracks last saved emserShifts JSON */
 const[fbConnected,setFbConnected]=useState(false);
 const driverChangeSource=useRef("init"); /* "init" | "firebase" | "user" */
 
-/* ── FIREBASE SYNC ── */
+
 useEffect(()=>{
   _whenFB(async()=>{
     firebaseReady.current=true;
@@ -2290,7 +2359,7 @@ useEffect(()=>{
   return()=>clearTimeout(timer);
 },[emserShifts,emDk]);
 
-/* ── LOCALSTORAGE PERSISTENCE (offline fallback — active until Firebase connected) ── */
+
 useEffect(()=>{lsSet(LS_DRIVERS,drivers);},[drivers]);
 useEffect(()=>{lsSet(LS_CUSTOM_INSTR,customInstr);},[customInstr]);
 useEffect(()=>{lsSet(LS_DISP_NOTES,dispNotes);},[dispNotes]);
@@ -2345,7 +2414,7 @@ useEffect(()=>{
   return()=>clearTimeout(timer);
 },[hiddenStops]);
 
-/* ── STOP EDIT HELPERS (permanent changes to ALL stops) ── */
+
 const openStopEdit=(cust,idx,isCustom,stop,addr,rate,note)=>{
   setStopEditOpen({cust,idx,isCustom,stop,addr,rate,note});
   setStopEditName(stop);setStopEditAddr(addr||"");setStopEditRate(rate?String(rate):"");setStopEditNote(note||"");setConfirmDeleteStop(false);
@@ -2392,7 +2461,7 @@ const restoreHiddenStop=(key)=>{
   showToast("Stop restored");
 };
 
-/* ── QUOTE HELPERS ── */
+
 const calcQuoteRate=(miles,liftgate,gravel,extraPallets)=>{
 let base=getBaseTier(parseFloat(miles)||0);
 let fuel=0;
@@ -2464,7 +2533,7 @@ setLog(p=>({...p,[dk]:[...(p[dk]||[]),...newEntries]}));
 showToast(`${stops.length} stops added`);setMultiSelect(false);setMultiChecked([]);
 };
 
-/* ── Shared: rebuild pickup cards for a customer. Pickups ONLY exist on assigned drivers, NEVER in unassigned. ── */
+
 const rebuildPickupsFor=(all,cust)=>{
 const makeNote=(dels)=>{if(!dels.length)return"";const names=dels.map(e=>e.stop);if(names.length<=3)return names.join(", ");return names.slice(0,2).join(", ")+" +"+(names.length-2)+" more";};
 const puSrcs=PICKUP_SOURCES.filter(s=>s.customer===cust);
@@ -2593,7 +2662,7 @@ showToast("Stop #"+(dl.filter(e=>e.driverId===did).length+1)+" added");
 };
 const updateInstructions=(eid,text)=>setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,instructions:text}:e)}));
 const updateRate=(eid,rate)=>setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,baseRate:parseFloat(rate)||0}:e)}));
-/* ── LIFTGATE ── */
+
 const[liftgateRequests,setLiftgateRequests]=useState([]);/* [{id,entryId,stop,driverId,driverName,time,status}] */
 const requestLiftgate=(entryId,stopName)=>{
 const entry=dl.find(e=>e.id===entryId);
@@ -2646,7 +2715,7 @@ const setDueBy=(eid,time)=>setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{
 const setWeight=(eid,w)=>setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,weight:parseFloat(w)||0}:e)}));
 const setLoadNum=(eid,n)=>setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,loadNum:n}:e)}));
 
-/* ── TRUCK WEIGHT LIMITS ── */
+
 const TRUCK_LIMITS={default:10000,heavy:13500};
 const[driverCapacity,setDriverCapacity]=useState(()=>lsGet("dd_driver_capacity",{})); /* {driverId: 10000|13500} */
 useEffect(()=>{lsSet("dd_driver_capacity",driverCapacity);},[driverCapacity]);
@@ -2672,7 +2741,7 @@ const getMaxLoad=(drvId)=>{const loads=getDriverLoads(drvId);return loads.length
 const weightPct=(w,cap)=>Math.min((w/(cap||TRUCK_LIMITS.default))*100,100);
 const weightColor=(w,cap)=>w>(cap||TRUCK_LIMITS.default)?"#dc2626":w>(cap||TRUCK_LIMITS.default)*0.85?"#d97706":"#16a34a";
 
-/* ── EMSER SHIFT HELPERS ── */
+
 /* parseTime accepts both "14:30" (from <input type=time>) and "2:30 PM" (legacy) */
 const parseTime=(str)=>{
   if(!str)return null;
@@ -2728,7 +2797,7 @@ useEffect(()=>{
   }
 },[emserShifts,emDk]);
 
-/* ── 2-WAY MESSAGING (Firestore real-time) ── */
+
 const getMsgKey=(ch)=>ch?"dm-"+ch:"group";
 const getMessages=(ch)=>allMessages[getMsgKey(ch)]||[];
 const sendMsg=(ch)=>{
@@ -2769,7 +2838,7 @@ useEffect(()=>{
 
 const moveInDriver=(drvId,fromIdx,dir)=>{const toIdx=fromIdx+dir;setLog(p=>{const all=[...(p[dk]||[])];const de=all.filter(e=>e.driverId===drvId);const rest=all.filter(e=>e.driverId!==drvId);if(toIdx<0||toIdx>=de.length)return p;[de[fromIdx],de[toIdx]]=[de[toIdx],de[fromIdx]];return{...p,[dk]:[...rest,...de]};});};
 
-/* ── MANIFEST ROUTE SORTING (works on live log, not just route planner) ── */
+
 const[sortMenuDrv,setSortMenuDrv]=useState(null);
 const _sCoord=(e)=>{if(!e)return null;const addr=e.addr||getAddr(e.stop);return getCoords(addr);};
 const _sOrigin={lat:33.93,lng:-84.21};
@@ -2804,11 +2873,11 @@ const insertPickup=(drvId,afterIdx)=>{if(!pickupStop)return;const forLabel=picku
 
 const computeDay=(key,emKey)=>{const entries=log[key]||[];let base=0;if(entries.some(e=>e.isHourly))base+=102.50*(emH[`${emKey||key}-emser`]||4);const fBC={};entries.forEach(e=>{if(e.isHourly)return;base+=e.baseRate;if(e.fuelPct>0){if(!fBC[e.customer])fBC[e.customer]={pct:e.fuelPct,base:0};fBC[e.customer].base+=e.baseRate;}});let fuel=0;Object.values(fBC).forEach(c=>{fuel+=c.base*c.pct;});return{base,fuel,total:base+fuel,fBC};};
 
-/* ── PER-DRIVER ROUTE MILEAGE ── */
+
 const getDriverMiles=(drvId,dayKey)=>{const entries=(log[dayKey||dk]||[]).filter(e=>e.driverId===drvId);return calcRouteMiles(entries);};
 const getWeekDriverMiles=(drvId)=>{let total=0;for(let i=0;i<5;i++){total+=getDriverMiles(drvId,`${wo}-${i}`);}return total;};
 
-/* ── INVOICE GENERATOR ── */
+
 const generateInvoice=(custName)=>{
 const cd=CUSTOMERS[custName];if(!cd)return null;
 const weekDates=getWeekDates(wo);
@@ -2888,7 +2957,7 @@ const printManifest=drvId=>{const drv=drivers.find(d=>d.id===drvId);const de=drv
 const printDailyLog=()=>{printContent(`Daily Log`,()=>{let h=`<h1>DAVIS DELIVERY — Daily Log</h1><div style="color:#78716c">${wd[sd].name} — ${wd[sd].date}</div><div style="font-size:16px;font-weight:700;margin:8px 0;color:#16a34a">${fmt(dc.total)}</div>`;dl.filter(e=>e.stopType!=="pickup").forEach(e=>{const drv=drivers.find(d=>d.id===e.driverId);h+=`<div class="stop"><b>${e.customer}</b> — ${e.stop}`;if(drv)h+=` <span style="color:#2563eb;font-size:11px">[${drv.name}]</span>`;h+=`<br>${e.isHourly?"Hourly":fmt(e.baseRate)}`;if(e.addr)h+=`<br><span class="addr">${e.addr}</span>`;if(e.instructions)h+=`<br><span class="instr">📋 ${e.instructions}</span>`;if(e.shipPlan)h+=`<br><b style="color:#ea580c">Ship Plan #: ${e.shipPlan}</b>`;h+=`</div>`;});return h;});};
 const printWeekly=()=>{printContent("Weekly",()=>{let h=`<h1>DAVIS DELIVERY — Weekly Summary</h1><div style="font-size:16px;font-weight:700;color:#16a34a">${fmt(wkT)}</div>`;DAYS.forEach((day,i)=>{const{entries,calc}=wkD[i];if(!entries.length)return;h+=`<h2>${day} — ${wd[i].date} ${fmt(calc.total)}</h2>`;entries.filter(e=>e.stopType!=="pickup").forEach(e=>{h+=`<div class="stop">${e.customer} — ${e.stop} ${e.isHourly?"HR":fmt(e.baseRate)}`;if(e.shipPlan)h+=` <b style="color:#ea580c">SP# ${e.shipPlan}</b>`;h+=`</div>`;});});return h;});};
 
-/* ── BACKUP / EXPORT ── */
+
 const exportBackup=()=>{
   const backup={
     version:APP_VERSION,
@@ -2943,7 +3012,7 @@ const importBackup=(file)=>{
   reader.readAsText(file);
 };
 
-/* ── NOTIFICATIONS ── */
+
 const sendNotification=(drvId,msg,type,viaSms=true)=>{
 const now=new Date().toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});
 const notif={msg,type,time:now,id:Date.now()};
@@ -2972,7 +3041,7 @@ if(type==="pickup")return de.filter(e=>e.stopType==="pickup").slice(-count);
 return de.filter(e=>e.stopType==="delivery").slice(-count);
 };
 
-/* ── AI CHAT ── */
+
 const buildSystemPrompt=()=>{
 const drvSummary=drivers.map(d=>{const de=drvEntries(d.id);return`${d.name} (id:${d.id}, phone:${d.phone||"none"}): ${de.length} stops — ${de.map((e,i)=>{let s=`${i+1}. ${e.stop} (${e.customer}${e.addr?", "+e.addr:""})`;if(e.dueBy)s+=` [⏰ ${e.dueBy}]`;if(e.instructions)s+=` [📋 ${e.instructions}]`;return s;}).join("; ")||"no stops"}`;}).join("\n");
 const unassigned=dl.filter(e=>e.driverId===0);
@@ -3115,7 +3184,7 @@ setChatMessages(prev=>[...prev,{role:"assistant",content:"Connection error: "+er
 setChatLoading(false);
 };
 
-/* ── DRIVER VIEW MODE ── */
+
 if(driverViewId){
 const drv=drivers.find(d=>d.id===driverViewId);
 const de=drvEntries(driverViewId);
@@ -3128,7 +3197,7 @@ onStatusUpdate={updateStatus} onPhotoUpload={addPhoto} onSignature={addSignature
 );
 }
 
-/* ═══════════════ DESKTOP LAYOUT ═══════════════ */
+
 /* For add/selCust/quoteMode on desktop, fall through to the shared mobile layout below */
 if(isDesktop&&view!=="add"&&!selCust&&!quoteMode){
 const dkNote=dispNotes[emDk]||"";
@@ -3148,9 +3217,9 @@ return(
 
 {/* Message popup notification */}
 {msgPopup&&<div style={{position:"fixed",top:20,right:20,zIndex:1001,background:"#fff",border:"2px solid "+BRAND.main,borderRadius:16,padding:"14px 18px",boxShadow:"0 12px 40px rgba(30,91,146,0.25)",maxWidth:340,cursor:"pointer",animation:"slideDown 0.3s ease"}} onClick={()=>{setShowMsgPanel(true);setMsgPopup(null);}}>
-<div style={{display:"flex",alignItems:"center",gap:10}}>
+<div style={_s.flexC10}>
 <div style={{width:36,height:36,borderRadius:10,background:BRAND.main,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,color:"#fff",flexShrink:0}}>💬</div>
-<div style={{flex:1,minWidth:0}}>
+<div style={_s.f1m}>
 <div style={{fontSize:12,fontWeight:700,color:BRAND.main}}>{msgPopup.from}</div>
 <div style={{fontSize:13,color:"#1c1917",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{msgPopup.text}</div>
 <div style={{fontSize:10,color:"#a8a29e",marginTop:2}}>{msgPopup.time} · Tap to reply</div>
@@ -3165,14 +3234,14 @@ return(
 <div key={req.id} style={{background:"#fff",border:"2px solid #ea580c",borderRadius:14,padding:"14px 16px",boxShadow:"0 8px 32px rgba(234,88,12,0.2)",animation:"slideDown 0.3s ease"}}>
 <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
 <span style={{fontSize:20}}>🔄</span>
-<div style={{flex:1}}>
+<div style={_s.f1}>
 <div style={{fontSize:13,fontWeight:700,color:"#ea580c"}}>Liftgate Request</div>
 <div style={{fontSize:12,color:"#1c1917",fontWeight:600}}>{req.stop}</div>
-<div style={{fontSize:10,color:"#78716c"}}>From {req.driverName} at {req.time}</div>
+<div style={_s.sub}>From {req.driverName} at {req.time}</div>
 </div>
 </div>
 <div style={{fontSize:12,color:"#57534e",marginBottom:10}}>Apply $75 liftgate charge to this delivery?</div>
-<div style={{display:"flex",gap:6}}>
+<div style={_s.flexG6}>
 <button onClick={()=>approveLiftgate(req.id)} style={{flex:1,background:"#16a34a",color:"#fff",border:"none",borderRadius:8,padding:"8px",cursor:"pointer",fontSize:12,fontWeight:700}}>✓ Approve +$75</button>
 <button onClick={()=>denyLiftgate(req.id)} style={{flex:1,background:"#fef2f2",color:"#dc2626",border:"1px solid #fca5a5",borderRadius:8,padding:"8px",cursor:"pointer",fontSize:12,fontWeight:600}}>Deny</button>
 </div>
@@ -3183,7 +3252,7 @@ return(
 {/* \u2500\u2500 TOP BAR \u2500\u2500 */}
 <div style={{background:"#f7f7f6",borderBottom:"1px solid #e7e5e4",padding:"8px 28px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
 <div style={{display:"flex",alignItems:"center",gap:24}}>
-<div style={{display:"flex",alignItems:"center",gap:8}}>
+<div style={_s.flexC8}>
 <a href={window.location.pathname} onClick={e=>{e.preventDefault();setView("manifest");setSelCust(null);setQuoteMode(null);window.history.replaceState(null,"",window.location.pathname);window.scrollTo(0,0);}} style={{cursor:"pointer",display:"flex",alignItems:"center",gap:8}}>
 <img src={LOGO_URI} alt="Davis Delivery Service" style={{height:38,objectFit:"contain"}}/>
 </a>
@@ -3201,7 +3270,7 @@ return(
 {wo!==0&&<button onClick={()=>{setWo(0);setSd(()=>{const d=new Date().getDay();return d>=1&&d<=5?d-1:0;});}} style={{background:"#16a34a",border:"none",borderRadius:7,padding:"4px 14px",cursor:"pointer",fontSize:11,fontWeight:600,color:"#fff",marginLeft:2}}>Today</button>}
 </div>
 </div>
-<div style={{display:"flex",alignItems:"center",gap:10}}>
+<div style={_s.flexC10}>
 {view!=="manifest"&&<button onClick={()=>{setView("manifest");setSelCust(null);setQuoteMode(null);window.history.replaceState(null,"",window.location.pathname);window.scrollTo(0,0);}} style={{background:BRAND.main,border:"none",color:"#fff",borderRadius:8,padding:"7px 16px",cursor:"pointer",fontSize:12,fontWeight:700}}>{"← Dashboard"}</button>}
 {[{k:"daily",l:"Daily"},{k:"weekly",l:"Weekly"},{k:"routes",l:"Routes"},{k:"add",l:"+ Add"}].map(v=><button key={v.k} onClick={()=>{setView(v.k);setSelCust(null);setQuoteMode(null);if(v.k==="routes"){setRpInited(false);}}} style={{background:view===v.k?(v.k==="add"?"#16a34a":v.k==="routes"?"#d97706":BRAND.main):v.k==="add"?"#f0fdf4":v.k==="routes"?"#fffbeb":"#fff",border:view===v.k?"none":v.k==="add"?"1px solid #bbf7d0":v.k==="routes"?"1px solid #fde68a":"1px solid #e7e5e4",color:view===v.k?"#fff":v.k==="add"?"#16a34a":v.k==="routes"?"#d97706":"#57534e",borderRadius:8,padding:"7px 14px",cursor:"pointer",fontSize:12,fontWeight:600}}>{v.l}</button>)}
 <div style={{position:"relative"}}>
@@ -3254,18 +3323,18 @@ onMouseEnter={e=>{e.currentTarget.style.background="#f5f5f4";}} onMouseLeave={e=
 </div>
 </div>
 
-{/* ══════ ADVANCED ROUTE PLANNER ══════ */}
+{}
 {view==="routes"&&(dl.length===0
 ?<div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",background:"#f8f7f5"}}><div style={{textAlign:"center",color:"#a8a29e"}}><div style={{fontSize:48,marginBottom:12}}>🗺️</div><p style={{fontSize:16,fontWeight:600,margin:"0 0 8px"}}>No stops to route</p><p style={{fontSize:13,margin:0}}>Add deliveries via + Add, then build routes here.</p></div></div>
 :(()=>{
 /* rpOrders initialized via useEffect when Routes tab opens */
 
-/* ── Core data ── */
+
 const rpUnassigned=dl.filter(e=>!Object.values(rpOrders).flat().includes(e.id));
 const rpE=(id)=>dl.find(e=>e.id===id);
 const rpTotal=Object.values(rpOrders).reduce((s,ids)=>s+ids.length,0);
 
-/* ── Shared geo helpers ── */
+
 const rpC=(e)=>{if(!e)return null;const addr=e.addr||getAddr(e.stop);return getCoords(addr);};
 const rpO={lat:33.93,lng:-84.21};
 const rpD=(a,b)=>Math.sqrt(Math.pow(a.lat-b.lat,2)+Math.pow(a.lng-b.lng,2));
@@ -3280,10 +3349,10 @@ return{pu,tm,rg};
 };
 const rpSet=(drvId,sorted,msg)=>{setRpOrders(p=>({...p,[drvId]:sorted.map(e=>e.id)}));setRpOptMenu(null);showToast(msg);};
 
-/* ── Parse dueBy time to minutes ── */
+
 const rpParseTime=(db)=>{if(!db)return 9999;const m=db.match(/(\d{1,2})(?::(\d{2}))?\s*(AM|PM)/i);if(!m)return 9999;let h=parseInt(m[1]);const min=parseInt(m[2]||"0");const ap=(m[3]||"").toUpperCase();if(ap==="PM"&&h!==12)h+=12;if(ap==="AM"&&h===12)h=0;return h*60+min;};
 
-/* ══ 5 ROUTING ALGORITHMS ══ */
+
 
 /* 1. Closest → Furthest */
 const rpOptClose=(did)=>{const ids=rpOrders[did]||[];if(ids.length<2)return;const es=ids.map(id=>rpE(id)).filter(Boolean);const{pu,tm,rg}=rpSplit(es);
@@ -3312,7 +3381,7 @@ const rpOptRev=(did)=>{const ids=rpOrders[did]||[];if(ids.length<2)return;const 
 const np=es.filter(e=>!pu.includes(e));np.reverse();
 rpSet(did,[...pu,...np],"🔄 Route Reversed");};
 
-/* ── Route Planner actions ── */
+
 const rpClick=(entryId)=>{if(!rpActive)return;
 /* Find all entries at the same stop name + address */
 const entry=dl.find(e=>e.id===entryId);
@@ -3370,11 +3439,11 @@ return{...e,coords,driverId:ad,routeOrder:ro};}).filter(Boolean);
 
 const actColor=rpActive?DCOL[drivers.findIndex(d=>d.id===rpActive)]||BRAND.main:BRAND.main;
 
-/* ══ RENDER ══ */
+
 return(
 <div style={{display:"grid",gridTemplateColumns:"360px 1fr",gap:0,flex:1,overflow:"hidden",minHeight:0}}>
 
-{/* ═══ LEFT PANEL ═══ */}
+{}
 <div style={{background:"#fff",borderRight:"1px solid #e7e5e4",display:"flex",flexDirection:"column",overflow:"hidden"}}>
 
 {/* Header */}
@@ -3418,9 +3487,9 @@ style={{marginBottom:8,borderRadius:14,border:isAct?`2px solid ${DCOL[di]}`:"1px
 {/* Driver Header */}
 <div onClick={()=>{setRpActive(isAct?null:drv.id);setRpOptMenu(null);}}
 style={{padding:"12px 14px",cursor:"pointer",background:isAct?`linear-gradient(135deg, ${DCOL[di]}08, ${DCOL[di]}15)`:"#fafaf9",borderBottom:ids.length||isAct?"1px solid #e7e5e4":"none",transition:"background 0.15s"}}>
-<div style={{display:"flex",alignItems:"center",gap:10}}>
+<div style={_s.flexC10}>
 <div style={{width:36,height:36,borderRadius:10,background:`linear-gradient(135deg, ${DCOL[di]}, ${DCOL[di]}cc)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,color:"#fff",fontWeight:800,flexShrink:0,boxShadow:isAct?`0 3px 10px ${DCOL[di]}44`:"none"}}>{drv.name.charAt(0)}</div>
-<div style={{flex:1,minWidth:0}}>
+<div style={_s.f1m}>
 <div style={{display:"flex",alignItems:"center",gap:6}}>
 <span style={{fontSize:15,fontWeight:700,color:isAct?DCOL[di]:"#1c1917"}}>{drv.name}</span>
 {ids.length>0&&<span style={{fontSize:10,background:DCOL[di]+"18",color:DCOL[di],padding:"2px 8px",borderRadius:10,fontWeight:700}}>{ids.length}</span>}
@@ -3482,7 +3551,7 @@ return(<div key={id} draggable onDragStart={()=>setRpDragSrc({drvId:drv.id,idx:o
 style={{display:"flex",alignItems:"center",gap:6,padding:"6px 8px",marginBottom:2,borderRadius:9,background:isDOvr?"#dcfce7":isDSrc?"#fef9c3":"#fff",border:isDOvr?"2px dashed #16a34a":`1px solid ${isPU?"#bfdbfe":"#f5f5f4"}`,opacity:isDSrc?0.35:1,cursor:"grab",transition:"all 0.1s"}}>
 <div style={{width:22,height:22,borderRadius:7,background:`linear-gradient(135deg, ${DCOL[di]}, ${DCOL[di]}bb)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,color:"#fff",fontWeight:800,flexShrink:0}}>{oi+1}</div>
 <div style={{width:3,height:20,borderRadius:2,background:isPU?"#2563eb":c.accent,flexShrink:0}}/>
-<div style={{flex:1,minWidth:0}}>
+<div style={_s.f1m}>
 <div style={{fontSize:11,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.stop}</div>
 <div style={{display:"flex",alignItems:"center",gap:3,flexWrap:"wrap"}}>
 <span style={{fontSize:9,color:c.accent}}>{e.customer}</span>
@@ -3504,13 +3573,13 @@ Click stops on the map to build this route
 </div>}
 </div>);})}
 
-{/* ═ Unassigned Pool ═ */}
+{}
 <div style={{marginTop:4,borderRadius:14,border:rpUnassigned.length?"2px dashed #d97706":"1px solid #e7e5e4",overflow:"hidden"}}
 onDragOver={e=>e.preventDefault()}
 onDrop={()=>{if(rpDragSrc&&rpDragSrc.drvId!=="pool"){const eid=(rpOrders[rpDragSrc.drvId]||[])[rpDragSrc.idx];if(eid)rpRemove(eid,rpDragSrc.drvId);setRpDragSrc(null);setRpDragOver(null);}}}>
 <div onClick={()=>setRpShowUnassigned(!rpShowUnassigned)}
 style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 14px",cursor:"pointer",background:rpUnassigned.length?"linear-gradient(90deg, #fffbeb, #fef3c7)":"#fafaf9"}}>
-<div style={{display:"flex",alignItems:"center",gap:8}}>
+<div style={_s.flexC8}>
 <div style={{width:30,height:30,borderRadius:9,background:rpUnassigned.length?"linear-gradient(135deg, #d97706, #f59e0b)":"#a8a29e",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,color:"#fff",fontWeight:800}}>!</div>
 <div>
 <span style={{fontSize:13,fontWeight:700,color:rpUnassigned.length?"#92400e":"#78716c"}}>Unassigned Pool</span>
@@ -3524,7 +3593,7 @@ style={{display:"flex",alignItems:"center",justifyContent:"space-between",paddin
 <div key={e.id} draggable onDragStart={()=>setRpDragSrc({drvId:"pool",idx:e.id})}
 style={{display:"flex",alignItems:"center",gap:6,padding:"6px 8px",marginBottom:2,borderRadius:9,background:"#fff",border:"1px solid #f5f5f4",cursor:"grab"}}>
 <div style={{width:3,height:20,borderRadius:2,background:c.accent,flexShrink:0}}/>
-<div style={{flex:1,minWidth:0}}>
+<div style={_s.f1m}>
 <div style={{fontSize:11,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.stop}</div>
 <div style={{display:"flex",alignItems:"center",gap:3}}>
 <span style={{fontSize:9,color:c.accent}}>{e.customer}</span>
@@ -3549,15 +3618,15 @@ style={{width:"100%",background:rpTotal?"linear-gradient(135deg, #16a34a, #15803
 </div>
 </div>
 
-{/* ═══ RIGHT — GOOGLE MAP ═══ */}
+{}
 <div style={{position:"relative",background:"#e8e4df",overflow:"hidden",height:"100%",minHeight:0}}>
 {/* Active driver HUD */}
 {rpActive&&(()=>{const di2=drivers.findIndex(d=>d.id===rpActive);const dv=drivers.find(d=>d.id===rpActive);const ct=(rpOrders[rpActive]||[]).length;const st2=rpSt(rpActive);
 return(<div style={{position:"absolute",top:12,left:12,right:60,zIndex:5}}>
 <div style={{background:`linear-gradient(135deg, ${DCOL[di2]}, ${DCOL[di2]}dd)`,color:"#fff",borderRadius:14,padding:"12px 18px",boxShadow:`0 8px 32px ${DCOL[di2]}44`,display:"flex",alignItems:"center",gap:12}}>
 <div style={{width:34,height:34,borderRadius:10,background:"rgba(255,255,255,0.2)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,fontWeight:800,flexShrink:0}}>{dv?.name?.charAt(0)}</div>
-<div style={{flex:1}}>
-<div style={{fontSize:14,fontWeight:700}}>{dv?.name}'s Route</div>
+<div style={_s.f1}>
+<div style={_s.bold14}>{dv?.name}'s Route</div>
 <div style={{fontSize:11,opacity:0.85}}>{ct} stop{ct!==1?"s":""}{st2.miles>0?` · ~${st2.miles}mi`:""}{st2.rev>0?" · "+fmt(st2.rev):""} — click map to add</div>
 </div>
 </div>
@@ -3585,15 +3654,15 @@ activeDriver={rpActive} onStopClick={rpClick} onAssignStop={rpActive?(sid)=>rpCl
 </div>);
 })()
 )}
-{/* ── NON-MANIFEST DESKTOP VIEWS (scrollable) ── */}
+{}
 {(view==="daily"||view==="weekly"||view==="history")&&(
 <div style={{flex:1,overflowY:"auto",padding:"24px 40px",background:"#f8f7f5"}}>
 
 {/* Daily */}
 {view==="daily"&&<div style={{maxWidth:900,margin:"0 auto"}}>
-<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+<div style={_s.flexBtwMb16}>
 <h2 style={{margin:0,fontSize:18,fontWeight:700}}>{wd[sd].name} — {wd[sd].date}</h2>
-<div style={{display:"flex",alignItems:"center",gap:10}}>
+<div style={_s.flexC10}>
 {dl.length>0&&<button onClick={printDailyLog} style={{background:"#e7e5e4",border:"none",borderRadius:8,padding:"6px 12px",cursor:"pointer",fontSize:12,fontWeight:600,color:"#57534e"}}>Print</button>}
 <span style={{fontSize:18,fontWeight:700,color:"#16a34a",fontVariantNumeric:"tabular-nums"}}>{fmt(dc.total)}</span>
 </div>
@@ -3645,7 +3714,7 @@ return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius
 <span style={{fontSize:10,color:"#78716c",marginLeft:"auto"}}>Long-distance run</span>
 </div>}
 {!totalMins&&<div style={{fontSize:11,color:"#64748b",marginBottom:8}}>💡 Log shifts in History → ⏱ Emser Hours for auto-calculation</div>}
-<div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+<div style={_s.flexBtw}>
 <span style={{fontSize:12,color:"#64748b"}}>{hoursUsed}h × $102.50</span>
 <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
 {[4,5,6,7,8,9,10].map(h=><button key={h} onClick={()=>setEmH(p=>({...p,[`${emDk}-emser`]:h}))} style={{width:32,height:30,borderRadius:8,border:"none",cursor:"pointer",fontSize:13,fontWeight:600,background:hoursUsed===h&&!totalMins?"#2563eb":"#e7e5e4",color:hoursUsed===h&&!totalMins?"#fff":"#78716c"}}>{h}</button>)}
@@ -3654,7 +3723,7 @@ return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius
 {showCustomHrs&&<div style={{display:"flex",gap:6,alignItems:"center",marginTop:8}}><input value={customHrsInput} onChange={e=>setCustomHrsInput(e.target.value)} placeholder="e.g. 4.5" type="number" inputMode="decimal" step="0.25" min="1" style={{width:80,border:"1px solid #bfdbfe",borderRadius:8,padding:"6px 10px",fontSize:14,fontWeight:700,outline:"none",textAlign:"center"}}/><span style={{fontSize:12,color:"#64748b"}}>hrs</span><button onClick={()=>{const v=parseFloat(customHrsInput);if(v>0){setEmH(p=>({...p,[`${emDk}-emser`]:v}));setShowCustomHrs(false);setCustomHrsInput("");}}} style={{background:"#2563eb",color:"#fff",border:"none",borderRadius:8,padding:"6px 14px",fontSize:12,fontWeight:600,cursor:"pointer"}}>Set</button></div>}
 </div>);})()}
 {/* Entry list */}
-{dl.length===0?<div style={{textAlign:"center",padding:"60px 20px",color:"#a8a29e"}}><div style={{fontSize:40,marginBottom:12}}>🚚</div><p style={{fontSize:14,margin:0}}>No deliveries logged for this day</p></div>
+{dl.length===0?<div style={_s.emptyState2}><div style={{fontSize:40,marginBottom:12}}>🚚</div><p style={{fontSize:14,margin:0}}>No deliveries logged for this day</p></div>
 :<div style={{display:"flex",flexDirection:"column",gap:8}}>
 {dl.filter(e=>e.stopType!=="pickup").map(entry=>{const c=getCustColor(entry.customer);const drv=drivers.find(d=>d.id===entry.driverId);const di=drivers.findIndex(d=>d.id===entry.driverId);const done=entry.status==="departed";const onSite=entry.status==="arrived";const isImetco=entry.customer==="IMETCO";return(
 <div key={entry.id} style={{background:"#fff",border:"1px solid #e7e5e4",borderRadius:12,padding:"12px 14px",borderLeft:`4px solid ${entry.priority?"#f59e0b":c.accent}`}}>
@@ -3662,9 +3731,9 @@ return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius
 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
 <div style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap",flex:1}}>
 <span style={{fontSize:11,fontWeight:600,color:c.accent,textTransform:"uppercase"}}>{entry.customer}</span>
-{entry.priority&&<span style={{fontSize:9,background:"#f59e0b",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700}}>PRIORITY</span>}
-{done&&<span style={{fontSize:9,background:"#16a34a",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700}}>DONE</span>}
-{onSite&&!done&&<span style={{fontSize:9,background:"#f59e0b",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700}}>ON SITE</span>}
+{entry.priority&&<span style={_s.tag9Amber}>PRIORITY</span>}
+{done&&<span style={_s.tag9Green}>DONE</span>}
+{onSite&&!done&&<span style={_s.tag9Amber}>ON SITE</span>}
 {entry.dueBy&&<span style={{fontSize:9,background:entry.dueBy.includes("-")?"#7c3aed":entry.dueBy.startsWith("After")?"#2563eb":"#dc2626",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700}}>⏰ {entry.dueBy}</span>}
 {drv&&<span style={{fontSize:9,background:DCOL[di]||"#78716c",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:600}}>{drv.name.split(" ")[0]}</span>}
 </div>
@@ -3672,7 +3741,7 @@ return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius
 </div>
 {/* Stop name + details */}
 <div style={{fontSize:15,fontWeight:600,marginBottom:2}}>{entry.stop}</div>
-{entry.addr&&<div style={{fontSize:11,color:"#78716c"}}>{entry.addr}</div>}
+{entry.addr&&<div style={_s.sub11}>{entry.addr}</div>}
 {entry.instructions&&<div style={{fontSize:11,color:"#2563eb",marginTop:3,background:"#eff6ff",padding:"4px 8px",borderRadius:6}}>📋 {entry.instructions}</div>}
 {entry.shipPlan&&<div style={{fontSize:11,color:"#ea580c",fontWeight:700,marginTop:2}}>SP# {entry.shipPlan}</div>}
 {entry.weight>0&&<div style={{fontSize:11,color:BRAND.main,fontWeight:700,marginTop:2}}>{entry.weight.toLocaleString()} lbs{entry.wasSplit?" (Load "+entry.loadNum+")":""}</div>}
@@ -3689,12 +3758,12 @@ return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius
 {splitEntry?.id===entry.id&&<div style={{marginTop:8,background:"#eff6ff",border:"2px solid #2563eb",borderRadius:10,padding:14}}>
 <div style={{fontSize:13,fontWeight:700,color:"#1e40af",marginBottom:10}}>✂ Split Shipment</div>
 {(()=>{const tw=splitEntry.totalWeight||0;const t1w=splitEntry.truck1Weight!==undefined?splitEntry.truck1Weight:Math.round(tw*(splitEntry.ratio/100));const t2w=tw-t1w;return(<>
-<div style={{display:"flex",gap:6,marginBottom:6,alignItems:"center"}}>
-<div style={{flex:1}}><label style={{fontSize:9,fontWeight:600,color:"#57534e",display:"block",marginBottom:2}}>Total</label><input type="number" inputMode="numeric" value={tw||""} onChange={e=>{const newTw=parseInt(e.target.value)||0;setSplitEntry(p=>({...p,totalWeight:newTw,truck1Weight:Math.min(p.truck1Weight||Math.round(newTw/2),newTw)}));}} style={{width:"100%",border:"1px solid #bfdbfe",borderRadius:6,padding:"5px 8px",fontSize:13,fontWeight:700,outline:"none",textAlign:"center"}}/></div>
-<div style={{flex:1}}><label style={{fontSize:9,fontWeight:600,color:"#2563eb",display:"block",marginBottom:2}}>Truck 1</label><input type="number" inputMode="numeric" value={splitEntry.truck1Weight!==undefined?splitEntry.truck1Weight:""} onChange={e=>{const v=e.target.value;setSplitEntry(p=>({...p,truck1Weight:v===""?0:parseInt(v)||0}));}} style={{width:"100%",border:"2px solid #2563eb",borderRadius:6,padding:"5px 8px",fontSize:13,fontWeight:700,outline:"none",textAlign:"center",background:"#eff6ff"}}/></div>
-<div style={{flex:1}}><label style={{fontSize:9,fontWeight:600,color:"#78716c",display:"block",marginBottom:2}}>Truck 2</label><div style={{border:"1px solid #e7e5e4",borderRadius:6,padding:"5px 8px",fontSize:13,fontWeight:700,textAlign:"center",background:"#f5f5f4",color:"#57534e"}}>{t2w.toLocaleString()}</div></div>
+<div style={_s.flexG6Mb6}>
+<div style={_s.f1}><label style={_s.labelSm}>Total</label><input type="number" inputMode="numeric" value={tw||""} onChange={e=>{const newTw=parseInt(e.target.value)||0;setSplitEntry(p=>({...p,totalWeight:newTw,truck1Weight:Math.min(p.truck1Weight||Math.round(newTw/2),newTw)}));}} style={_s.splitTotal}/></div>
+<div style={_s.f1}><label style={_s.labelBlue}>Truck 1</label><input type="number" inputMode="numeric" value={splitEntry.truck1Weight!==undefined?splitEntry.truck1Weight:""} onChange={e=>{const v=e.target.value;setSplitEntry(p=>({...p,truck1Weight:v===""?0:parseInt(v)||0}));}} style={_s.splitInput}/></div>
+<div style={_s.f1}><label style={_s.labelGray}>Truck 2</label><div style={_s.splitT2}>{t2w.toLocaleString()}</div></div>
 </div>
-<input type="range" min={0} max={tw} step={100} value={t1w} onChange={e=>{const v=parseInt(e.target.value)||0;setSplitEntry(p=>({...p,truck1Weight:v}));}} style={{width:"100%",accentColor:"#2563eb",marginBottom:6}}/>
+<input type="range" min={0} max={tw} step={100} value={t1w} onChange={e=>{const v=parseInt(e.target.value)||0;setSplitEntry(p=>({...p,truck1Weight:v}));}} style={_s.slider}/>
 </>);})()}
 <div style={{display:"flex",gap:8}}>
 <button onClick={()=>confirmSplit(entry.id,splitEntry.totalWeight,splitEntry.ratio,splitEntry.truck1Weight)} style={{flex:1,background:"#2563eb",color:"#fff",border:"none",borderRadius:8,padding:"10px",fontSize:13,fontWeight:700,cursor:"pointer"}}>✂ Split into 2 Loads</button>
@@ -3707,7 +3776,7 @@ return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius
 </div>}
 </div>);})}
 </div>}
-{Object.keys(dc.fBC).length>0&&<div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:12,padding:"14px 16px",marginTop:12}}><div style={{fontSize:12,fontWeight:700,color:"#d97706",textTransform:"uppercase",marginBottom:8}}>Fuel Surcharges</div>{Object.entries(dc.fBC).map(([cu,cf])=><div key={cu} style={{display:"flex",justifyContent:"space-between",padding:"4px 0"}}><span style={{fontSize:13}}>{cu} <span style={{fontSize:11,color:"#a8a29e"}}>{fmt(cf.base)} × {Math.round(cf.pct*100)}%</span></span><span style={{fontSize:14,fontWeight:700,color:"#d97706",fontVariantNumeric:"tabular-nums"}}>{fmt(cf.base*cf.pct)}</span></div>)}</div>}
+{Object.keys(dc.fBC).length>0&&<div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:12,padding:"14px 16px",marginTop:12}}><div style={_s.loadTitle}>Fuel Surcharges</div>{Object.entries(dc.fBC).map(([cu,cf])=><div key={cu} style={_s.flexBtwP4}><span style={{fontSize:13}}>{cu} <span style={{fontSize:11,color:"#a8a29e"}}>{fmt(cf.base)} × {Math.round(cf.pct*100)}%</span></span><span style={_s.loadWeight}>{fmt(cf.base*cf.pct)}</span></div>)}</div>}
 <div style={{display:"flex",justifyContent:"space-between",padding:"16px 4px 0",borderTop:"2px solid #bbf7d0",marginTop:16}}><span style={{fontSize:15,fontWeight:700,color:"#57534e"}}>Day Total</span><span style={{fontSize:22,fontWeight:700,color:"#16a34a",fontVariantNumeric:"tabular-nums"}}>{fmt(dc.total)}</span></div>
 </div>}
 
@@ -3715,7 +3784,7 @@ return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius
 {view==="weekly"&&<div style={{maxWidth:860,margin:"0 auto"}}>
 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
 <h2 style={{margin:0,fontSize:18,fontWeight:700}}>Weekly Summary</h2>
-<div style={{display:"flex",alignItems:"center",gap:10}}>
+<div style={_s.flexC10}>
 <button onClick={printWeekly} style={{background:"#e7e5e4",border:"none",borderRadius:8,padding:"6px 12px",cursor:"pointer",fontSize:12,fontWeight:600,color:"#57534e"}}>Print</button>
 <span style={{fontSize:20,fontWeight:700,color:"#16a34a",fontVariantNumeric:"tabular-nums"}}>{fmt(wkT)}</span>
 </div>
@@ -3750,15 +3819,15 @@ return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius
 </div>);})}
 </div>
 <div style={{display:"flex",justifyContent:"center",gap:14,marginTop:8}}>
-<div style={{display:"flex",alignItems:"center",gap:4}}><div style={{width:10,height:10,borderRadius:2,background:"#d6d3d1"}}/><span style={{fontSize:10,color:"#a8a29e"}}>Last week</span></div>
-<div style={{display:"flex",alignItems:"center",gap:4}}><div style={{width:10,height:10,borderRadius:2,background:"#16a34a"}}/><span style={{fontSize:10,color:"#a8a29e"}}>This week</span></div>
+<div style={_s.flexC4}><div style={{width:10,height:10,borderRadius:2,background:"#d6d3d1"}}/><span style={{fontSize:10,color:"#a8a29e"}}>Last week</span></div>
+<div style={_s.flexC4}><div style={{width:10,height:10,borderRadius:2,background:"#16a34a"}}/><span style={{fontSize:10,color:"#a8a29e"}}>This week</span></div>
 </div>
 </div>
 {/* Week fuel */}
-{Object.keys(wkF).length>0&&<div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:14,padding:"14px 16px",marginBottom:16}}><div style={{fontSize:12,fontWeight:700,color:"#d97706",textTransform:"uppercase",marginBottom:8}}>Week Fuel Surcharges</div>{Object.entries(wkF).map(([cu,cf])=><div key={cu} style={{display:"flex",justifyContent:"space-between",padding:"4px 0"}}><span style={{fontSize:13}}>{cu} <span style={{fontSize:11,color:"#a8a29e"}}>{fmt(cf.base)} × {Math.round(cf.pct*100)}%</span></span><span style={{fontSize:14,fontWeight:700,color:"#d97706",fontVariantNumeric:"tabular-nums"}}>{fmt(cf.base*cf.pct)}</span></div>)}</div>}
+{Object.keys(wkF).length>0&&<div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:14,padding:"14px 16px",marginBottom:16}}><div style={_s.loadTitle}>Week Fuel Surcharges</div>{Object.entries(wkF).map(([cu,cf])=><div key={cu} style={_s.flexBtwP4}><span style={{fontSize:13}}>{cu} <span style={{fontSize:11,color:"#a8a29e"}}>{fmt(cf.base)} × {Math.round(cf.pct*100)}%</span></span><span style={_s.loadWeight}>{fmt(cf.base*cf.pct)}</span></div>)}</div>}
 {/* Day-by-day breakdown */}
 {DAYS.map((day,i)=>{const{entries,calc}=wkD[i];const dayKey=`${wo}-${i}`;const{byDriver:shiftByDrv,totalMins:shiftMins}=getShiftSummary(getFbKey(wo,i));if(!entries.length&&!shiftMins)return null;return(<div key={day} style={{marginBottom:14}}>
-<div style={{display:"flex",justifyContent:"space-between",padding:"8px 4px",borderBottom:"1px solid #e7e5e4",marginBottom:6}}><span style={{fontSize:14,fontWeight:700}}>{day} — {wd[i].date}</span><span style={{fontVariantNumeric:"tabular-nums",fontWeight:700,color:"#16a34a",fontSize:14}}>{fmt(calc.total)}</span></div>
+<div style={{display:"flex",justifyContent:"space-between",padding:"8px 4px",borderBottom:"1px solid #e7e5e4",marginBottom:6}}><span style={_s.bold14}>{day} — {wd[i].date}</span><span style={{fontVariantNumeric:"tabular-nums",fontWeight:700,color:"#16a34a",fontSize:14}}>{fmt(calc.total)}</span></div>
 {shiftMins>0&&<div style={{display:"flex",alignItems:"center",gap:6,padding:"5px 8px 5px 14px",borderLeft:"3px solid #2563eb",marginBottom:3,background:"#eff6ff",borderRadius:"0 8px 8px 0",flexWrap:"wrap"}}>
 <span style={{fontSize:11,color:"#2563eb",fontWeight:700,flexShrink:0}}>⏱ Emser</span>
 {drivers.map((drv,di)=>{const mins=shiftByDrv[drv.id]||0;if(!mins)return null;const initials=drv.name.split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase();return(<span key={drv.id} style={{fontSize:11,background:DCOL[di],color:"#fff",padding:"1px 6px",borderRadius:4,fontWeight:600}}>{initials} {formatMins(mins)}</span>);})}
@@ -3767,16 +3836,16 @@ return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius
 {entries.filter(e=>e.stopType!=="pickup").map(entry=>{const c=getCustColor(entry.customer);const drv=drivers.find(d=>d.id===entry.driverId);const di2=drivers.findIndex(d=>d.id===entry.driverId);return(<div key={entry.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"5px 8px 5px 14px",borderLeft:`3px solid ${c.accent}`,marginBottom:3,background:"#fff",borderRadius:"0 8px 8px 0"}}>
 <div style={{display:"flex",alignItems:"center",gap:6,flex:1,minWidth:0}}>
 <span style={{fontSize:11,color:c.accent,fontWeight:600,flexShrink:0}}>{entry.customer}</span>
-<span style={{fontSize:12,color:"#57534e",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{entry.stop}</span>
+<span style={_s.truncate}>{entry.stop}</span>
 {entry.shipPlan&&<span style={{fontSize:10,color:"#ea580c",fontWeight:700,flexShrink:0}}>SP#{entry.shipPlan}</span>}
 {drv&&<span style={{fontSize:9,background:DCOL[di2]||"#78716c",color:"#fff",padding:"1px 4px",borderRadius:3,fontWeight:600,flexShrink:0}}>{drv.name.split(" ")[0]}</span>}
 </div>
 <InlineRate value={entry.baseRate} isHourly={entry.isHourly} onSave={r=>updateRate(entry.id,r)}/>
 </div>);})}
 </div>);})}
-{wkD.every(d=>!d.entries.length)&&<div style={{textAlign:"center",padding:"60px 20px",color:"#a8a29e"}}><p>No deliveries this week</p></div>}
+{wkD.every(d=>!d.entries.length)&&<div style={_s.emptyState2}><p>No deliveries this week</p></div>}
 {(()=>{const wkShiftByDrv={};let wkShiftTotal=0;DAYS.forEach((_,i)=>{const{byDriver,totalMins}=getShiftSummary(getFbKey(wo,i));wkShiftTotal+=totalMins;Object.entries(byDriver).forEach(([did,mins])=>{wkShiftByDrv[did]=(wkShiftByDrv[did]||0)+mins;});});if(!wkShiftTotal)return null;const wkShiftHrs=Math.round(wkShiftTotal/15)*15/60;return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:14,padding:"16px 18px",marginBottom:16}}>
-<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+<div style={_s.flexBtwMb10}>
 <span style={{fontSize:14,fontWeight:700,color:"#2563eb"}}>⏱ Week Emser Hours</span>
 <span style={{fontSize:18,fontWeight:700,fontVariantNumeric:"tabular-nums",color:"#1d4ed8"}}>{fmt(102.50*wkShiftHrs)}</span>
 </div>
@@ -3788,10 +3857,10 @@ return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius
 </div>
 <div style={{fontSize:12,color:"#64748b"}}>{formatMins(wkShiftTotal)} total · $102.50/hr</div>
 </div>);})()}
-{Object.keys(wkF).length>0&&<div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:14,padding:"14px 16px",marginBottom:16}}><div style={{fontSize:12,fontWeight:700,color:"#d97706",textTransform:"uppercase",marginBottom:8}}>Week Fuel Surcharges</div>{Object.entries(wkF).map(([cu,cf])=><div key={cu} style={{display:"flex",justifyContent:"space-between",padding:"4px 0"}}><span style={{fontSize:13}}>{cu} <span style={{fontSize:11,color:"#a8a29e"}}>{fmt(cf.base)} × {Math.round(cf.pct*100)}%</span></span><span style={{fontSize:14,fontWeight:700,color:"#d97706",fontVariantNumeric:"tabular-nums"}}>{fmt(cf.base*cf.pct)}</span></div>)}</div>}
+{Object.keys(wkF).length>0&&<div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:14,padding:"14px 16px",marginBottom:16}}><div style={_s.loadTitle}>Week Fuel Surcharges</div>{Object.entries(wkF).map(([cu,cf])=><div key={cu} style={_s.flexBtwP4}><span style={{fontSize:13}}>{cu} <span style={{fontSize:11,color:"#a8a29e"}}>{fmt(cf.base)} × {Math.round(cf.pct*100)}%</span></span><span style={_s.loadWeight}>{fmt(cf.base*cf.pct)}</span></div>)}</div>}
 </div>}
 {view==="history"&&<div style={{maxWidth:1000,margin:"0 auto"}}>
-<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+<div style={_s.flexBtwMb16}>
 <h2 style={{margin:0,fontSize:18,fontWeight:700}}>Delivery History</h2>
 </div>
 {/* Mode toggle */}
@@ -3809,7 +3878,7 @@ const totalHrs=Math.round(totalMins/15)*15/60;
 const perDriver={};shifts.forEach(s=>{if(!perDriver[s.driverId])perDriver[s.driverId]=0;perDriver[s.driverId]+=calcShiftMins(s);});
 const TIME_PRESETS=["7:00 AM","8:00 AM","9:00 AM","10:00 AM","11:00 AM","12:00 PM","1:00 PM","2:00 PM","3:00 PM","4:00 PM","5:00 PM"];
 return(<div>
-<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+<div style={_s.flexBtwMb16}>
 <span style={{fontSize:15,fontWeight:700}}>{wd[sd].name} — {wd[sd].date}</span>
 <div style={{textAlign:"right"}}>
 <div style={{fontSize:22,fontWeight:800,color:BRAND.main,fontVariantNumeric:"tabular-nums"}}>{totalMins>0?formatMins(totalMins):(emH[`${emDk}-emser`]||4)+"h"}</div>
@@ -3822,9 +3891,9 @@ const drvShifts=shifts.filter(s=>s.driverId===drv.id);
 const drvMins=perDriver[drv.id]||0;
 return(<div key={drv.id} style={{background:"#fff",border:"1px solid #e7e5e4",borderRadius:14,padding:"14px 16px",borderLeft:`3px solid ${DCOL[di]}`}}>
 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:drvShifts.length?10:0}}>
-<div style={{display:"flex",alignItems:"center",gap:8}}>
+<div style={_s.flexC8}>
 <div style={{width:24,height:24,borderRadius:7,background:DCOL[di],display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,color:"#fff",fontWeight:700}}>{drv.name.charAt(0)}</div>
-<span style={{fontSize:14,fontWeight:700}}>{drv.name}</span>
+<span style={_s.bold14}>{drv.name}</span>
 {drvMins>0&&<span style={{fontSize:13,fontWeight:700,color:BRAND.main}}>{formatMins(drvMins)}</span>}
 </div>
 <button onClick={()=>addEmserShift(drv.id)} style={{background:BRAND.pale,border:"1px solid "+BRAND.light,borderRadius:6,padding:"4px 12px",cursor:"pointer",fontSize:12,fontWeight:600,color:BRAND.main}}>+ Shift</button>
@@ -3844,7 +3913,7 @@ const MINS=[{l:":00",v:"00"},{l:":15",v:"15"},{l:":30",v:"30"},{l:":45",v:"45"}]
 const btnBase={padding:"3px 0",borderRadius:4,border:"none",cursor:"pointer",fontSize:9,fontWeight:700,textAlign:"center"};
 return(
 <div key={shift.id} style={{background:"#fafaf9",border:"1px solid #e7e5e4",borderRadius:10,padding:"10px 12px",marginBottom:8}}>
-<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+<div style={_s.flexBtwMb8}>
 <span style={{fontSize:11,fontWeight:600,color:"#57534e"}}>Shift {si+1}</span>
 <div style={{display:"flex",alignItems:"center",gap:6}}>
 {mins>0&&<span style={{fontSize:12,fontWeight:700,color:BRAND.main}}>{formatMins(mins)}</span>}
@@ -3853,10 +3922,10 @@ return(
 </div>
 <div style={{display:"flex",gap:12}}>
 {/* Start column */}
-<div style={{flex:1}}>
+<div style={_s.f1}>
 <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
 <label style={{fontSize:10,fontWeight:700,color:BRAND.main,width:28,flexShrink:0}}>Start</label>
-<div style={{flex:1,border:"1px solid #bfdbfe",borderRadius:7,padding:"4px 8px",fontSize:13,fontWeight:700,background:shift.start?"#eff6ff":"#fafaf9",color:shift.start?"#1c1917":"#a8a29e",minHeight:22,display:"flex",alignItems:"center"}}>{shift.start?((h)=>{const[hh,mm]=h.split(":");const n=parseInt(hh);const ampm=n>=12?"PM":"AM";const d=n===0?12:n>12?n-12:n;return d+":"+mm+" "+ampm;})(shift.start):"—"}{shift.start&&<button onClick={()=>updateEmserShift(shift.id,"start","")} style={{marginLeft:"auto",background:"none",border:"none",color:"#dc2626",fontSize:10,cursor:"pointer",padding:"0 2px"}}>✕</button>}</div>
+<div style={{flex:1,border:"1px solid #bfdbfe",borderRadius:7,padding:"4px 8px",fontSize:13,fontWeight:700,background:shift.start?"#eff6ff":"#fafaf9",color:shift.start?"#1c1917":"#a8a29e",minHeight:22,display:"flex",alignItems:"center"}}>{shift.start?((h)=>{const[hh,mm]=h.split(":");const n=parseInt(hh);const ampm=n>=12?"PM":"AM";const d=n===0?12:n>12?n-12:n;return d+":"+mm+" "+ampm;})(shift.start):"—"}{shift.start&&<button onClick={()=>updateEmserShift(shift.id,"start","")} style={_s.delBtn}>✕</button>}</div>
 </div>
 <div style={{display:"flex",gap:2,paddingLeft:34}}>
 {HOURS.map(h=>{const sel=startDispHour===h&&!!shift.start;return(<button key={h} onClick={()=>setHour("start",h)} style={{...btnBase,flex:1,background:sel?BRAND.main:"#e7e5e4",color:sel?"#fff":"#44403c"}}>{h}</button>);})}
@@ -3866,10 +3935,10 @@ return(
 </div>
 </div>
 {/* End column */}
-<div style={{flex:1}}>
+<div style={_s.f1}>
 <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
 <label style={{fontSize:10,fontWeight:700,color:"#16a34a",width:28,flexShrink:0}}>End</label>
-<div style={{flex:1,border:"1px solid #bbf7d0",borderRadius:7,padding:"4px 8px",fontSize:13,fontWeight:700,background:shift.end?"#f0fdf4":"#fafaf9",color:shift.end?"#1c1917":"#a8a29e",minHeight:22,display:"flex",alignItems:"center"}}>{shift.end?((h)=>{const[hh,mm]=h.split(":");const n=parseInt(hh);const ampm=n>=12?"PM":"AM";const d=n===0?12:n>12?n-12:n;return d+":"+mm+" "+ampm;})(shift.end):"—"}{shift.end&&<button onClick={()=>updateEmserShift(shift.id,"end","")} style={{marginLeft:"auto",background:"none",border:"none",color:"#dc2626",fontSize:10,cursor:"pointer",padding:"0 2px"}}>✕</button>}</div>
+<div style={{flex:1,border:"1px solid #bbf7d0",borderRadius:7,padding:"4px 8px",fontSize:13,fontWeight:700,background:shift.end?"#f0fdf4":"#fafaf9",color:shift.end?"#1c1917":"#a8a29e",minHeight:22,display:"flex",alignItems:"center"}}>{shift.end?((h)=>{const[hh,mm]=h.split(":");const n=parseInt(hh);const ampm=n>=12?"PM":"AM";const d=n===0?12:n>12?n-12:n;return d+":"+mm+" "+ampm;})(shift.end):"—"}{shift.end&&<button onClick={()=>updateEmserShift(shift.id,"end","")} style={_s.delBtn}>✕</button>}</div>
 </div>
 <div style={{display:"flex",gap:2,paddingLeft:34}}>
 {HOURS.map(h=>{const sel=endDispHour===h&&!!shift.end;return(<button key={h} onClick={()=>setHour("end",h)} style={{...btnBase,flex:1,background:sel?"#16a34a":"#e7e5e4",color:sel?"#fff":"#44403c"}}>{h}</button>);})}
@@ -3894,7 +3963,7 @@ return(
 const photosAll=[];
 histFiltered.forEach(e=>{if(e.photos&&e.photos.length>0){e.photos.forEach((p,pi)=>photosAll.push({src:p,stop:e.stop,customer:e.customer,dayName:e.dayName,dayDate:e.dayDate,signature:e.signature,id:e.id+"-"+pi}));}});
 return(<div>
-<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+<div style={_s.flexBtwMb12}>
 <span style={{fontSize:13,color:"#78716c"}}>{photosAll.length} photo{photosAll.length!==1?"s":""}</span>
 {(histSearch||histCustFilter||histDrvFilter)&&<button onClick={()=>{setHistSearch("");setHistCustFilter("");setHistDrvFilter("");}} style={{background:"#fef2f2",border:"none",borderRadius:6,padding:"4px 10px",cursor:"pointer",fontSize:11,color:"#dc2626",fontWeight:600}}>Clear filters</button>}
 </div>
@@ -3908,7 +3977,7 @@ return(<div>
 <option value={2}>2 weeks</option><option value={4}>4 weeks</option><option value={8}>8 weeks</option><option value={12}>12 weeks</option>
 </select>
 </div>
-{photosAll.length===0?<div style={{textAlign:"center",padding:"60px 20px",color:"#a8a29e"}}><div style={{fontSize:40,marginBottom:12}}>📷</div><p style={{fontSize:14,fontWeight:600,margin:"0 0 4px"}}>No photos found</p></div>
+{photosAll.length===0?<div style={_s.emptyState2}><div style={{fontSize:40,marginBottom:12}}>📷</div><p style={{fontSize:14,fontWeight:600,margin:"0 0 4px"}}>No photos found</p></div>
 :<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(160px,1fr))",gap:10}}>
 {photosAll.map(photo=>{const c=CC[photo.customer]||CC["One-Off Delivery"];return(
 <div key={photo.id} onClick={()=>setLightboxPhoto(photo)} style={{cursor:"pointer",borderRadius:10,overflow:"hidden",border:"1px solid #e7e5e4",background:"#fff"}}>
@@ -3931,7 +4000,7 @@ return(<div>
 const allCustNames=[...Object.keys(CUSTOMERS),...QUOTE_CUSTOMERS.map(q=>q.name),"One-Off Delivery"];
 const getDeliveries=(custName)=>{const cd=CUSTOMERS[custName];if(!cd)return[];return cd.deliveries.map(d=>typeof d==="string"?{s:d,r:0}:d);};
 return(<div>
-<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+<div style={_s.flexBtwMb16}>
 <div><span style={{fontSize:15,fontWeight:700}}>Saved Quotes</span><span style={{fontSize:12,color:"#a8a29e",marginLeft:8}}>{savedQuotes.length} total</span></div>
 <button onClick={()=>setQuoteFormOpen(!quoteFormOpen)} style={{background:"#16a34a",color:"#fff",border:"none",borderRadius:10,padding:"8px 18px",cursor:"pointer",fontSize:13,fontWeight:700}}>{quoteFormOpen?"Cancel":"+ New Quote"}</button>
 </div>
@@ -3939,20 +4008,20 @@ return(<div>
 <div style={{fontSize:14,fontWeight:700,color:"#16a34a",marginBottom:14}}>New Quote</div>
 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
 <div>
-<label style={{fontSize:11,fontWeight:600,color:"#57534e",display:"block",marginBottom:4}}>Customer</label>
+<label style={_s.label}>Customer</label>
 <select value={qCust} onChange={e=>{setQCust(e.target.value);setQStop("");setQPickup("");setQCustomMode(false);}} style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px",fontSize:13,outline:"none",background:"#fff"}}>
 <option value="">Select customer...</option>{allCustNames.map(c=><option key={c} value={c}>{c}</option>)}<option value="__manual">Manual Entry</option>
 </select>
 </div>
 {(()=>{const qc=QUOTE_CUSTOMERS.find(q=>q.name===qCust);if(qc&&qc.pickups&&qc.pickups.length>1)return(<div style={{gridColumn:"1 / -1",marginBottom:4}}>
 <label style={{fontSize:11,fontWeight:600,color:qPickup?"#57534e":"#dc2626",display:"block",marginBottom:4}}>⚠ Pickup Location</label>
-<div style={{display:"flex",gap:6}}>
+<div style={_s.flexG6}>
 {qc.pickups.map(p=><button key={p.label} onClick={()=>setQPickup(p.label)} style={{padding:"8px 16px",borderRadius:8,border:qPickup===p.label?"2px solid #2563eb":"2px solid #e7e5e4",cursor:"pointer",fontSize:13,fontWeight:700,background:qPickup===p.label?"#2563eb":"#fff",color:qPickup===p.label?"#fff":"#57534e"}}>{p.label}</button>)}
 </div>
 {qPickup&&<div style={{fontSize:11,color:"#78716c",marginTop:4}}>{qc.pickups.find(p=>p.label===qPickup)?.addr}</div>}
 </div>);return null;})()}
 <div>
-<label style={{fontSize:11,fontWeight:600,color:"#57534e",display:"block",marginBottom:4}}>Delivery To</label>
+<label style={_s.label}>Delivery To</label>
 {qCust&&qCust!=="__manual"&&getDeliveries(qCust).length>0&&qStop!=="__custom"&&!qCustomMode?
 <select value={qStop} onChange={e=>{if(e.target.value==="__custom"){setQStop("");setQCustomMode(true);}else{setQStop(e.target.value);setQCustomMode(false);}}} style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px",fontSize:13,outline:"none",background:"#fff"}}>
 <option value="">Select stop...</option>{getDeliveries(qCust).map(d=><option key={d.s} value={d.s}>{d.s}{d.r?" — $"+d.r:""}</option>)}<option value="__custom">Custom location...</option>
@@ -3963,19 +4032,19 @@ return(<div>
 </div>
 </div>
 <div style={{marginBottom:12}}>
-<label style={{fontSize:11,fontWeight:600,color:"#57534e",display:"block",marginBottom:4}}>Address</label>
+<label style={_s.label}>Address</label>
 <AddressInput value={qAddr} onChange={setQAddr} placeholder="Delivery address" style={{fontSize:13}}/>
 {qAddr&&<button onClick={calcQuoteMiles} disabled={qCalcLoading} style={{marginTop:6,background:"#1c1917",color:"#fff",border:"none",borderRadius:8,padding:"8px 16px",fontSize:12,fontWeight:600,cursor:"pointer",opacity:qCalcLoading?0.6:1}}>{qCalcLoading?"Calculating…":"📍 Calculate Distance"}</button>}
 {qCalcError&&<div style={{fontSize:11,color:"#dc2626",marginTop:4}}>{qCalcError}</div>}
 </div>
 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
 <div>
-<label style={{fontSize:11,fontWeight:600,color:"#57534e",display:"block",marginBottom:4}}>Distance (miles)</label>
+<label style={_s.label}>Distance (miles)</label>
 <input type="number" value={qMiles} onChange={e=>setQMiles(e.target.value)} placeholder="0" style={{width:"100%",border:qMiles?"2px solid #16a34a":"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px",fontSize:13,fontWeight:700,outline:"none",textAlign:"center",background:qMiles?"#f0fdf4":"#fff"}}/>
 {qMiles&&<div style={{fontSize:11,color:"#16a34a",fontWeight:700,marginTop:4}}>Auto: {fmt(calcQuoteRate(qMiles,qLiftgate,qGravel,qExtraPallets).total)}</div>}
 </div>
 <div>
-<label style={{fontSize:11,fontWeight:600,color:"#57534e",display:"block",marginBottom:4}}>Rate Override</label>
+<label style={_s.label}>Rate Override</label>
 <input type="number" value={qRate} onChange={e=>setQRate(e.target.value)} placeholder={qMiles?"Auto-calculated":"Manual rate"} style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px",fontSize:13,fontWeight:700,outline:"none",textAlign:"center"}}/>
 </div>
 </div>
@@ -3988,7 +4057,7 @@ return(<div>
 <input type="checkbox" checked={qExtraPallets} onChange={e=>setQExtraPallets(e.target.checked)} style={{accentColor:"#d97706"}}/> 4-5 Pallets +$25</label>
 </div>
 <div style={{marginBottom:12}}>
-<label style={{fontSize:11,fontWeight:600,color:"#57534e",display:"block",marginBottom:4}}>Notes</label>
+<label style={_s.label}>Notes</label>
 <textarea value={qNote} onChange={e=>setQNote(e.target.value)} placeholder="Additional details..." rows={2} style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px",fontSize:13,outline:"none",resize:"vertical",fontFamily:"inherit"}}/>
 </div>
 <div style={{display:"flex",justifyContent:"flex-end",gap:8}}>
@@ -3996,17 +4065,17 @@ return(<div>
 <button onClick={saveQuote} disabled={!qStop.trim()} style={{background:qStop.trim()?"#16a34a":"#a8a29e",color:"#fff",border:"none",borderRadius:8,padding:"8px 18px",cursor:"pointer",fontSize:12,fontWeight:700}}>Save Quote</button>
 </div>
 </div>}
-{savedQuotes.length===0&&!quoteFormOpen&&<div style={{textAlign:"center",padding:"60px 20px",color:"#a8a29e"}}><div style={{fontSize:40,marginBottom:12}}>💰</div><p style={{fontSize:14,fontWeight:600,margin:"0 0 4px"}}>No quotes yet</p><p style={{fontSize:12,margin:0}}>Create your first quote above</p></div>}
+{savedQuotes.length===0&&!quoteFormOpen&&<div style={_s.emptyState2}><div style={{fontSize:40,marginBottom:12}}>💰</div><p style={{fontSize:14,fontWeight:600,margin:"0 0 4px"}}>No quotes yet</p><p style={{fontSize:12,margin:0}}>Create your first quote above</p></div>}
 {savedQuotes.map((q,qi)=>{const c=CC[q.customer]||CC["Quote Delivery"]||CC["One-Off Delivery"];const accepted=q.status==="accepted";return(
 <div key={q.id} style={{background:accepted?"#f0fdf4":"#fff",border:`1px solid ${accepted?"#bbf7d0":"#e7e5e4"}`,borderRadius:14,padding:"14px 18px",marginBottom:8,borderLeft:`4px solid ${accepted?"#16a34a":c.accent}`}}>
 <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-<div style={{flex:1}}>
+<div style={_s.f1}>
 <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4,flexWrap:"wrap"}}>
 <span style={{fontSize:12,fontWeight:800,color:"#a8a29e",fontVariantNumeric:"tabular-nums"}}>#{q.num}</span>
 <span style={{fontSize:11,fontWeight:600,color:c.accent}}>{q.customer}</span>
 {accepted&&<span style={{fontSize:9,background:"#16a34a",color:"#fff",padding:"1px 6px",borderRadius:3,fontWeight:700}}>ACCEPTED</span>}
 {!accepted&&<span style={{fontSize:9,background:"#fef3c7",color:"#92400e",padding:"1px 6px",borderRadius:3,fontWeight:700}}>PENDING</span>}
-{q.miles&&<span style={{fontSize:10,color:"#78716c"}}>{q.miles}mi</span>}
+{q.miles&&<span style={_s.sub}>{q.miles}mi</span>}
 {q.liftgate&&<span style={{fontSize:9,background:"#fef3c7",color:"#92400e",padding:"1px 4px",borderRadius:3}}>LG</span>}
 {q.gravel&&<span style={{fontSize:9,background:"#fef3c7",color:"#92400e",padding:"1px 4px",borderRadius:3}}>GRV</span>}
 {q.extraPallets&&<span style={{fontSize:9,background:"#fef3c7",color:"#92400e",padding:"1px 4px",borderRadius:3}}>4-5P</span>}
@@ -4018,7 +4087,7 @@ return(<div>
 </div>
 <div style={{textAlign:"right",marginLeft:14,flexShrink:0}}>
 <div style={{fontSize:20,fontWeight:800,color:accepted?"#16a34a":"#1c1917",fontVariantNumeric:"tabular-nums"}}>{fmt(q.rate)}</div>
-{q.calc&&<div style={{fontSize:10,color:"#78716c"}}>{fmt(q.calc.base)}+{fmt(q.calc.fuel)} fuel</div>}
+{q.calc&&<div style={_s.sub}>{fmt(q.calc.base)}+{fmt(q.calc.fuel)} fuel</div>}
 {!accepted&&<div style={{display:"flex",flexDirection:"column",gap:4,marginTop:8}}>
 {qPushDay&&qPushDay.quoteId===q.id?<div style={{display:"flex",flexDirection:"column",gap:4}}>
 <input type="date" onChange={e=>{if(e.target.value){
@@ -4059,7 +4128,7 @@ else{showToast("Pick a weekday (Mon-Fri)");}
 {(histSearch||histCustFilter||histDrvFilter)&&<button onClick={()=>{setHistSearch("");setHistCustFilter("");setHistDrvFilter("");}} style={{background:"#fef2f2",border:"none",borderRadius:6,padding:"7px 10px",cursor:"pointer",fontSize:11,color:"#dc2626",fontWeight:600}}>Clear</button>}
 <span style={{fontSize:12,color:"#78716c"}}>{histFiltered.length} deliveries</span>
 </div>
-{histFiltered.length===0&&<div style={{textAlign:"center",padding:"60px 20px",color:"#a8a29e"}}><div style={{fontSize:40,marginBottom:12}}>🔍</div><p style={{fontSize:14,margin:0}}>{histAll.length===0?"No delivery data yet":"No matches"}</p></div>}
+{histFiltered.length===0&&<div style={_s.emptyState2}><div style={{fontSize:40,marginBottom:12}}>🔍</div><p style={{fontSize:14,margin:0}}>{histAll.length===0?"No delivery data yet":"No matches"}</p></div>}
 {histFiltered.length>0&&(()=>{const grouped={};histFiltered.forEach(e=>{const gk=`${e.weekOff}-${e.dayIdx}`;if(!grouped[gk])grouped[gk]={dayName:e.dayName,dayDate:e.dayDate,weekOff:e.weekOff,dayIdx:e.dayIdx,entries:[]};grouped[gk].entries.push(e);});return Object.values(grouped).sort((a,b)=>a.weekOff!==b.weekOff?b.weekOff-a.weekOff:b.dayIdx-a.dayIdx).map((grp,gi)=>{const dayTotal=grp.entries.reduce((s,e)=>s+e.baseRate,0);const isCur=grp.weekOff===wo;return(<div key={gi} style={{marginBottom:14}}>
 <div style={{display:"flex",justifyContent:"space-between",padding:"6px 4px",borderBottom:"1px solid #e7e5e4",marginBottom:6}}>
 <span style={{fontSize:13,fontWeight:700,color:isCur?"#1c1917":"#78716c"}}>{grp.dayName} — {grp.dayDate}{!isCur&&<span style={{fontSize:10,color:"#a8a29e",fontWeight:500,marginLeft:4}}>{grp.weekOff===wo-1?"last wk":(wo-grp.weekOff)+"w ago"}</span>}</span>
@@ -4067,12 +4136,12 @@ else{showToast("Pick a weekday (Mon-Fri)");}
 </div>
 {grp.entries.map(entry=>{const c=getCustColor(entry.customer);const drv=drivers.find(d=>d.id===entry.driverId);const di=drivers.findIndex(d=>d.id===entry.driverId);const hasPhotos=entry.photos&&entry.photos.length>0;return(
 <div key={entry.id} style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",padding:"7px 10px 7px 16px",borderLeft:`3px solid ${entry.stopType==="pickup"?"#2563eb":c.accent}`,marginBottom:4,background:"#fff",borderRadius:"0 8px 8px 0"}}>
-<div style={{flex:1,minWidth:0}}>
+<div style={_s.f1m}>
 <div style={{display:"flex",alignItems:"center",gap:4,flexWrap:"wrap"}}>
 {entry.stopType==="pickup"&&<span style={{fontSize:8,background:"#2563eb",color:"#fff",padding:"1px 4px",borderRadius:3,fontWeight:700}}>PU</span>}
 {entry.stopType!=="pickup"&&<span style={{fontSize:8,background:"#16a34a",color:"#fff",padding:"1px 4px",borderRadius:3,fontWeight:700}}>DEL</span>}
 <span style={{fontSize:11,color:c.accent,fontWeight:600}}>{entry.customer}</span>
-<span style={{fontSize:12,color:"#57534e",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{entry.stop}</span>
+<span style={_s.truncate}>{entry.stop}</span>
 {hasPhotos&&<span style={{fontSize:9,background:"#dbeafe",color:"#2563eb",padding:"1px 4px",borderRadius:3,fontWeight:600}}>📷 {entry.photos.length}</span>}
 {entry.signature&&<span style={{fontSize:9,background:"#dcfce7",color:"#16a34a",padding:"1px 4px",borderRadius:3,fontWeight:600}}>✓ POD</span>}
 </div>
@@ -4107,14 +4176,14 @@ else{showToast("Pick a weekday (Mon-Fri)");}
 
 {/* LEFT \u2500 Kanban Manifests */}
 <div style={{background:"#fff",borderRight:"1px solid #e7e5e4",overflowY:"auto",padding:"16px"}}>
-<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+<div style={_s.flexBtwMb12}>
 <h2 style={{margin:0,fontSize:15,fontWeight:700}}>Manifests</h2>
 <button onClick={()=>{setView("add");setSelCust(null);setQuoteMode(null);}} style={{background:"#16a34a",border:"none",borderRadius:6,padding:"5px 14px",cursor:"pointer",fontSize:11,fontWeight:600,color:"#fff"}}>+ Add</button>
 </div>
 
 {!editingNote?<div onClick={()=>{setEditingNote(true);setNoteText(dispNotes[emDk]||"");}} style={{background:dispNotes[emDk]?"#faf5ff":"#fafaf9",border:dispNotes[emDk]?"1px solid #d8b4fe":"1px dashed #d6d3d1",borderRadius:10,padding:"8px 12px",marginBottom:12,cursor:"pointer",minHeight:32,display:"flex",alignItems:"flex-start",gap:8}}>
 <span style={{fontSize:13,flexShrink:0}}>{"📝"}</span>
-{dispNotes[emDk]?<div style={{flex:1}}><div style={{fontSize:9,fontWeight:700,color:"#7c3aed",textTransform:"uppercase"}}>Notes</div><div style={{fontSize:12,color:"#57534e",whiteSpace:"pre-wrap",marginTop:2}}>{dispNotes[emDk]}</div></div>
+{dispNotes[emDk]?<div style={_s.f1}><div style={{fontSize:9,fontWeight:700,color:"#7c3aed",textTransform:"uppercase"}}>Notes</div><div style={{fontSize:12,color:"#57534e",whiteSpace:"pre-wrap",marginTop:2}}>{dispNotes[emDk]}</div></div>
 :<div style={{fontSize:11,color:"#a8a29e",paddingTop:2}}>Click to add dispatcher notes</div>}
 </div>
 :<div style={{background:"#fff",border:"2px solid #7c3aed",borderRadius:10,padding:"10px 12px",marginBottom:12}}>
@@ -4131,7 +4200,7 @@ style={{width:"100%",border:"1px solid #d8b4fe",borderRadius:8,padding:"8px 10px
 {allDriverEntries.map(({drv,di,entries:de})=>(
 <div key={drv.id} style={{marginBottom:12}}>
 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 12px",background:"#f5f5f4",borderRadius:"10px 10px 0 0",borderLeft:`3px solid ${DCOL[di]}`}}>
-<div style={{display:"flex",alignItems:"center",gap:8}}>
+<div style={_s.flexC8}>
 <div style={{width:24,height:24,borderRadius:8,background:DCOL[di],display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,color:"#fff",fontWeight:700}}>{drv.name.charAt(0)}</div>
 <span style={{fontSize:13,fontWeight:700}}>{drv.name}</span>
 <span style={{fontSize:11,color:"#a8a29e"}}>({de.length})</span>
@@ -4157,10 +4226,10 @@ style={{width:"100%",border:"1px solid #d8b4fe",borderRadius:8,padding:"8px 10px
 {sortMenuDrv===("more-"+drv.id)&&<><div style={{position:"fixed",inset:0,zIndex:199}} onClick={()=>setSortMenuDrv(null)}/>
 <div style={{position:"absolute",top:"100%",right:0,zIndex:200,background:"#fff",border:"1px solid #e7e5e4",borderRadius:12,padding:6,marginTop:4,boxShadow:"0 12px 40px rgba(0,0,0,0.2)",width:180}}>
 <div style={{fontSize:11,fontWeight:700,color:DCOL[di],padding:"6px 10px",borderBottom:"1px solid #f5f5f4",marginBottom:4}}>{drv.name}</div>
-{getDriverLoadOptions(drv.id)<3&&<button onClick={()=>{addDriverLoad(drv.id);setSortMenuDrv(null);}} style={{display:"flex",alignItems:"center",gap:8,width:"100%",textAlign:"left",background:"none",border:"none",padding:"10px",cursor:"pointer",borderRadius:8,fontSize:12,fontWeight:600,color:"#1c1917"}}>
+{getDriverLoadOptions(drv.id)<3&&<button onClick={()=>{addDriverLoad(drv.id);setSortMenuDrv(null);}} style={_s.menuBtn}>
 <span style={{fontSize:14}}>🚚</span><span>Add Load {getDriverLoadOptions(drv.id)+1}</span>
 </button>}
-<button onClick={()=>{toggleDriverCapacity(drv.id);setSortMenuDrv(null);}} style={{display:"flex",alignItems:"center",gap:8,width:"100%",textAlign:"left",background:"none",border:"none",padding:"10px",cursor:"pointer",borderRadius:8,fontSize:12,fontWeight:600,color:"#1c1917"}}>
+<button onClick={()=>{toggleDriverCapacity(drv.id);setSortMenuDrv(null);}} style={_s.menuBtn}>
 <span style={{fontSize:14}}>{getDriverCapacity(drv.id)===TRUCK_LIMITS.heavy?"🚚":"🚛"}</span><span>{getDriverCapacity(drv.id)===TRUCK_LIMITS.heavy?"Switch to 10k":"Switch to 13.5k"}</span>
 </button>
 </div></>}
@@ -4220,19 +4289,19 @@ return(<div key={entry.id}>
 onDragOver={ev=>{ev.preventDefault();setDragOver({drvId:drv.id,idx:eIdx});}}
 onDrop={()=>handleDrop(drv.id,eIdx)}
 style={{background:isDrgOver?"#dcfce7":isDrgSrc?"#fef9c3":done?"#f0fdf4":onSite?"#fffbeb":hasDue?"#fef2f2":isP?"#fef3c7":isPU?"#eff6ff":"#fff",border:isDrgOver?"2px dashed #16a34a":`1px solid ${done?"#bbf7d0":onSite?"#fde68a":hasDue?"#fca5a5":"#e7e5e4"}`,borderRadius:8,padding:"8px 10px",marginBottom:0,borderLeft:`3px solid ${isPU?"#2563eb":isP?"#f59e0b":c.accent}`,opacity:isDrgSrc?0.4:done?0.6:1,cursor:"grab",transition:"background 0.1s"}}>
-<div style={{display:"flex",alignItems:"center",gap:4,marginBottom:2,flexWrap:"wrap"}}>
+<div style={_s.flexC4Mb2W}>
 <span style={{fontSize:10,color:"#a8a29e",fontVariantNumeric:"tabular-nums"}}>{stopNum}.</span>
-{isPU&&<span style={{fontSize:8,background:"#2563eb",color:"#fff",padding:"1px 4px",borderRadius:2,fontWeight:700}}>PU</span>}
-{!isPU&&<span style={{fontSize:8,background:"#16a34a",color:"#fff",padding:"1px 4px",borderRadius:2,fontWeight:700}}>DEL</span>}
-{isP&&<span style={{fontSize:8,background:"#f59e0b",color:"#fff",padding:"1px 4px",borderRadius:2,fontWeight:700}}>PRIORITY</span>}
-{done&&<span style={{fontSize:8,background:"#16a34a",color:"#fff",padding:"1px 4px",borderRadius:2,fontWeight:700}}>DONE</span>}
-{onSite&&!done&&<span style={{fontSize:8,background:"#f59e0b",color:"#fff",padding:"1px 4px",borderRadius:2,fontWeight:700}}>ON SITE</span>}
+{isPU&&<span style={_s.tagBlue}>PU</span>}
+{!isPU&&<span style={_s.tagGreen}>DEL</span>}
+{isP&&<span style={_s.tagAmber}>PRIORITY</span>}
+{done&&<span style={_s.tagGreen}>DONE</span>}
+{onSite&&!done&&<span style={_s.tagAmber}>ON SITE</span>}
 {hasDue&&<span style={{fontSize:8,background:entry.dueBy.includes("-")?"#7c3aed":entry.dueBy.startsWith("After")?"#2563eb":"#dc2626",color:"#fff",padding:"1px 4px",borderRadius:2,fontWeight:700,display:"inline-flex",alignItems:"center",gap:1}}>{"\u23F0"}{entry.dueBy}</span>}
 {entry.pickupDueBy&&<span style={{fontSize:8,background:"#16a34a",color:"#fff",padding:"1px 4px",borderRadius:2,fontWeight:700,display:"inline-flex",alignItems:"center",gap:1}}>{"📦"}{entry.pickupDueBy}</span>}
 {isImetco&&<span style={{fontSize:8,background:"#ea580c",color:"#fff",padding:"1px 4px",borderRadius:2,fontWeight:700}}>SHIP PLAN REQ</span>}
 <span style={{fontSize:11,fontWeight:600,color:"#1c1917",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{entry.stop}</span>
 </div>
-<div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+<div style={_s.flexBtw}>
 <div style={{fontSize:10,color:c.accent,fontWeight:600}}>{entry.customer}{entry.pickupFrom&&entry.stopType!=="pickup"?<span style={{color:"#78716c",fontWeight:500}}> — {entry.pickupFrom}</span>:""}</div>
 <InlineRate value={entry.baseRate} isHourly={entry.isHourly} onSave={r=>updateRate(entry.id,r)}/>
 </div>
@@ -4245,7 +4314,7 @@ style={{background:isDrgOver?"#dcfce7":isDrgSrc?"#fef9c3":done?"#f0fdf4":onSite?
 {entry.departedAt&&<div style={{fontSize:9,color:"#16a34a"}}>Departed: {entry.departedAt}</div>}
 {entry.signature&&<div style={{fontSize:9,color:"#16a34a",marginTop:1}}>✍ {entry.signature}</div>}
 {entry.photos&&entry.photos.length>0&&<div style={{display:"flex",gap:3,marginTop:3}}>{entry.photos.map((p,pi)=><img key={pi} src={p} alt="" style={{width:24,height:24,objectFit:"cover",borderRadius:4,border:"1px solid #e7e5e4"}}/>)}</div>}
-<div style={{display:"flex",gap:3,marginTop:4,flexWrap:"wrap",alignItems:"center"}}>
+<div style={_s.flexG3Mt4}>
 <select value={entry.driverId} onChange={e=>{e.stopPropagation();reassign(entry.id,Number(e.target.value));}} style={{background:"#f5f5f4",border:"1px solid #e7e5e4",borderRadius:5,padding:"2px 4px",fontSize:9,color:"#57534e",cursor:"pointer",maxWidth:70}}><option value={0}>Assign</option>{drivers.map(dd=><option key={dd.id} value={dd.id}>{dd.name}</option>)}</select>
 <button onClick={()=>moveInDriver(drv.id,eIdx,-1)} style={{background:"#f5f5f4",border:"1px solid #e7e5e4",borderRadius:4,padding:"1px 5px",cursor:"pointer",fontSize:9,color:"#78716c"}} title="Move up">▲</button>
 <button onClick={()=>moveInDriver(drv.id,eIdx,1)} style={{background:"#f5f5f4",border:"1px solid #e7e5e4",borderRadius:4,padding:"1px 5px",cursor:"pointer",fontSize:9,color:"#78716c"}} title="Move down">▼</button>
@@ -4254,7 +4323,7 @@ style={{background:isDrgOver?"#dcfce7":isDrgSrc?"#fef9c3":done?"#f0fdf4":onSite?
 {!isPU&&entry.isHourly&&!entry.liftgateApplied&&<button onClick={()=>{setEmH(p=>{const key=`${emDk}-emser`;const cur=p[key]||4;return{...p,[key]:cur+1};});setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===entry.id?{...e,liftgateApplied:true}:e)}));showToast("Liftgate +1 hr added");}} style={{background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:4,padding:"1px 6px",cursor:"pointer",fontSize:9,color:"#ea580c",fontWeight:700}}>+1HR LG</button>}
 {entry.liftgateApplied&&<span style={{fontSize:8,color:"#16a34a",fontWeight:700,padding:"2px 4px"}}>{entry.isHourly?"✓+1HR":"✓LG"}</span>}
 {!isPU&&!entry.wasSplit&&<button onClick={()=>setSplitEntry({id:entry.id,totalWeight:entry.weight||0,ratio:50,truck1Weight:Math.round((entry.weight||0)/2)})} style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:4,padding:"1px 6px",cursor:"pointer",fontSize:9,color:"#2563eb",fontWeight:700}}>✂Split</button>}
-{entry.wasSplit&&<span style={{fontSize:8,color:"#2563eb",fontWeight:700,padding:"2px 4px"}}>L{entry.loadNum}</span>}
+{entry.wasSplit&&<span style={_s.loadBadge}>L{entry.loadNum}</span>}
 {getDriverLoadOptions(drv.id)>1&&!entry.wasSplit&&<>{[1,2,3].filter(n=>n<=getDriverLoadOptions(drv.id)).map(n=><button key={n} onClick={()=>setLoadNum(entry.id,n)} style={{padding:"1px 5px",borderRadius:3,border:"none",cursor:"pointer",fontSize:8,fontWeight:700,background:(entry.loadNum||1)===n?"#7c3aed":"#f5f5f4",color:(entry.loadNum||1)===n?"#fff":"#78716c"}}>L{n}</button>)}</>}
 <button onClick={()=>deleteDel(entry.id)} style={{background:"none",border:"none",color:"#dc2626",fontSize:9,cursor:"pointer",padding:"1px 4px"}}>✕</button>
 </div>
@@ -4266,16 +4335,16 @@ style={{background:isDrgOver?"#dcfce7":isDrgSrc?"#fef9c3":done?"#f0fdf4":onSite?
 {splitEntry?.id===entry.id&&<div style={{marginTop:6,background:"#eff6ff",border:"2px solid #2563eb",borderRadius:8,padding:10}}>
 <div style={{fontSize:11,fontWeight:700,color:"#1e40af",marginBottom:8}}>✂ Split Shipment</div>
 {(()=>{const tw=splitEntry.totalWeight||0;const t1w=splitEntry.truck1Weight!==undefined?splitEntry.truck1Weight:Math.round(tw*(splitEntry.ratio/100));const t2w=tw-t1w;return(<>
-<div style={{display:"flex",gap:6,marginBottom:6,alignItems:"center"}}>
-<div style={{flex:1}}><label style={{fontSize:9,fontWeight:600,color:"#57534e",display:"block",marginBottom:2}}>Total</label><input type="number" inputMode="numeric" value={tw||""} onChange={e=>{const newTw=parseInt(e.target.value)||0;setSplitEntry(p=>({...p,totalWeight:newTw,truck1Weight:Math.min(p.truck1Weight||Math.round(newTw/2),newTw)}));}} style={{width:"100%",border:"1px solid #bfdbfe",borderRadius:6,padding:"5px 8px",fontSize:13,fontWeight:700,outline:"none",textAlign:"center"}}/></div>
-<div style={{flex:1}}><label style={{fontSize:9,fontWeight:600,color:"#2563eb",display:"block",marginBottom:2}}>Truck 1</label><input type="number" inputMode="numeric" value={splitEntry.truck1Weight!==undefined?splitEntry.truck1Weight:""} onChange={e=>{const v=e.target.value;setSplitEntry(p=>({...p,truck1Weight:v===""?0:parseInt(v)||0}));}} style={{width:"100%",border:"2px solid #2563eb",borderRadius:6,padding:"5px 8px",fontSize:13,fontWeight:700,outline:"none",textAlign:"center",background:"#eff6ff"}}/></div>
-<div style={{flex:1}}><label style={{fontSize:9,fontWeight:600,color:"#78716c",display:"block",marginBottom:2}}>Truck 2</label><div style={{border:"1px solid #e7e5e4",borderRadius:6,padding:"5px 8px",fontSize:13,fontWeight:700,textAlign:"center",background:"#f5f5f4",color:"#57534e"}}>{t2w.toLocaleString()}</div></div>
+<div style={_s.flexG6Mb6}>
+<div style={_s.f1}><label style={_s.labelSm}>Total</label><input type="number" inputMode="numeric" value={tw||""} onChange={e=>{const newTw=parseInt(e.target.value)||0;setSplitEntry(p=>({...p,totalWeight:newTw,truck1Weight:Math.min(p.truck1Weight||Math.round(newTw/2),newTw)}));}} style={_s.splitTotal}/></div>
+<div style={_s.f1}><label style={_s.labelBlue}>Truck 1</label><input type="number" inputMode="numeric" value={splitEntry.truck1Weight!==undefined?splitEntry.truck1Weight:""} onChange={e=>{const v=e.target.value;setSplitEntry(p=>({...p,truck1Weight:v===""?0:parseInt(v)||0}));}} style={_s.splitInput}/></div>
+<div style={_s.f1}><label style={_s.labelGray}>Truck 2</label><div style={_s.splitT2}>{t2w.toLocaleString()}</div></div>
 </div>
-<input type="range" min={0} max={tw} step={100} value={t1w} onChange={e=>{const v=parseInt(e.target.value)||0;setSplitEntry(p=>({...p,truck1Weight:v}));}} style={{width:"100%",accentColor:"#2563eb",marginBottom:6}}/>
+<input type="range" min={0} max={tw} step={100} value={t1w} onChange={e=>{const v=parseInt(e.target.value)||0;setSplitEntry(p=>({...p,truck1Weight:v}));}} style={_s.slider}/>
 </>);})()}
-<div style={{display:"flex",gap:6}}>
-<button onClick={()=>confirmSplit(entry.id,splitEntry.totalWeight,splitEntry.ratio,splitEntry.truck1Weight)} style={{flex:1,background:"#2563eb",color:"#fff",border:"none",borderRadius:6,padding:"8px",fontSize:12,fontWeight:700,cursor:"pointer"}}>✂ Split</button>
-<button onClick={()=>setSplitEntry(null)} style={{background:"#e7e5e4",border:"none",borderRadius:6,padding:"8px 12px",fontSize:11,cursor:"pointer",color:"#57534e"}}>Cancel</button>
+<div style={_s.flexG6}>
+<button onClick={()=>confirmSplit(entry.id,splitEntry.totalWeight,splitEntry.ratio,splitEntry.truck1Weight)} style={_s.splitBtn}>✂ Split</button>
+<button onClick={()=>setSplitEntry(null)} style={_s.cancelBtn}>Cancel</button>
 </div>
 </div>}
 </div>
@@ -4293,15 +4362,15 @@ style={{background:isDrgOver?"#dcfce7":isDrgSrc?"#fef9c3":done?"#f0fdf4":onSite?
 <div style={{background:"#fafaf9",border:"1px solid #e7e5e4",borderTop:"none",borderRadius:"0 0 10px 10px",padding:"6px 6px 2px"}}>
 {uaEntries.map(entry=>{const c=CC[entry.customer]||CC["One-Off Delivery"];const addr=entry.addr||getAddr(entry.stop);const hasInstr=entry.instructions?.trim();return(
 <div key={entry.id} style={{background:entry.priority?"#fef3c7":"#fff",border:`1px solid ${entry.priority?"#fde68a":"#e7e5e4"}`,borderRadius:8,padding:"8px 10px",marginBottom:4,borderLeft:`3px solid ${entry.stopType==="pickup"?"#2563eb":c.accent}`}}>
-<div style={{display:"flex",alignItems:"center",gap:4,marginBottom:2,flexWrap:"wrap"}}>
-{entry.stopType==="pickup"&&<span style={{fontSize:8,background:"#2563eb",color:"#fff",padding:"1px 4px",borderRadius:2,fontWeight:700}}>PU</span>}
-{entry.stopType!=="pickup"&&<span style={{fontSize:8,background:"#16a34a",color:"#fff",padding:"1px 4px",borderRadius:2,fontWeight:700}}>DEL</span>}
-{entry.priority&&<span style={{fontSize:8,background:"#f59e0b",color:"#fff",padding:"1px 4px",borderRadius:2,fontWeight:700}}>PRIORITY</span>}
+<div style={_s.flexC4Mb2W}>
+{entry.stopType==="pickup"&&<span style={_s.tagBlue}>PU</span>}
+{entry.stopType!=="pickup"&&<span style={_s.tagGreen}>DEL</span>}
+{entry.priority&&<span style={_s.tagAmber}>PRIORITY</span>}
 {entry.dueBy&&<span style={{fontSize:8,background:entry.dueBy.includes("-")?"#7c3aed":entry.dueBy.startsWith("After")?"#2563eb":"#dc2626",color:"#fff",padding:"1px 4px",borderRadius:2,fontWeight:700}}>{"\u23F0"}{entry.dueBy}</span>}
-{entry.pickupDueBy&&<span style={{fontSize:8,background:"#16a34a",color:"#fff",padding:"1px 4px",borderRadius:2,fontWeight:700}}>{"📦"}{entry.pickupDueBy}</span>}
+{entry.pickupDueBy&&<span style={_s.tagGreen}>{"📦"}{entry.pickupDueBy}</span>}
 <span style={{fontSize:11,fontWeight:600}}>{entry.stop}</span>
 </div>
-<div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+<div style={_s.flexBtw}>
 <div style={{fontSize:10,color:c.accent}}>{entry.customer}{entry.pickupFrom&&entry.stopType!=="pickup"?<span style={{color:"#78716c"}}> — {entry.pickupFrom}</span>:""}</div>
 <InlineRate value={entry.baseRate} isHourly={entry.isHourly} onSave={r=>updateRate(entry.id,r)}/>
 </div>
@@ -4325,12 +4394,12 @@ style={{background:isDrgOver?"#dcfce7":isDrgSrc?"#fef9c3":done?"#f0fdf4":onSite?
 <div style={{background:"#f8f7f5",overflowY:"auto",display:"flex",flexDirection:"column"}}>
 
 <div style={{padding:"16px 20px 0"}}>
-<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+<div style={_s.flexBtwMb10}>
 <h2 style={{margin:0,fontSize:15,fontWeight:700}}>Live Routes</h2>
 <div style={{display:"flex",gap:10}}>
-{drivers.map((d,di)=><div key={d.id} style={{display:"flex",alignItems:"center",gap:4}}>
+{drivers.map((d,di)=><div key={d.id} style={_s.flexC4}>
 <div style={{width:8,height:8,borderRadius:4,background:DCOL[di]}}/>
-<span style={{fontSize:10,color:"#78716c"}}>{d.name.split(" ")[0]}</span>
+<span style={_s.sub}>{d.name.split(" ")[0]}</span>
 </div>)}
 </div>
 </div>
@@ -4408,9 +4477,9 @@ onAssignStop={mapActiveDrv?(stopId,drvId)=>{assignInOrder(stopId,mapActiveDrv);}
 
 {/* RIGHT \u2500 Daily Log */}
 <div style={{background:"#fff",borderLeft:"1px solid #e7e5e4",overflowY:"auto",padding:16}}>
-<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+<div style={_s.flexBtwMb12}>
 <h2 style={{margin:0,fontSize:15,fontWeight:700}}>Daily Log</h2>
-<div style={{display:"flex",alignItems:"center",gap:8}}>
+<div style={_s.flexC8}>
 <button onClick={printDailyLog} style={{background:"#f5f5f4",border:"1px solid #e7e5e4",borderRadius:6,padding:"4px 10px",cursor:"pointer",fontSize:10,fontWeight:600,color:"#78716c"}}>Print</button>
 <span style={{fontVariantNumeric:"tabular-nums",fontSize:16,fontWeight:700,color:"#16a34a"}}>{fmt(dc.total)}</span>
 </div>
@@ -4439,14 +4508,14 @@ onAssignStop={mapActiveDrv?(stopId,drvId)=>{assignInOrder(stopId,mapActiveDrv);}
 :dl.map(entry=>{const c=getCustColor(entry.customer);const drv=drivers.find(d=>d.id===entry.driverId);const di=drivers.findIndex(d=>d.id===entry.driverId);const done=entry.status==="departed";const onSite=entry.status==="arrived";const addr=entry.addr||getAddr(entry.stop);const hasInstr=entry.instructions?.trim();return(
 <div key={entry.id} style={{background:done?"#f0fdf4":onSite?"#fffbeb":"#fafaf9",borderRadius:10,padding:"10px 14px",marginBottom:6,borderLeft:`3px solid ${entry.priority?"#f59e0b":entry.stopType==="pickup"?"#2563eb":c.accent}`,border:`1px solid ${done?"#bbf7d0":onSite?"#fde68a":"#e7e5e4"}`,opacity:done?0.7:1}}>
 <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-<div style={{flex:1,minWidth:0}}>
+<div style={_s.f1m}>
 <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:2,flexWrap:"wrap"}}>
 <span style={{fontSize:10,fontWeight:600,color:c.accent,textTransform:"uppercase"}}>{entry.customer}</span>
-{entry.stopType==="pickup"&&<span style={{fontSize:8,background:"#2563eb",color:"#fff",padding:"1px 4px",borderRadius:2,fontWeight:700}}>PU</span>}
-{entry.stopType!=="pickup"&&<span style={{fontSize:8,background:"#16a34a",color:"#fff",padding:"1px 4px",borderRadius:2,fontWeight:700}}>DEL</span>}
-{entry.priority&&<span style={{fontSize:8,background:"#f59e0b",color:"#fff",padding:"1px 4px",borderRadius:2,fontWeight:700}}>PRIORITY</span>}
-{done&&<span style={{fontSize:8,background:"#16a34a",color:"#fff",padding:"1px 4px",borderRadius:2,fontWeight:700}}>DONE</span>}
-{onSite&&!done&&<span style={{fontSize:8,background:"#f59e0b",color:"#fff",padding:"1px 4px",borderRadius:2,fontWeight:700}}>ON SITE</span>}
+{entry.stopType==="pickup"&&<span style={_s.tagBlue}>PU</span>}
+{entry.stopType!=="pickup"&&<span style={_s.tagGreen}>DEL</span>}
+{entry.priority&&<span style={_s.tagAmber}>PRIORITY</span>}
+{done&&<span style={_s.tagGreen}>DONE</span>}
+{onSite&&!done&&<span style={_s.tagAmber}>ON SITE</span>}
 {entry.dueBy&&<span style={{fontSize:8,background:entry.dueBy.includes("-")?"#7c3aed":entry.dueBy.startsWith("After")?"#2563eb":"#dc2626",color:"#fff",padding:"1px 4px",borderRadius:2,fontWeight:700,display:"inline-flex",alignItems:"center",gap:1}}>{"\u23F0"}{entry.dueBy}</span>}
 {drv&&<span style={{fontSize:9,background:DCOL[di]||"#78716c",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:600}}>{drv.name.split(" ")[0]}</span>}
 </div>
@@ -4484,14 +4553,14 @@ onAssignStop={mapActiveDrv?(stopId,drvId)=>{assignInOrder(stopId,mapActiveDrv);}
 
 {showDM&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:100,display:"flex",alignItems:"center",justifyContent:"center",padding:20}} onClick={()=>{setShowDM(false);setEditDrv(null);}}>
 <div style={{background:"#fff",borderRadius:20,padding:24,width:"100%",maxWidth:420}} onClick={e=>e.stopPropagation()}>
-<div style={{display:"flex",justifyContent:"space-between",marginBottom:16}}><h3 style={{margin:0,fontSize:18,fontWeight:700}}>Manage Drivers</h3><button onClick={()=>{setShowDM(false);setEditDrv(null);}} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:"#78716c"}}>{"\u2715"}</button></div>
+<div style={{display:"flex",justifyContent:"space-between",marginBottom:16}}><h3 style={{margin:0,fontSize:18,fontWeight:700}}>Manage Drivers</h3><button onClick={()=>{setShowDM(false);setEditDrv(null);}} style={_s.iconBtn}>{"\u2715"}</button></div>
 {drivers.map((d,i)=><div key={d.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 0",borderBottom:"1px solid #f5f5f4"}}>
 <div style={{width:12,height:12,borderRadius:4,background:DCOL[i]||"#78716c",flexShrink:0}}/>
 {editDrv===d.id?<div style={{flex:1,display:"flex",flexDirection:"column",gap:6}}>
 <input value={editNm} onChange={e=>setEditNm(e.target.value)} autoFocus placeholder="Name" style={{border:"1px solid #d6d3d1",borderRadius:8,padding:"6px 10px",fontSize:14,outline:"none"}}/>
-<div style={{display:"flex",gap:6}}><input value={editPh} onChange={e=>setEditPh(e.target.value)} placeholder="Phone (optional)" onKeyDown={e=>e.key==="Enter"&&saveDrv(d.id)} style={{flex:1,border:"1px solid #d6d3d1",borderRadius:8,padding:"6px 10px",fontSize:13,outline:"none"}}/><button onClick={()=>saveDrv(d.id)} style={{background:"#16a34a",color:"#fff",border:"none",borderRadius:8,padding:"6px 12px",cursor:"pointer",fontSize:12,fontWeight:600}}>Save</button></div>
+<div style={_s.flexG6}><input value={editPh} onChange={e=>setEditPh(e.target.value)} placeholder="Phone (optional)" onKeyDown={e=>e.key==="Enter"&&saveDrv(d.id)} style={{flex:1,border:"1px solid #d6d3d1",borderRadius:8,padding:"6px 10px",fontSize:13,outline:"none"}}/><button onClick={()=>saveDrv(d.id)} style={{background:"#16a34a",color:"#fff",border:"none",borderRadius:8,padding:"6px 12px",cursor:"pointer",fontSize:12,fontWeight:600}}>Save</button></div>
 </div>:<>
-<div style={{flex:1}}><div style={{fontSize:15,fontWeight:600}}>{d.name}</div>{d.phone&&<div style={{fontSize:11,color:"#78716c"}}>{d.phone}</div>}</div>
+<div style={_s.f1}><div style={{fontSize:15,fontWeight:600}}>{d.name}</div>{d.phone&&<div style={_s.sub11}>{d.phone}</div>}</div>
 <button onClick={()=>{const slug=getDriverSlug(d.name);const url=`${window.location.origin}${window.location.pathname}#/driver/${slug}`;setShowLinkModal({name:d.name,url,phone:d.phone||""});}} style={{background:"#f0fdf4",border:"none",borderRadius:6,padding:"4px 8px",cursor:"pointer",fontSize:10,fontWeight:600,color:"#16a34a"}}>🔗 Link</button>
 <button onClick={()=>setDriverViewId(d.id)} style={{background:"#eff6ff",border:"none",borderRadius:6,padding:"4px 8px",cursor:"pointer",fontSize:10,fontWeight:600,color:"#2563eb"}}>View</button>
 <button onClick={()=>{setEditDrv(d.id);setEditNm(d.name);setEditPh(d.phone||"");}} style={{background:"#f5f5f4",border:"none",borderRadius:6,padding:"4px 10px",cursor:"pointer",fontSize:12}}>Edit</button>
@@ -4513,7 +4582,7 @@ onAssignStop={mapActiveDrv?(stopId,drvId)=>{assignInOrder(stopId,mapActiveDrv);}
 {/* Driver Link Modal */}
 {showLinkModal&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",padding:20}} onClick={()=>setShowLinkModal(null)}>
 <div style={{background:"#fff",borderRadius:20,padding:24,width:"100%",maxWidth:400,boxShadow:"0 24px 64px rgba(0,0,0,0.25)"}} onClick={e=>e.stopPropagation()}>
-<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+<div style={_s.flexBtwMb16}>
 <h3 style={{margin:0,fontSize:17,fontWeight:700}}>🔗 {showLinkModal.name}'s Link</h3>
 <button onClick={()=>setShowLinkModal(null)} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:"#78716c",lineHeight:1}}>✕</button>
 </div>
@@ -4541,9 +4610,9 @@ style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,width:"
 {showChat&&<div style={{position:"fixed",inset:0,zIndex:200,display:"flex",alignItems:"center",justifyContent:"center"}} onClick={()=>setShowChat(false)}>
 <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:20,width:"100%",maxWidth:520,maxHeight:"80vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 64px rgba(0,0,0,0.2)"}}>
 <div style={{padding:"16px 20px 12px",borderBottom:"1px solid #e7e5e4",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
-<div style={{display:"flex",alignItems:"center",gap:10}}>
+<div style={_s.flexC10}>
 <div style={{width:36,height:36,borderRadius:12,background:"linear-gradient(135deg, #d97706, #ea580c)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18}}>{"🤖"}</div>
-<div><div style={{fontSize:15,fontWeight:700}}>Dispatch AI</div><div style={{fontSize:10,color:"#78716c"}}>Knows your routes, rates & customers</div></div>
+<div><div style={{fontSize:15,fontWeight:700}}>Dispatch AI</div><div style={_s.sub}>Knows your routes, rates & customers</div></div>
 </div>
 <button onClick={()=>setShowChat(false)} style={{background:"#f5f5f4",border:"none",borderRadius:8,padding:"6px 10px",cursor:"pointer",fontSize:14,color:"#78716c"}}>{"✕"}</button>
 </div>
@@ -4610,12 +4679,12 @@ const de=drvEntries(notifyDriver);
 return(
 <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:100,display:"flex",alignItems:"center",justifyContent:"center",padding:20}} onClick={()=>setNotifyDriver(null)}>
 <div style={{background:"#fff",borderRadius:20,padding:24,width:"100%",maxWidth:420}} onClick={e=>e.stopPropagation()}>
-<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-<div style={{display:"flex",alignItems:"center",gap:8}}>
+<div style={_s.flexBtwMb16}>
+<div style={_s.flexC8}>
 <div style={{width:28,height:28,borderRadius:8,background:DCOL[di],display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,color:"#fff",fontWeight:700}}>{drv?.name?.charAt(0)}</div>
 <h3 style={{margin:0,fontSize:16,fontWeight:700}}>{"Notify "+drv?.name}</h3>
 </div>
-<button onClick={()=>setNotifyDriver(null)} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:"#78716c"}}>{"\u2715"}</button>
+<button onClick={()=>setNotifyDriver(null)} style={_s.iconBtn}>{"\u2715"}</button>
 </div>
 <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:16}}>
 <button onClick={()=>sendNotification(notifyDriver,"🔄 RETURN TO YARD\nHead back to base when current stop is complete.","return")} style={{display:"flex",alignItems:"center",gap:10,width:"100%",textAlign:"left",padding:"12px 14px",borderRadius:10,border:"2px solid #dc2626",background:"#fef2f2",cursor:"pointer"}}>
@@ -4625,7 +4694,7 @@ return(
 <button onClick={()=>sendNotification(notifyDriver,"⚠️ MANIFEST UPDATED\nYour route has been changed. Check your manifest.\nCurrent stops: "+de.length,"update")} style={{display:"flex",alignItems:"center",gap:10,width:"100%",textAlign:"left",padding:"12px 14px",borderRadius:10,border:"1px solid #e7e5e4",background:"#fafaf9",cursor:"pointer"}}>
 <span style={{fontSize:20}}>{"⚠️"}</span><div><div style={{fontSize:13,fontWeight:700}}>Manifest Updated</div></div></button>
 </div>
-<div style={{display:"flex",gap:6}}>
+<div style={_s.flexG6}>
 <textarea value={notifyCustomMsg} onChange={e=>setNotifyCustomMsg(e.target.value)} placeholder="Custom message..." rows={2} style={{flex:1,border:"1px solid #d6d3d1",borderRadius:10,padding:"10px 14px",fontSize:13,outline:"none",resize:"vertical",fontFamily:"inherit"}}/>
 <button onClick={()=>{if(notifyCustomMsg.trim())sendNotification(notifyDriver,notifyCustomMsg.trim(),"custom");}} disabled={!notifyCustomMsg.trim()} style={{alignSelf:"flex-end",background:notifyCustomMsg.trim()?BRAND.main:"#e7e5e4",color:notifyCustomMsg.trim()?"#fff":"#a8a29e",border:"none",borderRadius:10,padding:"10px 16px",cursor:notifyCustomMsg.trim()?"pointer":"default",fontSize:13,fontWeight:600}}>Send</button>
 </div>
@@ -4637,7 +4706,7 @@ return(
 </div>
 );
 }
-/* ═══════════════ END DESKTOP ═══════════════ */
+
 
 return(
 <div style={{fontFamily:"'DM Sans',system-ui,sans-serif",background:"#f5f5f4",color:"#1c1917",minHeight:"100vh",maxWidth:isDesktop?900:480,margin:"0 auto"}}>
@@ -4647,7 +4716,7 @@ return(
 {/* Desktop: back to dashboard bar */}
 {isDesktop&&<div style={{background:"#fff",borderBottom:"1px solid #e7e5e4",padding:"8px 20px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
 <button onClick={()=>{setView("manifest");setSelCust(null);setQuoteMode(null);window.history.replaceState(null,"",window.location.pathname);window.scrollTo(0,0);}} style={{background:BRAND.main,border:"none",color:"#fff",borderRadius:8,padding:"7px 16px",cursor:"pointer",fontSize:12,fontWeight:600}}>{"← Dashboard"}</button>
-<div style={{display:"flex",gap:6}}>
+<div style={_s.flexG6}>
 {[{k:"daily",l:"Daily"},{k:"weekly",l:"Weekly"},{k:"history",l:"History"},{k:"add",l:"+ Add"}].map(v=><button key={v.k} onClick={()=>{setView(v.k);setSelCust(null);setQuoteMode(null);}} style={{background:view===v.k?BRAND.main:"#f5f5f4",border:view===v.k?"none":"1px solid #e7e5e4",color:view===v.k?"#fff":"#57534e",borderRadius:8,padding:"7px 14px",cursor:"pointer",fontSize:12,fontWeight:600}}>{v.l}</button>)}
 </div>
 </div>}
@@ -4724,11 +4793,11 @@ style={{display:"flex",alignItems:"center",gap:12,width:"100%",textAlign:"left",
 <button onClick={()=>{exportBackup();setShowMoreMenu(false);}}
 style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"14px 12px",borderRadius:12,border:"1px solid #e7e5e4",background:"#fff",cursor:"pointer"}}>
 <span style={{fontSize:20}}>💾</span>
-<div style={{textAlign:"left"}}><div style={{fontSize:13,fontWeight:700,color:"#1c1917"}}>Backup</div><div style={{fontSize:10,color:"#78716c"}}>Export JSON</div></div>
+<div style={{textAlign:"left"}}><div style={{fontSize:13,fontWeight:700,color:"#1c1917"}}>Backup</div><div style={_s.sub}>Export JSON</div></div>
 </button>
 <label style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"14px 12px",borderRadius:12,border:"1px solid #e7e5e4",background:"#fff",cursor:"pointer"}}>
 <span style={{fontSize:20}}>📂</span>
-<div style={{textAlign:"left"}}><div style={{fontSize:13,fontWeight:700,color:"#1c1917"}}>Restore</div><div style={{fontSize:10,color:"#78716c"}}>Import JSON</div></div>
+<div style={{textAlign:"left"}}><div style={{fontSize:13,fontWeight:700,color:"#1c1917"}}>Restore</div><div style={_s.sub}>Import JSON</div></div>
 <input type="file" accept=".json" style={{display:"none"}} onChange={e=>{if(e.target.files[0]){importBackup(e.target.files[0]);setShowMoreMenu(false);}e.target.value="";}}/>
 </label>
 </div>
@@ -4738,14 +4807,14 @@ style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:8,
 {/* DRIVER MODAL */}
 {showDM&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:100,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
 <div style={{background:"#fff",borderRadius:20,padding:24,width:"100%",maxWidth:380}}>
-<div style={{display:"flex",justifyContent:"space-between",marginBottom:16}}><h3 style={{margin:0,fontSize:18,fontWeight:700}}>Manage Drivers</h3><button onClick={()=>{setShowDM(false);setEditDrv(null);}} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:"#78716c"}}>✕</button></div>
+<div style={{display:"flex",justifyContent:"space-between",marginBottom:16}}><h3 style={{margin:0,fontSize:18,fontWeight:700}}>Manage Drivers</h3><button onClick={()=>{setShowDM(false);setEditDrv(null);}} style={_s.iconBtn}>✕</button></div>
 {drivers.map((d,i)=><div key={d.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 0",borderBottom:"1px solid #f5f5f4"}}>
 <div style={{width:12,height:12,borderRadius:4,background:DCOL[i]||"#78716c"}}/>
 {editDrv===d.id?<div style={{flex:1,display:"flex",flexDirection:"column",gap:6}}>
 <input value={editNm} onChange={e=>setEditNm(e.target.value)} autoFocus placeholder="Name" style={{border:"1px solid #d6d3d1",borderRadius:8,padding:"6px 10px",fontSize:14,outline:"none"}}/>
-<div style={{display:"flex",gap:6}}><input value={editPh} onChange={e=>setEditPh(e.target.value)} placeholder="Phone" onKeyDown={e=>e.key==="Enter"&&saveDrv(d.id)} style={{flex:1,border:"1px solid #d6d3d1",borderRadius:8,padding:"6px 10px",fontSize:13,outline:"none"}}/><button onClick={()=>saveDrv(d.id)} style={{background:"#16a34a",color:"#fff",border:"none",borderRadius:8,padding:"6px 12px",cursor:"pointer",fontSize:12,fontWeight:600}}>Save</button></div>
+<div style={_s.flexG6}><input value={editPh} onChange={e=>setEditPh(e.target.value)} placeholder="Phone" onKeyDown={e=>e.key==="Enter"&&saveDrv(d.id)} style={{flex:1,border:"1px solid #d6d3d1",borderRadius:8,padding:"6px 10px",fontSize:13,outline:"none"}}/><button onClick={()=>saveDrv(d.id)} style={{background:"#16a34a",color:"#fff",border:"none",borderRadius:8,padding:"6px 12px",cursor:"pointer",fontSize:12,fontWeight:600}}>Save</button></div>
 </div>:<>
-<div style={{flex:1}}><div style={{fontSize:15,fontWeight:600}}>{d.name}</div>{d.phone&&<div style={{fontSize:11,color:"#78716c"}}>{d.phone}</div>}</div>
+<div style={_s.f1}><div style={{fontSize:15,fontWeight:600}}>{d.name}</div>{d.phone&&<div style={_s.sub11}>{d.phone}</div>}</div>
 <button onClick={()=>{const slug=getDriverSlug(d.name);const url=`${window.location.origin}${window.location.pathname}#/driver/${slug}`;setShowLinkModal({name:d.name,url,phone:d.phone||""});}} style={{background:"#f0fdf4",border:"none",borderRadius:6,padding:"4px 8px",cursor:"pointer",fontSize:10,fontWeight:600,color:"#16a34a"}}>🔗 Link</button>
 <button onClick={()=>setDriverViewId(d.id)} style={{background:"#eff6ff",border:"none",borderRadius:6,padding:"4px 8px",cursor:"pointer",fontSize:10,fontWeight:600,color:"#2563eb"}}>View</button>
 <button onClick={()=>{setEditDrv(d.id);setEditNm(d.name);setEditPh(d.phone||"");}} style={{background:"#f5f5f4",border:"none",borderRadius:6,padding:"4px 10px",cursor:"pointer",fontSize:12}}>Edit</button>
@@ -4764,7 +4833,7 @@ style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:8,
 </div>);})}
 <p style={{fontSize:10,color:"#a8a29e",margin:"8px 0 0"}}>Driver PINs = last 4 digits of their phone number</p>
 </div>
-{<div style={{marginTop:12}}><div style={{display:"flex",gap:6,marginBottom:6}}><input value={newDN} onChange={e=>setNewDN(e.target.value)} placeholder="Driver name" style={{flex:1,border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 12px",fontSize:14,outline:"none"}}/></div><div style={{display:"flex",gap:6}}><input value={newDP} onChange={e=>setNewDP(e.target.value)} placeholder="Phone number" type="tel" onKeyDown={e=>e.key==="Enter"&&addDrvr()} style={{flex:1,border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 12px",fontSize:14,outline:"none"}}/><button onClick={addDrvr} style={{background:(!newDN.trim()||!newDP.trim())?"#e7e5e4":"#1c1917",color:(!newDN.trim()||!newDP.trim())?"#a8a29e":"#fff",border:"none",borderRadius:8,padding:"8px 16px",cursor:"pointer",fontSize:13,fontWeight:600}}>Add</button></div>{newDN.trim()&&!newDP.trim()&&<p style={{fontSize:11,color:"#dc2626",margin:"4px 0 0"}}>Phone required</p>}</div>}
+{<div style={{marginTop:12}}><div style={{display:"flex",gap:6,marginBottom:6}}><input value={newDN} onChange={e=>setNewDN(e.target.value)} placeholder="Driver name" style={{flex:1,border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 12px",fontSize:14,outline:"none"}}/></div><div style={_s.flexG6}><input value={newDP} onChange={e=>setNewDP(e.target.value)} placeholder="Phone number" type="tel" onKeyDown={e=>e.key==="Enter"&&addDrvr()} style={{flex:1,border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 12px",fontSize:14,outline:"none"}}/><button onClick={addDrvr} style={{background:(!newDN.trim()||!newDP.trim())?"#e7e5e4":"#1c1917",color:(!newDN.trim()||!newDP.trim())?"#a8a29e":"#fff",border:"none",borderRadius:8,padding:"8px 16px",cursor:"pointer",fontSize:13,fontWeight:600}}>Add</button></div>{newDN.trim()&&!newDP.trim()&&<p style={{fontSize:11,color:"#dc2626",margin:"4px 0 0"}}>Phone required</p>}</div>}
 </div>
 </div>}
 
@@ -4776,7 +4845,7 @@ const remaining=[...allStops].filter(s=>!SHARED_STOPS.includes(s)&&!s.startsWith
 return(
 <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:100,display:"flex",alignItems:"flex-start",justifyContent:"center",padding:20,paddingTop:40,overflowY:"auto"}}>
 <div style={{background:"#fff",borderRadius:20,padding:24,width:"100%",maxWidth:400}}>
-<div style={{display:"flex",justifyContent:"space-between",marginBottom:12}}><h3 style={{margin:0,fontSize:18,fontWeight:700}}>Insert Pickup</h3><button onClick={()=>setInsertPickupFor(null)} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:"#78716c"}}>✕</button></div>
+<div style={{display:"flex",justifyContent:"space-between",marginBottom:12}}><h3 style={{margin:0,fontSize:18,fontWeight:700}}>Insert Pickup</h3><button onClick={()=>setInsertPickupFor(null)} style={_s.iconBtn}>✕</button></div>
 <p style={{fontSize:12,color:"#78716c",margin:"0 0 10px"}}>Tap a customer to auto-fill, or use manual entry.</p>
 <div style={{maxHeight:180,overflowY:"auto",marginBottom:12,border:"1px solid #e7e5e4",borderRadius:12,padding:4}}>
 {PICKUP_SOURCES.map((src,i)=><button key={i} onClick={()=>handleSelect(src)} style={{display:"block",width:"100%",textAlign:"left",padding:"8px 12px",marginBottom:2,borderRadius:8,cursor:"pointer",background:pickupStop===src.label?"#eff6ff":"#fafaf9",border:pickupStop===src.label?"2px solid #2563eb":"1px solid transparent"}}><div style={{fontSize:13,fontWeight:600}}>{src.label}</div><div style={{fontSize:10,color:"#a8a29e"}}>{src.addr}</div></button>)}
@@ -4789,7 +4858,7 @@ return(
 <input value={pickupForDel} onChange={e=>setPickupForDel(e.target.value)} placeholder="Or type manually..." style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 12px",fontSize:13,outline:"none"}}/>
 </div>}
 {pickupStop&&<input value={pickupNote} onChange={e=>setPickupNote(e.target.value)} placeholder="Note (optional)" style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 12px",fontSize:13,outline:"none",marginBottom:12}}/>}
-{pickupStop&&<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:10,padding:"10px 14px",marginBottom:12}}><div style={{fontSize:11,color:"#2563eb",fontWeight:600}}>PICKUP</div><div style={{fontSize:14,fontWeight:700}}>{pickupCustomer||"Pickup"}{pickupForDel?` → ${pickupForDel}`:""}</div>{pickupAddr&&<div style={{fontSize:11,color:"#78716c"}}>{pickupAddr}</div>}</div>}
+{pickupStop&&<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:10,padding:"10px 14px",marginBottom:12}}><div style={{fontSize:11,color:"#2563eb",fontWeight:600}}>PICKUP</div><div style={_s.bold14}>{pickupCustomer||"Pickup"}{pickupForDel?` → ${pickupForDel}`:""}</div>{pickupAddr&&<div style={_s.sub11}>{pickupAddr}</div>}</div>}
 <button onClick={()=>insertPickup(insertPickupFor.driverId,insertPickupFor.afterIdx)} disabled={!pickupStop} style={{display:"block",width:"100%",background:pickupStop?"#2563eb":"#e7e5e4",color:pickupStop?"#fff":"#a8a29e",border:"none",borderRadius:10,padding:"12px",fontSize:14,fontWeight:600,cursor:pickupStop?"pointer":"default"}}>Insert Pickup</button>
 </div>
 </div>
@@ -4807,13 +4876,13 @@ const drvNotifs=notifications[notifyDriver]||[];
 return(
 <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:100,display:"flex",alignItems:"flex-start",justifyContent:"center",padding:20,paddingTop:40,overflowY:"auto"}}>
 <div style={{background:"#fff",borderRadius:20,padding:24,width:"100%",maxWidth:400}}>
-<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-<div style={{display:"flex",alignItems:"center",gap:8}}>
+<div style={_s.flexBtwMb16}>
+<div style={_s.flexC8}>
 <div style={{width:28,height:28,borderRadius:8,background:DCOL[di],display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,color:"#fff",fontWeight:700}}>{drv?.name?.charAt(0)}</div>
 <div><h3 style={{margin:0,fontSize:16,fontWeight:700}}>Notify {drv?.name}</h3>
-<div style={{fontSize:10,color:"#78716c"}}>{drv?.phone||"No phone"} • via SMS{drv?.phone?"":" (unavailable)"}</div></div>
+<div style={_s.sub}>{drv?.phone||"No phone"} • via SMS{drv?.phone?"":" (unavailable)"}</div></div>
 </div>
-<button onClick={()=>setNotifyDriver(null)} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:"#78716c"}}>✕</button>
+<button onClick={()=>setNotifyDriver(null)} style={_s.iconBtn}>✕</button>
 </div>
 
 {/* Quick presets */}
@@ -4823,25 +4892,25 @@ return(
 <button onClick={()=>sendNotification(notifyDriver,"🔄 RETURN TO YARD\nHead back to base when current stop is complete.","return")}
 style={{display:"flex",alignItems:"center",gap:10,width:"100%",textAlign:"left",padding:"12px 14px",borderRadius:10,border:"2px solid #dc2626",background:"#fef2f2",cursor:"pointer"}}>
 <span style={{fontSize:20}}>🔄</span>
-<div><div style={{fontSize:13,fontWeight:700,color:"#dc2626"}}>Return to Yard</div><div style={{fontSize:10,color:"#78716c"}}>Head back to base</div></div>
+<div><div style={{fontSize:13,fontWeight:700,color:"#dc2626"}}>Return to Yard</div><div style={_s.sub}>Head back to base</div></div>
 </button>
 
 <button onClick={()=>sendNotification(notifyDriver,"📞 CALL DISPATCH\nCall dispatch ASAP.","call")}
 style={{display:"flex",alignItems:"center",gap:10,width:"100%",textAlign:"left",padding:"12px 14px",borderRadius:10,border:"1px solid #e7e5e4",background:"#fafaf9",cursor:"pointer"}}>
 <span style={{fontSize:20}}>📞</span>
-<div><div style={{fontSize:13,fontWeight:700}}>Call Dispatch</div><div style={{fontSize:10,color:"#78716c"}}>Driver needs to call in</div></div>
+<div><div style={{fontSize:13,fontWeight:700}}>Call Dispatch</div><div style={_s.sub}>Driver needs to call in</div></div>
 </button>
 
 <button onClick={()=>sendNotification(notifyDriver,"⏰ SCHEDULE CHANGE\nCheck your manifest — stop times have been updated.","schedule")}
 style={{display:"flex",alignItems:"center",gap:10,width:"100%",textAlign:"left",padding:"12px 14px",borderRadius:10,border:"1px solid #e7e5e4",background:"#fafaf9",cursor:"pointer"}}>
 <span style={{fontSize:20}}>⏰</span>
-<div><div style={{fontSize:13,fontWeight:700}}>Schedule Change</div><div style={{fontSize:10,color:"#78716c"}}>Stop times updated</div></div>
+<div><div style={{fontSize:13,fontWeight:700}}>Schedule Change</div><div style={_s.sub}>Stop times updated</div></div>
 </button>
 
 <button onClick={()=>sendNotification(notifyDriver,"⚠️ MANIFEST UPDATED\nYour route has been changed. Check your manifest for updates.\n\nCurrent stops: "+de.length,"update")}
 style={{display:"flex",alignItems:"center",gap:10,width:"100%",textAlign:"left",padding:"12px 14px",borderRadius:10,border:"1px solid #e7e5e4",background:"#fafaf9",cursor:"pointer"}}>
 <span style={{fontSize:20}}>⚠️</span>
-<div><div style={{fontSize:13,fontWeight:700}}>Manifest Updated</div><div style={{fontSize:10,color:"#78716c"}}>General route change alert</div></div>
+<div><div style={{fontSize:13,fontWeight:700}}>Manifest Updated</div><div style={_s.sub}>General route change alert</div></div>
 </button>
 </div>
 
@@ -4855,7 +4924,7 @@ style={{display:"flex",alignItems:"center",gap:10,width:"100%",textAlign:"left",
 "pickup")}
 style={{display:"flex",alignItems:"center",gap:10,width:"100%",textAlign:"left",padding:"10px 14px",borderRadius:10,border:"2px solid #2563eb",background:"#eff6ff",cursor:"pointer"}}>
 <span style={{fontSize:18}}>📦</span>
-<div style={{flex:1,minWidth:0}}>
+<div style={_s.f1m}>
 <div style={{fontSize:12,fontWeight:700,color:"#2563eb"}}>Pickup: {p.stop}</div>
 {p.addr&&<div style={{fontSize:10,color:"#78716c",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.addr}</div>}
 {p.instructions&&<div style={{fontSize:10,color:"#1c1917"}}>📋 {p.instructions}</div>}
@@ -4876,7 +4945,7 @@ style={{display:"flex",alignItems:"center",gap:10,width:"100%",textAlign:"left",
 "delivery")}
 style={{display:"flex",alignItems:"center",gap:10,width:"100%",textAlign:"left",padding:"10px 14px",borderRadius:10,border:"2px solid #16a34a",background:"#f0fdf4",cursor:"pointer"}}>
 <span style={{fontSize:18}}>🚚</span>
-<div style={{flex:1,minWidth:0}}>
+<div style={_s.f1m}>
 <div style={{fontSize:12,fontWeight:700,color:"#16a34a"}}>Deliver: {p.stop}</div>
 {p.addr&&<div style={{fontSize:10,color:"#78716c",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.addr}</div>}
 {p.instructions&&<div style={{fontSize:10,color:"#1c1917"}}>📋 {p.instructions}</div>}
@@ -4889,7 +4958,7 @@ style={{display:"flex",alignItems:"center",gap:10,width:"100%",textAlign:"left",
 
 {/* Custom message */}
 <div style={{fontSize:11,fontWeight:700,color:"#57534e",marginBottom:6,textTransform:"uppercase"}}>Custom Message</div>
-<div style={{display:"flex",gap:6}}>
+<div style={_s.flexG6}>
 <textarea value={notifyCustomMsg} onChange={e=>setNotifyCustomMsg(e.target.value)} placeholder="Type a message…" rows={2}
 style={{flex:1,border:"1px solid #d6d3d1",borderRadius:10,padding:"10px 14px",fontSize:13,outline:"none",resize:"vertical",fontFamily:"inherit"}}/>
 <button onClick={()=>{if(notifyCustomMsg.trim())sendNotification(notifyDriver,notifyCustomMsg.trim(),"custom");}} disabled={!notifyCustomMsg.trim()}
@@ -4915,13 +4984,13 @@ style={{alignSelf:"flex-end",background:notifyCustomMsg.trim()?"#1c1917":"#e7e5e
 
 <div style={{padding:"0 16px 100px"}}>
 
-{/* ═══ MANIFESTS ═══ */}
+{}
 {view==="manifest"&&<div
 onDragEnd={()=>{setDragSrc(null);setDragOver(null);}}>
 <div style={{padding:"16px 4px 8px"}}><h2 style={{margin:0,fontSize:16,fontWeight:600}}>Load Manifests — {wd[sd].name}</h2><p style={{margin:"4px 0 0",fontSize:12,color:"#78716c"}}>Use ▲▼ to reorder. Tap driver initials to reassign.</p></div>
 {dispNotes[emDk]&&<div onClick={()=>{setView("daily");setEditingNote(true);setNoteText(dispNotes[emDk]);}} style={{background:"#faf5ff",border:"1px solid #d8b4fe",borderRadius:10,padding:"8px 12px",marginBottom:10,cursor:"pointer",display:"flex",alignItems:"flex-start",gap:6}}>
 <span style={{fontSize:12,flexShrink:0}}>📝</span>
-<div style={{flex:1}}><div style={{fontSize:10,fontWeight:700,color:"#7c3aed",textTransform:"uppercase"}}>Day Notes</div><div style={{fontSize:12,color:"#57534e",whiteSpace:"pre-wrap",lineHeight:1.3}}>{dispNotes[emDk].length>120?dispNotes[emDk].slice(0,120)+"…":dispNotes[emDk]}</div></div>
+<div style={_s.f1}><div style={{fontSize:10,fontWeight:700,color:"#7c3aed",textTransform:"uppercase"}}>Day Notes</div><div style={{fontSize:12,color:"#57534e",whiteSpace:"pre-wrap",lineHeight:1.3}}>{dispNotes[emDk].length>120?dispNotes[emDk].slice(0,120)+"…":dispNotes[emDk]}</div></div>
 </div>}
 {drivers.map((drv,di)=>{const de=drvEntries(drv.id);const isDrvDropTarget=dragSrc&&dragSrc.drvId!==drv.id&&dragOver?.drvId===drv.id;return(
 <div key={drv.id}
@@ -4950,10 +5019,10 @@ style={{background:isDrvDropTarget&&!de.length?"#dcfce7":"#fff",border:isDrvDrop
 {sortMenuDrv===("more2-"+drv.id)&&<><div style={{position:"fixed",inset:0,zIndex:199}} onClick={()=>setSortMenuDrv(null)}/>
 <div style={{position:"absolute",top:"100%",right:0,zIndex:200,background:"#fff",border:"1px solid #e7e5e4",borderRadius:12,padding:6,marginTop:4,boxShadow:"0 12px 40px rgba(0,0,0,0.2)",width:180}}>
 <div style={{fontSize:11,fontWeight:700,color:DCOL[di],padding:"6px 10px",borderBottom:"1px solid #f5f5f4",marginBottom:4}}>{drv.name}</div>
-{getDriverLoadOptions(drv.id)<3&&<button onClick={()=>{addDriverLoad(drv.id);setSortMenuDrv(null);}} style={{display:"flex",alignItems:"center",gap:8,width:"100%",textAlign:"left",background:"none",border:"none",padding:"10px",cursor:"pointer",borderRadius:8,fontSize:12,fontWeight:600,color:"#1c1917"}}>
+{getDriverLoadOptions(drv.id)<3&&<button onClick={()=>{addDriverLoad(drv.id);setSortMenuDrv(null);}} style={_s.menuBtn}>
 <span style={{fontSize:14}}>🚚</span><span>Add Load {getDriverLoadOptions(drv.id)+1}</span>
 </button>}
-<button onClick={()=>{toggleDriverCapacity(drv.id);setSortMenuDrv(null);}} style={{display:"flex",alignItems:"center",gap:8,width:"100%",textAlign:"left",background:"none",border:"none",padding:"10px",cursor:"pointer",borderRadius:8,fontSize:12,fontWeight:600,color:"#1c1917"}}>
+<button onClick={()=>{toggleDriverCapacity(drv.id);setSortMenuDrv(null);}} style={_s.menuBtn}>
 <span style={{fontSize:14}}>{getDriverCapacity(drv.id)===TRUCK_LIMITS.heavy?"🚚":"🚛"}</span><span>{getDriverCapacity(drv.id)===TRUCK_LIMITS.heavy?"Switch to 10k":"Switch to 13.5k"}</span>
 </button>
 </div></>}
@@ -4979,18 +5048,18 @@ style={{background:isDrvDropTarget&&!de.length?"#dcfce7":"#fff",border:isDrvDrop
 onLiftgate={()=>{if(entry.isHourly){setEmH(p=>{const key=`${emDk}-emser`;const cur=p[key]||4;return{...p,[key]:cur+1};});setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===entry.id?{...e,liftgateApplied:true}:e)}));showToast("Liftgate +1 hr added");}else{manualLiftgate(entry.id);}}} onSplit={()=>setSplitEntry({id:entry.id,totalWeight:entry.weight||0,ratio:50,truck1Weight:Math.round((entry.weight||0)/2)})} driverLoadCounts={Object.fromEntries(drivers.map(d=>[d.id,getDriverLoadOptions(d.id)]))}
 isDragging={dragSrc?.drvId===drv.id&&dragSrc?.idx===eIdx} isDragOver={dragOver?.drvId===drv.id&&dragOver?.idx===eIdx} onDragStart={()=>setDragSrc({drvId:drv.id,idx:eIdx})} onDragOver={()=>setDragOver({drvId:drv.id,idx:eIdx})} onDrop={()=>handleDrop(drv.id,eIdx)}/>
 {splitEntry?.id===entry.id&&<div style={{margin:"0 0 4px",background:"#eff6ff",border:"2px solid #2563eb",borderRadius:10,padding:12}}>
-<div style={{fontSize:12,fontWeight:700,color:"#1e40af",marginBottom:8}}>✂ Split Shipment</div>
+<div style={_s.splitTitle}>✂ Split Shipment</div>
 {(()=>{const tw=splitEntry.totalWeight||0;const t1w=splitEntry.truck1Weight!==undefined?splitEntry.truck1Weight:Math.round(tw*(splitEntry.ratio/100));const t2w=tw-t1w;return(<>
-<div style={{display:"flex",gap:6,marginBottom:6,alignItems:"center"}}>
-<div style={{flex:1}}><label style={{fontSize:9,fontWeight:600,color:"#57534e",display:"block",marginBottom:2}}>Total</label><input type="number" inputMode="numeric" value={tw||""} onChange={e=>{const newTw=parseInt(e.target.value)||0;setSplitEntry(p=>({...p,totalWeight:newTw,truck1Weight:Math.min(p.truck1Weight||Math.round(newTw/2),newTw)}));}} style={{width:"100%",border:"1px solid #bfdbfe",borderRadius:6,padding:"5px 8px",fontSize:13,fontWeight:700,outline:"none",textAlign:"center"}}/></div>
-<div style={{flex:1}}><label style={{fontSize:9,fontWeight:600,color:"#2563eb",display:"block",marginBottom:2}}>Truck 1</label><input type="number" inputMode="numeric" value={splitEntry.truck1Weight!==undefined?splitEntry.truck1Weight:""} onChange={e=>{const v=e.target.value;setSplitEntry(p=>({...p,truck1Weight:v===""?0:parseInt(v)||0}));}} style={{width:"100%",border:"2px solid #2563eb",borderRadius:6,padding:"5px 8px",fontSize:13,fontWeight:700,outline:"none",textAlign:"center",background:"#eff6ff"}}/></div>
-<div style={{flex:1}}><label style={{fontSize:9,fontWeight:600,color:"#78716c",display:"block",marginBottom:2}}>Truck 2</label><div style={{border:"1px solid #e7e5e4",borderRadius:6,padding:"5px 8px",fontSize:13,fontWeight:700,textAlign:"center",background:"#f5f5f4",color:"#57534e"}}>{t2w.toLocaleString()}</div></div>
+<div style={_s.flexG6Mb6}>
+<div style={_s.f1}><label style={_s.labelSm}>Total</label><input type="number" inputMode="numeric" value={tw||""} onChange={e=>{const newTw=parseInt(e.target.value)||0;setSplitEntry(p=>({...p,totalWeight:newTw,truck1Weight:Math.min(p.truck1Weight||Math.round(newTw/2),newTw)}));}} style={_s.splitTotal}/></div>
+<div style={_s.f1}><label style={_s.labelBlue}>Truck 1</label><input type="number" inputMode="numeric" value={splitEntry.truck1Weight!==undefined?splitEntry.truck1Weight:""} onChange={e=>{const v=e.target.value;setSplitEntry(p=>({...p,truck1Weight:v===""?0:parseInt(v)||0}));}} style={_s.splitInput}/></div>
+<div style={_s.f1}><label style={_s.labelGray}>Truck 2</label><div style={_s.splitT2}>{t2w.toLocaleString()}</div></div>
 </div>
-<input type="range" min={0} max={tw} step={100} value={t1w} onChange={e=>{const v=parseInt(e.target.value)||0;setSplitEntry(p=>({...p,truck1Weight:v}));}} style={{width:"100%",accentColor:"#2563eb",marginBottom:6}}/>
+<input type="range" min={0} max={tw} step={100} value={t1w} onChange={e=>{const v=parseInt(e.target.value)||0;setSplitEntry(p=>({...p,truck1Weight:v}));}} style={_s.slider}/>
 </>);})()}
-<div style={{display:"flex",gap:6}}>
-<button onClick={()=>confirmSplit(entry.id,splitEntry.totalWeight,splitEntry.ratio,splitEntry.truck1Weight)} style={{flex:1,background:"#2563eb",color:"#fff",border:"none",borderRadius:6,padding:"8px",fontSize:12,fontWeight:700,cursor:"pointer"}}>✂ Split</button>
-<button onClick={()=>setSplitEntry(null)} style={{background:"#e7e5e4",border:"none",borderRadius:6,padding:"8px 12px",fontSize:11,cursor:"pointer",color:"#57534e"}}>Cancel</button>
+<div style={_s.flexG6}>
+<button onClick={()=>confirmSplit(entry.id,splitEntry.totalWeight,splitEntry.ratio,splitEntry.truck1Weight)} style={_s.splitBtn}>✂ Split</button>
+<button onClick={()=>setSplitEntry(null)} style={_s.cancelBtn}>Cancel</button>
 </div>
 </div>}
 <button onClick={()=>setInsertPickupFor({driverId:drv.id,afterIdx:eIdx})} style={{display:"block",width:"100%",background:"none",border:"1px dashed #bfdbfe",borderRadius:6,padding:"3px",cursor:"pointer",fontSize:10,color:"#93c5fd",marginBottom:4,textAlign:"center"}}>+ insert pickup here</button>
@@ -5004,18 +5073,18 @@ style={{background:dragOver?.drvId===0?"#dcfce7":"#fff",border:dragOver?.drvId==
 onLiftgate={()=>{if(entry.isHourly){setEmH(p=>{const key=`${emDk}-emser`;const cur=p[key]||4;return{...p,[key]:cur+1};});setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===entry.id?{...e,liftgateApplied:true}:e)}));showToast("Liftgate +1 hr added");}else{manualLiftgate(entry.id);}}} onSplit={()=>setSplitEntry({id:entry.id,totalWeight:entry.weight||0,ratio:50,truck1Weight:Math.round((entry.weight||0)/2)})} driverLoadCounts={Object.fromEntries(drivers.map(d=>[d.id,getDriverLoadOptions(d.id)]))}
 isDragging={dragSrc?.drvId===0&&dragSrc?.idx===eIdx} isDragOver={dragOver?.drvId===0&&dragOver?.idx===eIdx} onDragStart={()=>setDragSrc({drvId:0,idx:eIdx})} onDragOver={()=>setDragOver({drvId:0,idx:eIdx})} onDrop={()=>handleDrop(0,eIdx)}/>
 {splitEntry?.id===entry.id&&<div style={{margin:"0 0 4px",background:"#eff6ff",border:"2px solid #2563eb",borderRadius:10,padding:12}}>
-<div style={{fontSize:12,fontWeight:700,color:"#1e40af",marginBottom:8}}>✂ Split Shipment</div>
+<div style={_s.splitTitle}>✂ Split Shipment</div>
 {(()=>{const tw=splitEntry.totalWeight||0;const t1w=splitEntry.truck1Weight!==undefined?splitEntry.truck1Weight:Math.round(tw*(splitEntry.ratio/100));const t2w=tw-t1w;return(<>
-<div style={{display:"flex",gap:6,marginBottom:6,alignItems:"center"}}>
-<div style={{flex:1}}><label style={{fontSize:9,fontWeight:600,color:"#57534e",display:"block",marginBottom:2}}>Total</label><input type="number" inputMode="numeric" value={tw||""} onChange={e=>{const newTw=parseInt(e.target.value)||0;setSplitEntry(p=>({...p,totalWeight:newTw,truck1Weight:Math.min(p.truck1Weight||Math.round(newTw/2),newTw)}));}} style={{width:"100%",border:"1px solid #bfdbfe",borderRadius:6,padding:"5px 8px",fontSize:13,fontWeight:700,outline:"none",textAlign:"center"}}/></div>
-<div style={{flex:1}}><label style={{fontSize:9,fontWeight:600,color:"#2563eb",display:"block",marginBottom:2}}>Truck 1</label><input type="number" inputMode="numeric" value={splitEntry.truck1Weight!==undefined?splitEntry.truck1Weight:""} onChange={e=>{const v=e.target.value;setSplitEntry(p=>({...p,truck1Weight:v===""?0:parseInt(v)||0}));}} style={{width:"100%",border:"2px solid #2563eb",borderRadius:6,padding:"5px 8px",fontSize:13,fontWeight:700,outline:"none",textAlign:"center",background:"#eff6ff"}}/></div>
-<div style={{flex:1}}><label style={{fontSize:9,fontWeight:600,color:"#78716c",display:"block",marginBottom:2}}>Truck 2</label><div style={{border:"1px solid #e7e5e4",borderRadius:6,padding:"5px 8px",fontSize:13,fontWeight:700,textAlign:"center",background:"#f5f5f4",color:"#57534e"}}>{t2w.toLocaleString()}</div></div>
+<div style={_s.flexG6Mb6}>
+<div style={_s.f1}><label style={_s.labelSm}>Total</label><input type="number" inputMode="numeric" value={tw||""} onChange={e=>{const newTw=parseInt(e.target.value)||0;setSplitEntry(p=>({...p,totalWeight:newTw,truck1Weight:Math.min(p.truck1Weight||Math.round(newTw/2),newTw)}));}} style={_s.splitTotal}/></div>
+<div style={_s.f1}><label style={_s.labelBlue}>Truck 1</label><input type="number" inputMode="numeric" value={splitEntry.truck1Weight!==undefined?splitEntry.truck1Weight:""} onChange={e=>{const v=e.target.value;setSplitEntry(p=>({...p,truck1Weight:v===""?0:parseInt(v)||0}));}} style={_s.splitInput}/></div>
+<div style={_s.f1}><label style={_s.labelGray}>Truck 2</label><div style={_s.splitT2}>{t2w.toLocaleString()}</div></div>
 </div>
-<input type="range" min={0} max={tw} step={100} value={t1w} onChange={e=>{const v=parseInt(e.target.value)||0;setSplitEntry(p=>({...p,truck1Weight:v}));}} style={{width:"100%",accentColor:"#2563eb",marginBottom:6}}/>
+<input type="range" min={0} max={tw} step={100} value={t1w} onChange={e=>{const v=parseInt(e.target.value)||0;setSplitEntry(p=>({...p,truck1Weight:v}));}} style={_s.slider}/>
 </>);})()}
-<div style={{display:"flex",gap:6}}>
-<button onClick={()=>confirmSplit(entry.id,splitEntry.totalWeight,splitEntry.ratio,splitEntry.truck1Weight)} style={{flex:1,background:"#2563eb",color:"#fff",border:"none",borderRadius:6,padding:"8px",fontSize:12,fontWeight:700,cursor:"pointer"}}>✂ Split</button>
-<button onClick={()=>setSplitEntry(null)} style={{background:"#e7e5e4",border:"none",borderRadius:6,padding:"8px 12px",fontSize:11,cursor:"pointer",color:"#57534e"}}>Cancel</button>
+<div style={_s.flexG6}>
+<button onClick={()=>confirmSplit(entry.id,splitEntry.totalWeight,splitEntry.ratio,splitEntry.truck1Weight)} style={_s.splitBtn}>✂ Split</button>
+<button onClick={()=>setSplitEntry(null)} style={_s.cancelBtn}>Cancel</button>
 </div>
 </div>}
 </div>)}
@@ -5035,9 +5104,9 @@ style={{display:"flex",alignItems:"center",gap:12,width:"100%",textAlign:"left",
 </div>}
 </div>}
 
-{/* ═══ ROUTES ═══ */}
+{}
 {view==="routes"&&<div>
-{dl.length===0?<div style={{textAlign:"center",padding:"48px 20px",color:"#a8a29e"}}><div style={{fontSize:48,marginBottom:12}}>🗺️</div><p style={{fontSize:16,fontWeight:600,margin:"0 0 8px"}}>No stops to route</p><p style={{fontSize:13,margin:0}}>Add deliveries first via the + Add tab,<br/>then come here to build routes on the map.</p></div>
+{dl.length===0?<div style={_s.emptyState}><div style={{fontSize:48,marginBottom:12}}>🗺️</div><p style={{fontSize:16,fontWeight:600,margin:"0 0 8px"}}>No stops to route</p><p style={{fontSize:13,margin:0}}>Add deliveries first via the + Add tab,<br/>then come here to build routes on the map.</p></div>
 :<RouteBuilder entries={dl} drivers={drivers}
 onAssign={(eid,did)=>reassign(eid,did)}
 onAssignBulk={(eids,did)=>reassignBulk(eids,did)}
@@ -5046,12 +5115,12 @@ onBack={()=>setView("manifest")}
 getDriverCapacity={getDriverCapacity}/>}
 </div>}
 
-{/* ═══ DAILY ═══ */}
+{}
 {view==="daily"&&<div>
-<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"16px 4px 8px"}}><h2 style={{margin:0,fontSize:16,fontWeight:600}}>{wd[sd].name} — {wd[sd].date}</h2><div style={{display:"flex",alignItems:"center",gap:8}}>{dl.length>0&&<button onClick={printDailyLog} style={{background:"#e7e5e4",border:"none",borderRadius:8,padding:"5px 10px",cursor:"pointer",fontSize:11,fontWeight:600,color:"#57534e"}}>Print</button>}<span style={{fontVariantNumeric:"tabular-nums",fontSize:15,fontWeight:700,color:"#16a34a"}}>{fmt(dc.total)}</span></div></div>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"16px 4px 8px"}}><h2 style={{margin:0,fontSize:16,fontWeight:600}}>{wd[sd].name} — {wd[sd].date}</h2><div style={_s.flexC8}>{dl.length>0&&<button onClick={printDailyLog} style={{background:"#e7e5e4",border:"none",borderRadius:8,padding:"5px 10px",cursor:"pointer",fontSize:11,fontWeight:600,color:"#57534e"}}>Print</button>}<span style={{fontVariantNumeric:"tabular-nums",fontSize:15,fontWeight:700,color:"#16a34a"}}>{fmt(dc.total)}</span></div></div>
 {!editingNote?<div onClick={()=>{setEditingNote(true);setNoteText(dispNotes[emDk]||"");}} style={{background:"#fff",border:dispNotes[emDk]?"2px solid #7c3aed":"1px solid #e7e5e4",borderRadius:12,padding:"10px 14px",marginBottom:12,cursor:"pointer",minHeight:28,display:"flex",alignItems:"flex-start",gap:8}}>
 <span style={{fontSize:14,flexShrink:0}}>{"📝"}</span>
-{dispNotes[emDk]?<div style={{flex:1}}><div style={{fontSize:10,fontWeight:700,color:"#7c3aed",textTransform:"uppercase",marginBottom:2}}>Dispatcher Notes</div><div style={{fontSize:13,color:"#1c1917",whiteSpace:"pre-wrap",lineHeight:1.4}}>{dispNotes[emDk]}</div></div>
+{dispNotes[emDk]?<div style={_s.f1}><div style={{fontSize:10,fontWeight:700,color:"#7c3aed",textTransform:"uppercase",marginBottom:2}}>Dispatcher Notes</div><div style={{fontSize:13,color:"#1c1917",whiteSpace:"pre-wrap",lineHeight:1.4}}>{dispNotes[emDk]}</div></div>
 :<div style={{fontSize:12,color:"#a8a29e",paddingTop:2}}>Tap to add dispatcher notes for this day</div>}
 </div>
 :<div style={{background:"#fff",border:"2px solid #7c3aed",borderRadius:12,padding:"10px 14px",marginBottom:12}}>
@@ -5069,7 +5138,7 @@ const{byDriver,totalMins}=getShiftSummary(emDk);
 const hasShifts=totalMins>0;
 const hrs=emH[`${emDk}-emser`]||4;
 return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:12,padding:"12px 16px",marginBottom:12}}>
-<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+<div style={_s.flexBtwMb8}>
 <span style={{fontSize:13,color:"#2563eb",fontWeight:600}}>Emser Hours</span>
 <span style={{fontSize:16,fontWeight:700,fontVariantNumeric:"tabular-nums"}}>{fmt(102.50*hrs)}</span>
 </div>
@@ -5086,7 +5155,7 @@ return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius
 </div>
 <div style={{fontSize:11,color:"#64748b"}}>{hrs}h billed × $102.50 — auto-updated from shifts</div>
 </>):(<>
-<div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><span style={{fontSize:12,color:"#64748b"}}>{hrs}h × $102.50</span>
+<div style={_s.flexBtw}><span style={{fontSize:12,color:"#64748b"}}>{hrs}h × $102.50</span>
 <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
 {[4,5,6,7,8,9,10].map(h=><button key={h} onClick={()=>{setEmH(p=>({...p,[`${emDk}-emser`]:h}));setShowCustomHrs(false);}} style={{width:30,height:30,borderRadius:8,border:"none",cursor:"pointer",fontSize:13,fontWeight:600,background:!showCustomHrs&&hrs===h?"#2563eb":"#e7e5e4",color:!showCustomHrs&&hrs===h?"#fff":"#78716c"}}>{h}</button>)}
 <button onClick={()=>setShowCustomHrs(!showCustomHrs)} style={{height:30,borderRadius:8,border:"none",cursor:"pointer",fontSize:11,fontWeight:600,padding:"0 8px",background:showCustomHrs?"#2563eb":"#dbeafe",color:showCustomHrs?"#fff":"#2563eb"}}>Other</button>
@@ -5096,14 +5165,14 @@ return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius
 </>)}
 </div>);
 })()}
-{dl.length===0?<div style={{textAlign:"center",padding:"48px 20px",color:"#a8a29e"}}><div style={{fontSize:36,marginBottom:12}}>🚚</div><p style={{fontSize:14,margin:0}}>No deliveries logged</p></div>:<>
+{dl.length===0?<div style={_s.emptyState}><div style={{fontSize:36,marginBottom:12}}>🚚</div><p style={{fontSize:14,margin:0}}>No deliveries logged</p></div>:<>
 {dl.filter(e=>e.stopType!=="pickup").map(entry=>{const c=getCustColor(entry.customer);const drv=drivers.find(d=>d.id===entry.driverId);const di=drivers.findIndex(d=>d.id===entry.driverId);const isImetco=entry.customer==="IMETCO";return(
 <div key={entry.id} style={{background:"#fff",border:"1px solid #e7e5e4",borderRadius:14,padding:"12px 16px",marginBottom:8,borderLeft:`4px solid ${entry.priority?"#f59e0b":c.accent}`}}>
 <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-<div style={{flex:1}}>
+<div style={_s.f1}>
 <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:2,flexWrap:"wrap"}}>
 <span style={{fontSize:11,fontWeight:600,color:c.accent,textTransform:"uppercase"}}>{entry.customer}</span>
-{entry.priority&&<span style={{fontSize:9,background:"#f59e0b",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700}}>PRIORITY</span>}
+{entry.priority&&<span style={_s.tag9Amber}>PRIORITY</span>}
 {entry.dueBy&&<span style={{fontSize:9,background:entry.dueBy.includes("-")?"#7c3aed":entry.dueBy.startsWith("After")?"#2563eb":"#dc2626",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700,display:"inline-flex",alignItems:"center",gap:2}}>{"\u23F0"} {entry.dueBy}</span>}
 <span style={{fontSize:10,background:drv?(DCOL[di]||"#78716c"):"#a8a29e",color:"#fff",padding:"1px 6px",borderRadius:4,fontWeight:600}}>{drv?.name||"Unassigned"}</span>
 </div>
@@ -5125,12 +5194,12 @@ return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius
 {splitEntry?.id===entry.id&&<div style={{marginTop:8,background:"#eff6ff",border:"2px solid #2563eb",borderRadius:10,padding:14}}>
 <div style={{fontSize:13,fontWeight:700,color:"#1e40af",marginBottom:8}}>✂ Split Shipment</div>
 {(()=>{const tw=splitEntry.totalWeight||0;const t1w=splitEntry.truck1Weight!==undefined?splitEntry.truck1Weight:Math.round(tw*(splitEntry.ratio/100));const t2w=tw-t1w;return(<>
-<div style={{display:"flex",gap:6,marginBottom:6,alignItems:"center"}}>
-<div style={{flex:1}}><label style={{fontSize:9,fontWeight:600,color:"#57534e",display:"block",marginBottom:2}}>Total</label><input type="number" inputMode="numeric" value={tw||""} onChange={e=>{const newTw=parseInt(e.target.value)||0;setSplitEntry(p=>({...p,totalWeight:newTw,truck1Weight:Math.min(p.truck1Weight||Math.round(newTw/2),newTw)}));}} style={{width:"100%",border:"1px solid #bfdbfe",borderRadius:6,padding:"5px 8px",fontSize:13,fontWeight:700,outline:"none",textAlign:"center"}}/></div>
-<div style={{flex:1}}><label style={{fontSize:9,fontWeight:600,color:"#2563eb",display:"block",marginBottom:2}}>Truck 1</label><input type="number" inputMode="numeric" value={splitEntry.truck1Weight!==undefined?splitEntry.truck1Weight:""} onChange={e=>{const v=e.target.value;setSplitEntry(p=>({...p,truck1Weight:v===""?0:parseInt(v)||0}));}} style={{width:"100%",border:"2px solid #2563eb",borderRadius:6,padding:"5px 8px",fontSize:13,fontWeight:700,outline:"none",textAlign:"center",background:"#eff6ff"}}/></div>
-<div style={{flex:1}}><label style={{fontSize:9,fontWeight:600,color:"#78716c",display:"block",marginBottom:2}}>Truck 2</label><div style={{border:"1px solid #e7e5e4",borderRadius:6,padding:"5px 8px",fontSize:13,fontWeight:700,textAlign:"center",background:"#f5f5f4",color:"#57534e"}}>{t2w.toLocaleString()}</div></div>
+<div style={_s.flexG6Mb6}>
+<div style={_s.f1}><label style={_s.labelSm}>Total</label><input type="number" inputMode="numeric" value={tw||""} onChange={e=>{const newTw=parseInt(e.target.value)||0;setSplitEntry(p=>({...p,totalWeight:newTw,truck1Weight:Math.min(p.truck1Weight||Math.round(newTw/2),newTw)}));}} style={_s.splitTotal}/></div>
+<div style={_s.f1}><label style={_s.labelBlue}>Truck 1</label><input type="number" inputMode="numeric" value={splitEntry.truck1Weight!==undefined?splitEntry.truck1Weight:""} onChange={e=>{const v=e.target.value;setSplitEntry(p=>({...p,truck1Weight:v===""?0:parseInt(v)||0}));}} style={_s.splitInput}/></div>
+<div style={_s.f1}><label style={_s.labelGray}>Truck 2</label><div style={_s.splitT2}>{t2w.toLocaleString()}</div></div>
 </div>
-<input type="range" min={0} max={tw} step={100} value={t1w} onChange={e=>{const v=parseInt(e.target.value)||0;setSplitEntry(p=>({...p,truck1Weight:v}));}} style={{width:"100%",accentColor:"#2563eb",marginBottom:6}}/>
+<input type="range" min={0} max={tw} step={100} value={t1w} onChange={e=>{const v=parseInt(e.target.value)||0;setSplitEntry(p=>({...p,truck1Weight:v}));}} style={_s.slider}/>
 </>);})()}
 <div style={{display:"flex",gap:8}}>
 <button onClick={()=>confirmSplit(entry.id,splitEntry.totalWeight,splitEntry.ratio,splitEntry.truck1Weight)} style={{flex:1,background:"#2563eb",color:"#fff",border:"none",borderRadius:8,padding:"10px 16px",fontSize:12,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>✂ Split</button>
@@ -5143,14 +5212,14 @@ return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius
 style={{flex:1,border:entry.shipPlan?"1px solid #bbf7d0":"1px solid #fca5a5",borderRadius:8,padding:"6px 10px",fontSize:13,fontWeight:700,outline:"none",background:entry.shipPlan?"#f0fdf4":"#fff7ed",textAlign:"center"}}/>
 </div>}
 </div>);})}
-{Object.keys(dc.fBC).length>0&&<div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:14,padding:"14px 16px",marginTop:12}}><div style={{fontSize:12,fontWeight:700,color:"#d97706",textTransform:"uppercase",marginBottom:8}}>Fuel Surcharges</div>{Object.entries(dc.fBC).map(([cu,cf])=><div key={cu} style={{display:"flex",justifyContent:"space-between",padding:"4px 0"}}><span style={{fontSize:13}}>{cu} <span style={{fontSize:11,color:"#a8a29e",fontVariantNumeric:"tabular-nums"}}>{fmt(cf.base)} x {Math.round(cf.pct*100)}%</span></span><span style={{fontSize:14,fontWeight:700,color:"#d97706",fontVariantNumeric:"tabular-nums"}}>{fmt(cf.base*cf.pct)}</span></div>)}</div>}
+{Object.keys(dc.fBC).length>0&&<div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:14,padding:"14px 16px",marginTop:12}}><div style={_s.loadTitle}>Fuel Surcharges</div>{Object.entries(dc.fBC).map(([cu,cf])=><div key={cu} style={_s.flexBtwP4}><span style={{fontSize:13}}>{cu} <span style={{fontSize:11,color:"#a8a29e",fontVariantNumeric:"tabular-nums"}}>{fmt(cf.base)} x {Math.round(cf.pct*100)}%</span></span><span style={_s.loadWeight}>{fmt(cf.base*cf.pct)}</span></div>)}</div>}
 <div style={{display:"flex",justifyContent:"space-between",padding:"16px 4px 0",borderTop:"2px solid #bbf7d0",marginTop:16}}><span style={{fontSize:15,fontWeight:700,color:"#57534e"}}>Day Total</span><span style={{fontSize:20,fontWeight:700,color:"#16a34a",fontVariantNumeric:"tabular-nums"}}>{fmt(dc.total)}</span></div>
 </>}
 </div>}
 
-{/* ═══ WEEKLY ═══ */}
+{}
 {view==="weekly"&&<div>
-<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"16px 4px 12px"}}><h2 style={{margin:0,fontSize:16,fontWeight:600}}>Weekly Summary</h2><div style={{display:"flex",alignItems:"center",gap:8}}><button onClick={printWeekly} style={{background:"#e7e5e4",border:"none",borderRadius:8,padding:"5px 10px",cursor:"pointer",fontSize:11,fontWeight:600,color:"#57534e"}}>Print</button><span style={{fontVariantNumeric:"tabular-nums",fontSize:18,fontWeight:700,color:"#16a34a"}}>{fmt(wkT)}</span></div></div>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"16px 4px 12px"}}><h2 style={{margin:0,fontSize:16,fontWeight:600}}>Weekly Summary</h2><div style={_s.flexC8}><button onClick={printWeekly} style={{background:"#e7e5e4",border:"none",borderRadius:8,padding:"5px 10px",cursor:"pointer",fontSize:11,fontWeight:600,color:"#57534e"}}>Print</button><span style={{fontVariantNumeric:"tabular-nums",fontSize:18,fontWeight:700,color:"#16a34a"}}>{fmt(wkT)}</span></div></div>
 <div style={{background:"#fff",border:"1px solid #e7e5e4",borderRadius:14,padding:"14px 16px",marginBottom:16}}>
 <div style={{fontSize:11,fontWeight:700,color:"#57534e",textTransform:"uppercase",marginBottom:10}}>Week-over-Week</div>
 <div style={{display:"flex",gap:12,marginBottom:10}}>
@@ -5177,26 +5246,26 @@ style={{flex:1,border:entry.shipPlan?"1px solid #bbf7d0":"1px solid #fca5a5",bor
 </div>);})}
 </div>
 <div style={{display:"flex",justifyContent:"center",gap:12,marginTop:6}}>
-<div style={{display:"flex",alignItems:"center",gap:4}}><div style={{width:8,height:8,borderRadius:2,background:"#d6d3d1"}}/><span style={{fontSize:9,color:"#a8a29e"}}>Last wk</span></div>
-<div style={{display:"flex",alignItems:"center",gap:4}}><div style={{width:8,height:8,borderRadius:2,background:"#16a34a"}}/><span style={{fontSize:9,color:"#a8a29e"}}>This wk</span></div>
+<div style={_s.flexC4}><div style={{width:8,height:8,borderRadius:2,background:"#d6d3d1"}}/><span style={{fontSize:9,color:"#a8a29e"}}>Last wk</span></div>
+<div style={_s.flexC4}><div style={{width:8,height:8,borderRadius:2,background:"#16a34a"}}/><span style={{fontSize:9,color:"#a8a29e"}}>This wk</span></div>
 </div>
 </div>
-{DAYS.map((day,i)=>{const{entries,calc}=wkD[i];const wk2=`${wo}-${i}`;const{byDriver:shiftByDrv,totalMins:shiftMins}=getShiftSummary(getFbKey(wo,i));if(!entries.length&&!shiftMins)return null;return(<div key={day} style={{marginBottom:16}}><div style={{display:"flex",justifyContent:"space-between",padding:"8px 4px",borderBottom:"1px solid #e7e5e4"}}><span style={{fontSize:14,fontWeight:700}}>{day} — {wd[i].date}</span><span style={{fontVariantNumeric:"tabular-nums",fontWeight:700,color:"#16a34a",fontSize:14}}>{fmt(calc.total)}</span></div>
+{DAYS.map((day,i)=>{const{entries,calc}=wkD[i];const wk2=`${wo}-${i}`;const{byDriver:shiftByDrv,totalMins:shiftMins}=getShiftSummary(getFbKey(wo,i));if(!entries.length&&!shiftMins)return null;return(<div key={day} style={{marginBottom:16}}><div style={{display:"flex",justifyContent:"space-between",padding:"8px 4px",borderBottom:"1px solid #e7e5e4"}}><span style={_s.bold14}>{day} — {wd[i].date}</span><span style={{fontVariantNumeric:"tabular-nums",fontWeight:700,color:"#16a34a",fontSize:14}}>{fmt(calc.total)}</span></div>
 {shiftMins>0&&<div style={{display:"flex",alignItems:"center",gap:5,padding:"5px 8px 5px 14px",borderLeft:"3px solid #2563eb",marginTop:4,background:"#eff6ff",borderRadius:"0 8px 8px 0",flexWrap:"wrap"}}>
 <span style={{fontSize:11,color:"#2563eb",fontWeight:700,flexShrink:0}}>⏱ Emser</span>
 {drivers.map((drv,di)=>{const mins=shiftByDrv[drv.id]||0;if(!mins)return null;const initials=drv.name.split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase();return(<span key={drv.id} style={{fontSize:11,background:DCOL[di],color:"#fff",padding:"1px 6px",borderRadius:4,fontWeight:600}}>{initials} {formatMins(mins)}</span>);})}
 <span style={{marginLeft:"auto",fontSize:11,fontWeight:700,color:"#1d4ed8",fontVariantNumeric:"tabular-nums"}}>{formatMins(shiftMins)}</span>
 </div>}
-{entries.filter(e=>e.stopType!=="pickup").map(entry=>{const c=getCustColor(entry.customer);const drv=drivers.find(d=>d.id===entry.driverId);const di2=drivers.findIndex(d=>d.id===entry.driverId);const isImetco=entry.customer==="IMETCO";return(<div key={entry.id}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 8px 6px 16px",borderLeft:`3px solid ${c.accent}`,marginTop:4,background:"#fff",borderRadius:isImetco?"0 8px 0 0":"0 8px 8px 0"}}><div style={{display:"flex",alignItems:"center",gap:4,flex:1,minWidth:0}}><span style={{fontSize:11,color:c.accent,fontWeight:600}}>{entry.customer}</span><span style={{fontSize:12,color:"#57534e",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{entry.stop}</span>{drv&&<span style={{fontSize:9,background:DCOL[di2]||"#78716c",color:"#fff",padding:"1px 4px",borderRadius:3,fontWeight:600,flexShrink:0}}>{drv.name.charAt(0)}</span>}</div><InlineRate value={entry.baseRate} isHourly={entry.isHourly} onSave={r=>updateRate(entry.id,r)}/></div>
+{entries.filter(e=>e.stopType!=="pickup").map(entry=>{const c=getCustColor(entry.customer);const drv=drivers.find(d=>d.id===entry.driverId);const di2=drivers.findIndex(d=>d.id===entry.driverId);const isImetco=entry.customer==="IMETCO";return(<div key={entry.id}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 8px 6px 16px",borderLeft:`3px solid ${c.accent}`,marginTop:4,background:"#fff",borderRadius:isImetco?"0 8px 0 0":"0 8px 8px 0"}}><div style={{display:"flex",alignItems:"center",gap:4,flex:1,minWidth:0}}><span style={{fontSize:11,color:c.accent,fontWeight:600}}>{entry.customer}</span><span style={_s.truncate}>{entry.stop}</span>{drv&&<span style={{fontSize:9,background:DCOL[di2]||"#78716c",color:"#fff",padding:"1px 4px",borderRadius:3,fontWeight:600,flexShrink:0}}>{drv.name.charAt(0)}</span>}</div><InlineRate value={entry.baseRate} isHourly={entry.isHourly} onSave={r=>updateRate(entry.id,r)}/></div>
 {isImetco&&<div style={{padding:"4px 8px 6px 16px",borderLeft:`3px solid ${c.accent}`,background:"#fff",borderRadius:"0 0 8px 0",display:"flex",alignItems:"center",gap:6}}>
 <span style={{fontSize:10,fontWeight:700,color:"#ea580c",flexShrink:0}}>SP#:</span>
 <input value={entry.shipPlan||""} onChange={e=>{const eid=entry.id;const val=e.target.value;setLog(p=>({...p,[wk2]:(p[wk2]||[]).map(en=>en.id===eid?{...en,shipPlan:val}:en)}));}} placeholder="—"
 style={{width:80,border:"1px solid #e7e5e4",borderRadius:6,padding:"3px 6px",fontSize:11,fontWeight:700,outline:"none",background:entry.shipPlan?"#f0fdf4":"#fff",textAlign:"center"}}/>
 </div>}
 </div>);})}</div>);})}
-{wkD.every(d=>!d.entries.length)&&<div style={{textAlign:"center",padding:"48px 20px",color:"#a8a29e"}}><p>No deliveries this week</p></div>}
+{wkD.every(d=>!d.entries.length)&&<div style={_s.emptyState}><p>No deliveries this week</p></div>}
 {(()=>{const wkShiftByDrv={};let wkShiftTotal=0;DAYS.forEach((_,i)=>{const{byDriver,totalMins}=getShiftSummary(getFbKey(wo,i));wkShiftTotal+=totalMins;Object.entries(byDriver).forEach(([did,mins])=>{wkShiftByDrv[did]=(wkShiftByDrv[did]||0)+mins;});});if(!wkShiftTotal)return null;const wkShiftHrs=Math.round(wkShiftTotal/15)*15/60;return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:14,padding:"14px 16px",marginBottom:12}}>
-<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+<div style={_s.flexBtwMb8}>
 <span style={{fontSize:13,fontWeight:700,color:"#2563eb"}}>⏱ Week Emser Hours</span>
 <span style={{fontSize:16,fontWeight:700,fontVariantNumeric:"tabular-nums",color:"#1d4ed8"}}>{fmt(102.50*wkShiftHrs)}</span>
 </div>
@@ -5209,10 +5278,10 @@ style={{width:80,border:"1px solid #e7e5e4",borderRadius:6,padding:"3px 6px",fon
 </div>
 <div style={{fontSize:11,color:"#64748b",fontVariantNumeric:"tabular-nums"}}>{formatMins(wkShiftTotal)} total across all drivers</div>
 </div>);})()}
-{Object.keys(wkF).length>0&&<div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:14,padding:"14px 16px",marginBottom:12}}><div style={{fontSize:12,fontWeight:700,color:"#d97706",textTransform:"uppercase",marginBottom:8}}>Week Fuel</div>{Object.entries(wkF).map(([cu,cf])=><div key={cu} style={{display:"flex",justifyContent:"space-between",padding:"4px 0"}}><span style={{fontSize:13}}>{cu} <span style={{fontSize:11,color:"#a8a29e",fontVariantNumeric:"tabular-nums"}}>{fmt(cf.base)} x {Math.round(cf.pct*100)}%</span></span><span style={{fontSize:14,fontWeight:700,color:"#d97706",fontVariantNumeric:"tabular-nums"}}>{fmt(cf.base*cf.pct)}</span></div>)}</div>}
+{Object.keys(wkF).length>0&&<div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:14,padding:"14px 16px",marginBottom:12}}><div style={_s.loadTitle}>Week Fuel</div>{Object.entries(wkF).map(([cu,cf])=><div key={cu} style={_s.flexBtwP4}><span style={{fontSize:13}}>{cu} <span style={{fontSize:11,color:"#a8a29e",fontVariantNumeric:"tabular-nums"}}>{fmt(cf.base)} x {Math.round(cf.pct*100)}%</span></span><span style={_s.loadWeight}>{fmt(cf.base*cf.pct)}</span></div>)}</div>}
 </div>}
 
-{/* ═══ HISTORY ═══ */}
+{}
 {view==="history"&&<div>
 <div style={{padding:"16px 4px 8px"}}><h2 style={{margin:0,fontSize:16,fontWeight:600}}>{histMode==="quotes"?"Quotes":histMode==="emser"?"Emser Hours":histMode==="photos"?"Photos":"Delivery History"}</h2><p style={{margin:"4px 0 0",fontSize:12,color:"#78716c"}}>{histMode==="emser"?"Track Emser driver hours":histMode==="quotes"?"Create and manage delivery quotes":histMode==="photos"?"Delivery photos & proof of delivery":"Search deliveries and proof of delivery"}</p></div>
 
@@ -5226,10 +5295,10 @@ const TIME_PRESETS=["7:00 AM","8:00 AM","9:00 AM","10:00 AM","11:00 AM","12:00 P
 return(<div>
 {/* Day header */}
 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"0 4px",marginBottom:12}}>
-<span style={{fontSize:14,fontWeight:700}}>{wd[sd].name} — {wd[sd].date}</span>
+<span style={_s.bold14}>{wd[sd].name} — {wd[sd].date}</span>
 <div style={{textAlign:"right"}}>
 <div style={{fontSize:18,fontWeight:800,color:BRAND.main,fontVariantNumeric:"tabular-nums"}}>{totalMins>0?formatMins(totalMins):(emH[`${emDk}-emser`]||4)+"h"}</div>
-<div style={{fontSize:10,color:"#78716c"}}>{totalMins>0?fmt(102.50*totalHrs):fmt(102.50*(emH[`${emDk}-emser`]||4))}</div>
+<div style={_s.sub}>{totalMins>0?fmt(102.50*totalHrs):fmt(102.50*(emH[`${emDk}-emser`]||4))}</div>
 </div>
 </div>
 
@@ -5239,9 +5308,9 @@ const drvShifts=shifts.filter(s=>s.driverId===drv.id);
 const drvMins=perDriver[drv.id]||0;
 return(<div key={drv.id} style={{background:"#fff",border:"1px solid #e7e5e4",borderRadius:14,padding:"12px 14px",marginBottom:10,borderLeft:`3px solid ${DCOL[di]}`}}>
 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:drvShifts.length?8:0}}>
-<div style={{display:"flex",alignItems:"center",gap:8}}>
+<div style={_s.flexC8}>
 <div style={{width:22,height:22,borderRadius:7,background:DCOL[di],display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:"#fff",fontWeight:700}}>{drv.name.charAt(0)}</div>
-<span style={{fontSize:14,fontWeight:700}}>{drv.name}</span>
+<span style={_s.bold14}>{drv.name}</span>
 {drvMins>0&&<span style={{fontSize:12,fontWeight:700,color:BRAND.main,fontVariantNumeric:"tabular-nums"}}>{formatMins(drvMins)}</span>}
 </div>
 <button onClick={()=>addEmserShift(drv.id)} style={{background:BRAND.pale,border:"1px solid "+BRAND.light,borderRadius:6,padding:"4px 10px",cursor:"pointer",fontSize:11,fontWeight:600,color:BRAND.main}}>+ Shift</button>
@@ -5267,7 +5336,7 @@ const MINS=[{l:":00",v:"00"},{l:":15",v:"15"},{l:":30",v:"30"},{l:":45",v:"45"}]
 const btnBase={padding:"4px 0",borderRadius:5,border:"none",cursor:"pointer",fontSize:10,fontWeight:700,textAlign:"center"};
 return(
 <div key={shift.id} style={{background:"#fafaf9",border:"1px solid #e7e5e4",borderRadius:10,padding:"10px 12px",marginBottom:6}}>
-<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+<div style={_s.flexBtwMb8}>
 <span style={{fontSize:11,fontWeight:600,color:"#57534e"}}>Shift {si+1}</span>
 <div style={{display:"flex",alignItems:"center",gap:6}}>
 {mins>0&&<span style={{fontSize:12,fontWeight:700,color:BRAND.main}}>{formatMins(mins)}</span>}
@@ -5278,7 +5347,7 @@ return(
 <div style={{marginBottom:8}}>
 <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
 <label style={{fontSize:10,fontWeight:700,color:BRAND.main,width:30,flexShrink:0}}>Start</label>
-<div style={{flex:1,border:"1px solid #bfdbfe",borderRadius:7,padding:"5px 8px",fontSize:13,fontWeight:700,background:shift.start?"#eff6ff":"#fafaf9",color:shift.start?"#1c1917":"#a8a29e",minHeight:22,display:"flex",alignItems:"center"}}>{shift.start?((h)=>{const[hh,mm]=h.split(":");const n=parseInt(hh);const ampm=n>=12?"PM":"AM";const d=n===0?12:n>12?n-12:n;return d+":"+mm+" "+ampm;})(shift.start):"—"}{shift.start&&<button onClick={()=>updateEmserShift(shift.id,"start","")} style={{marginLeft:"auto",background:"none",border:"none",color:"#dc2626",fontSize:10,cursor:"pointer",padding:"0 2px"}}>✕</button>}</div>
+<div style={{flex:1,border:"1px solid #bfdbfe",borderRadius:7,padding:"5px 8px",fontSize:13,fontWeight:700,background:shift.start?"#eff6ff":"#fafaf9",color:shift.start?"#1c1917":"#a8a29e",minHeight:22,display:"flex",alignItems:"center"}}>{shift.start?((h)=>{const[hh,mm]=h.split(":");const n=parseInt(hh);const ampm=n>=12?"PM":"AM";const d=n===0?12:n>12?n-12:n;return d+":"+mm+" "+ampm;})(shift.start):"—"}{shift.start&&<button onClick={()=>updateEmserShift(shift.id,"start","")} style={_s.delBtn}>✕</button>}</div>
 </div>
 <div style={{display:"flex",gap:2,paddingLeft:36}}>
 {HOURS.map(h=>{const sel=startDispHour===h&&!!shift.start;return(<button key={h} onClick={()=>setHour("start",h)} style={{...btnBase,flex:1,background:sel?BRAND.main:"#e7e5e4",color:sel?"#fff":"#44403c"}}>{h}</button>);})}
@@ -5291,7 +5360,7 @@ return(
 <div>
 <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
 <label style={{fontSize:10,fontWeight:700,color:"#16a34a",width:30,flexShrink:0}}>End</label>
-<div style={{flex:1,border:"1px solid #bbf7d0",borderRadius:7,padding:"5px 8px",fontSize:13,fontWeight:700,background:shift.end?"#f0fdf4":"#fafaf9",color:shift.end?"#1c1917":"#a8a29e",minHeight:22,display:"flex",alignItems:"center"}}>{shift.end?((h)=>{const[hh,mm]=h.split(":");const n=parseInt(hh);const ampm=n>=12?"PM":"AM";const d=n===0?12:n>12?n-12:n;return d+":"+mm+" "+ampm;})(shift.end):"—"}{shift.end&&<button onClick={()=>updateEmserShift(shift.id,"end","")} style={{marginLeft:"auto",background:"none",border:"none",color:"#dc2626",fontSize:10,cursor:"pointer",padding:"0 2px"}}>✕</button>}</div>
+<div style={{flex:1,border:"1px solid #bbf7d0",borderRadius:7,padding:"5px 8px",fontSize:13,fontWeight:700,background:shift.end?"#f0fdf4":"#fafaf9",color:shift.end?"#1c1917":"#a8a29e",minHeight:22,display:"flex",alignItems:"center"}}>{shift.end?((h)=>{const[hh,mm]=h.split(":");const n=parseInt(hh);const ampm=n>=12?"PM":"AM";const d=n===0?12:n>12?n-12:n;return d+":"+mm+" "+ampm;})(shift.end):"—"}{shift.end&&<button onClick={()=>updateEmserShift(shift.id,"end","")} style={_s.delBtn}>✕</button>}</div>
 </div>
 <div style={{display:"flex",gap:2,paddingLeft:36}}>
 {HOURS.map(h=>{const sel=endDispHour===h&&!!shift.end;return(<button key={h} onClick={()=>setHour("end",h)} style={{...btnBase,flex:1,background:sel?"#16a34a":"#e7e5e4",color:sel?"#fff":"#44403c"}}>{h}</button>);})}
@@ -5307,10 +5376,10 @@ return(
 
 {/* Apply button */}
 {totalMins>0&&<div style={{background:BRAND.pale,border:"2px solid "+BRAND.main,borderRadius:14,padding:"14px 16px",marginTop:8}}>
-<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+<div style={_s.flexBtwMb8}>
 <div>
 <div style={{fontSize:13,fontWeight:700,color:BRAND.dark}}>Total Emser Time</div>
-<div style={{fontSize:11,color:"#78716c"}}>Across all drivers</div>
+<div style={_s.sub11}>Across all drivers</div>
 </div>
 <div style={{textAlign:"right"}}>
 <div style={{fontSize:20,fontWeight:800,color:BRAND.main,fontVariantNumeric:"tabular-nums"}}>{formatMins(totalMins)}</div>
@@ -5360,7 +5429,7 @@ return(<div>
 <span style={{fontSize:12,color:"#78716c"}}>{photoCount} photo{photoCount!==1?"s":""}</span>
 {(histSearch||histCustFilter||histDrvFilter)&&<button onClick={()=>{setHistSearch("");setHistCustFilter("");setHistDrvFilter("");}} style={{background:"#fef2f2",border:"none",borderRadius:6,padding:"4px 10px",cursor:"pointer",fontSize:11,color:"#dc2626",fontWeight:600}}>Clear</button>}
 </div>
-{photoCount===0?<div style={{textAlign:"center",padding:"48px 20px",color:"#a8a29e"}}><div style={{fontSize:36,marginBottom:12}}>{"📷"}</div><p style={{fontSize:14,fontWeight:600,margin:"0 0 4px"}}>No photos found</p><p style={{fontSize:12,margin:0}}>{histFiltered.length>0?"No photos on these deliveries":"Try adjusting your filters"}</p></div>
+{photoCount===0?<div style={_s.emptyState}><div style={{fontSize:36,marginBottom:12}}>{"📷"}</div><p style={{fontSize:14,fontWeight:600,margin:"0 0 4px"}}>No photos found</p><p style={{fontSize:12,margin:0}}>{histFiltered.length>0?"No photos on these deliveries":"Try adjusting your filters"}</p></div>
 :<div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6}}>
 {photosAll.map(photo=>{const c=CC[photo.customer]||CC["One-Off Delivery"];const drv=drivers.find(d=>d.id===photo.driverId);return(
 <div key={photo.id} onClick={()=>setLightboxPhoto(photo)} style={{cursor:"pointer",borderRadius:10,overflow:"hidden",border:"1px solid #e7e5e4",background:"#fff"}}>
@@ -5383,13 +5452,13 @@ return(<div>
 const allCustNames=[...Object.keys(CUSTOMERS),...QUOTE_CUSTOMERS.map(q=>q.name),"One-Off Delivery"];
 const getDeliveries2=(custName)=>{const cd=CUSTOMERS[custName];if(!cd)return[];return cd.deliveries.map(d=>typeof d==="string"?{s:d,r:0}:d);};
 return(<div>
-<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-<div><span style={{fontSize:14,fontWeight:700}}>Quotes</span><span style={{fontSize:11,color:"#a8a29e",marginLeft:6}}>{savedQuotes.length}</span></div>
+<div style={_s.flexBtwMb12}>
+<div><span style={_s.bold14}>Quotes</span><span style={{fontSize:11,color:"#a8a29e",marginLeft:6}}>{savedQuotes.length}</span></div>
 <button onClick={()=>setQuoteFormOpen(!quoteFormOpen)} style={{background:"#16a34a",color:"#fff",border:"none",borderRadius:8,padding:"7px 14px",cursor:"pointer",fontSize:12,fontWeight:700}}>{quoteFormOpen?"Cancel":"+ New Quote"}</button>
 </div>
 {quoteFormOpen&&<div style={{background:"#fff",border:"2px solid #16a34a",borderRadius:14,padding:"14px 16px",marginBottom:16}}>
 <div style={{fontSize:13,fontWeight:700,color:"#16a34a",marginBottom:12}}>New Quote</div>
-<label style={{fontSize:11,fontWeight:600,color:"#57534e",display:"block",marginBottom:4}}>Customer</label>
+<label style={_s.label}>Customer</label>
 <select value={qCust} onChange={e=>{setQCust(e.target.value);setQStop("");setQPickup("");setQCustomMode(false);}} style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px",fontSize:13,outline:"none",background:"#fff",marginBottom:10}}>
 <option value="">Select customer...</option>{allCustNames.map(c=><option key={c} value={c}>{c}</option>)}<option value="__manual">Manual Entry</option>
 </select>
@@ -5400,7 +5469,7 @@ return(<div>
 </div>
 {qPickup&&<div style={{fontSize:11,color:"#78716c",marginTop:4}}>{qc.pickups.find(p=>p.label===qPickup)?.addr}</div>}
 </div>);return null;})()}
-<label style={{fontSize:11,fontWeight:600,color:"#57534e",display:"block",marginBottom:4}}>Delivery To</label>
+<label style={_s.label}>Delivery To</label>
 {qCust&&qCust!=="__manual"&&getDeliveries2(qCust).length>0&&qStop!=="__custom"&&!qCustomMode?
 <select value={qStop} onChange={e=>{if(e.target.value==="__custom"){setQStop("");setQCustomMode(true);}else{setQStop(e.target.value);setQCustomMode(false);}}} style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px",fontSize:13,outline:"none",background:"#fff",marginBottom:10}}>
 <option value="">Select stop...</option>{getDeliveries2(qCust).map(d=><option key={d.s} value={d.s}>{d.s}{d.r?" — $"+d.r:""}</option>)}<option value="__custom">Custom location...</option>
@@ -5408,13 +5477,13 @@ return(<div>
 :<div style={{marginBottom:10}}><input value={qStop} onChange={e=>setQStop(e.target.value)} placeholder="Custom location name..." autoFocus style={{width:"100%",border:"2px solid #16a34a",borderRadius:8,padding:"8px 10px",fontSize:13,outline:"none",background:"#f0fdf4"}}/>
 {qCust&&qCust!=="__manual"&&getDeliveries2(qCust).length>0&&<button onClick={()=>{setQStop("");setQCustomMode(false);}} style={{marginTop:4,background:"none",border:"none",color:"#2563eb",fontSize:11,cursor:"pointer",fontWeight:600}}>← Back to stop list</button>}
 </div>}
-<label style={{fontSize:11,fontWeight:600,color:"#57534e",display:"block",marginBottom:4}}>Address</label>
+<label style={_s.label}>Address</label>
 <div style={{marginBottom:10}}><AddressInput value={qAddr} onChange={setQAddr} placeholder="Delivery address" style={{fontSize:13}}/></div>
 {qAddr&&<button onClick={calcQuoteMiles} disabled={qCalcLoading} style={{width:"100%",background:"#1c1917",color:"#fff",border:"none",borderRadius:8,padding:"10px",fontSize:13,fontWeight:600,cursor:"pointer",marginBottom:10,opacity:qCalcLoading?0.6:1}}>{qCalcLoading?"Calculating…":"📍 Calculate Distance"}</button>}
 {qCalcError&&<div style={{fontSize:11,color:"#dc2626",marginBottom:8}}>{qCalcError}</div>}
 <div style={{display:"flex",gap:10,marginBottom:10}}>
-<div style={{flex:1}}><label style={{fontSize:11,fontWeight:600,color:"#57534e",display:"block",marginBottom:4}}>Miles</label><input type="number" value={qMiles} onChange={e=>setQMiles(e.target.value)} placeholder="0" style={{width:"100%",border:qMiles?"2px solid #16a34a":"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px",fontSize:13,fontWeight:700,outline:"none",textAlign:"center",background:qMiles?"#f0fdf4":"#fff"}}/></div>
-<div style={{flex:1}}><label style={{fontSize:11,fontWeight:600,color:"#57534e",display:"block",marginBottom:4}}>Rate Override</label><input type="number" value={qRate} onChange={e=>setQRate(e.target.value)} placeholder={qMiles?"Auto":"$"} style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px",fontSize:13,fontWeight:700,outline:"none",textAlign:"center"}}/></div>
+<div style={_s.f1}><label style={_s.label}>Miles</label><input type="number" value={qMiles} onChange={e=>setQMiles(e.target.value)} placeholder="0" style={{width:"100%",border:qMiles?"2px solid #16a34a":"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px",fontSize:13,fontWeight:700,outline:"none",textAlign:"center",background:qMiles?"#f0fdf4":"#fff"}}/></div>
+<div style={_s.f1}><label style={_s.label}>Rate Override</label><input type="number" value={qRate} onChange={e=>setQRate(e.target.value)} placeholder={qMiles?"Auto":"$"} style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px",fontSize:13,fontWeight:700,outline:"none",textAlign:"center"}}/></div>
 </div>
 {qMiles&&<div style={{fontSize:12,color:"#16a34a",fontWeight:700,marginBottom:8}}>Auto: {fmt(calcQuoteRate(qMiles,qLiftgate,qGravel,qExtraPallets).total)}</div>}
 <div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap"}}>
@@ -5425,14 +5494,14 @@ return(<div>
 <label style={{display:"flex",alignItems:"center",gap:4,cursor:"pointer",fontSize:11,fontWeight:600,color:qExtraPallets?"#92400e":"#78716c",background:qExtraPallets?"#fef3c7":"#f5f5f4",padding:"5px 10px",borderRadius:7,border:qExtraPallets?"1px solid #fde68a":"1px solid #e7e5e4"}}>
 <input type="checkbox" checked={qExtraPallets} onChange={e=>setQExtraPallets(e.target.checked)}/> 4-5 Pallets</label>
 </div>
-<label style={{fontSize:11,fontWeight:600,color:"#57534e",display:"block",marginBottom:4}}>Notes</label>
+<label style={_s.label}>Notes</label>
 <textarea value={qNote} onChange={e=>setQNote(e.target.value)} placeholder="Details..." rows={2} style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px",fontSize:12,outline:"none",resize:"vertical",fontFamily:"inherit",marginBottom:10}}/>
 <div style={{display:"flex",justifyContent:"flex-end",gap:6}}>
 <button onClick={()=>setQuoteFormOpen(false)} style={{background:"#e7e5e4",border:"none",borderRadius:8,padding:"7px 14px",cursor:"pointer",fontSize:11,fontWeight:600}}>Cancel</button>
 <button onClick={saveQuote} disabled={!qStop.trim()} style={{background:qStop.trim()?"#16a34a":"#a8a29e",color:"#fff",border:"none",borderRadius:8,padding:"7px 14px",cursor:"pointer",fontSize:11,fontWeight:700}}>Save</button>
 </div>
 </div>}
-{savedQuotes.length===0&&!quoteFormOpen&&<div style={{textAlign:"center",padding:"48px 20px",color:"#a8a29e"}}><div style={{fontSize:36,marginBottom:12}}>💰</div><p style={{fontSize:13,fontWeight:600,margin:"0 0 4px"}}>No quotes yet</p></div>}
+{savedQuotes.length===0&&!quoteFormOpen&&<div style={_s.emptyState}><div style={{fontSize:36,marginBottom:12}}>💰</div><p style={{fontSize:13,fontWeight:600,margin:"0 0 4px"}}>No quotes yet</p></div>}
 {savedQuotes.map(q=>{const c=CC[q.customer]||CC["Quote Delivery"]||CC["One-Off Delivery"];const accepted=q.status==="accepted";return(
 <div key={q.id} style={{background:accepted?"#f0fdf4":"#fff",border:`1px solid ${accepted?"#bbf7d0":"#e7e5e4"}`,borderRadius:12,padding:"12px 14px",marginBottom:8,borderLeft:`4px solid ${accepted?"#16a34a":c.accent}`}}>
 <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:3,flexWrap:"wrap"}}>
@@ -5443,8 +5512,8 @@ return(<div>
 {q.liftgate&&<span style={{fontSize:8,background:"#fef3c7",color:"#92400e",padding:"1px 3px",borderRadius:2}}>LG</span>}
 </div>
 <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-<div style={{flex:1}}>
-<div style={{fontSize:14,fontWeight:700}}>{q.stop}</div>
+<div style={_s.f1}>
+<div style={_s.bold14}>{q.stop}</div>
 {q.addr&&<div style={{fontSize:10,color:"#78716c",marginTop:1}}>{q.addr}</div>}
 {q.note&&<div style={{fontSize:10,color:"#57534e",marginTop:2}}>{q.note}</div>}
 <div style={{fontSize:9,color:"#a8a29e",marginTop:3}}>{new Date(q.createdAt).toLocaleDateString("en-US",{month:"short",day:"numeric"})} {new Date(q.createdAt).toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"})}</div>
@@ -5482,7 +5551,7 @@ else{showToast("Pick a weekday (Mon-Fri)");}
 <span style={{fontSize:12,color:"#78716c"}}>{histFiltered.length} deliveries</span>
 {(histSearch||histCustFilter||histDrvFilter)&&<button onClick={()=>{setHistSearch("");setHistCustFilter("");setHistDrvFilter("");}} style={{background:"#fef2f2",border:"none",borderRadius:6,padding:"4px 10px",cursor:"pointer",fontSize:11,color:"#dc2626",fontWeight:600}}>Clear</button>}
 </div>
-{histFiltered.length===0&&<div style={{textAlign:"center",padding:"48px 20px",color:"#a8a29e"}}><div style={{fontSize:36,marginBottom:12}}>{"🔍"}</div><p style={{fontSize:14,margin:0}}>{histAll.length===0?"No delivery data yet":"No matches"}</p></div>}
+{histFiltered.length===0&&<div style={_s.emptyState}><div style={{fontSize:36,marginBottom:12}}>{"🔍"}</div><p style={{fontSize:14,margin:0}}>{histAll.length===0?"No delivery data yet":"No matches"}</p></div>}
 {histFiltered.length>0&&(()=>{const grouped={};histFiltered.forEach(e=>{const gk=`${e.weekOff}-${e.dayIdx}`;if(!grouped[gk])grouped[gk]={dayName:e.dayName,dayDate:e.dayDate,weekOff:e.weekOff,dayIdx:e.dayIdx,entries:[]};grouped[gk].entries.push(e);});return Object.values(grouped).sort((a,b)=>a.weekOff!==b.weekOff?b.weekOff-a.weekOff:b.dayIdx-a.dayIdx).map((grp,gi)=>{const dayTotal=grp.entries.reduce((s,e)=>s+e.baseRate,0);const isCur=grp.weekOff===wo;return(<div key={gi} style={{marginBottom:12}}>
 <div style={{display:"flex",justifyContent:"space-between",padding:"6px 4px",borderBottom:"1px solid #e7e5e4",marginBottom:4}}>
 <span style={{fontSize:13,fontWeight:700,color:isCur?"#1c1917":"#78716c"}}>{grp.dayName} — {grp.dayDate}{!isCur&&<span style={{fontSize:10,color:"#a8a29e",fontWeight:500,marginLeft:4}}>{grp.weekOff===wo-1?"last wk":(wo-grp.weekOff)+"w ago"}</span>}</span>
@@ -5490,12 +5559,12 @@ else{showToast("Pick a weekday (Mon-Fri)");}
 </div>
 {grp.entries.map(entry=>{const c=getCustColor(entry.customer);const drv=drivers.find(d=>d.id===entry.driverId);const di=drivers.findIndex(d=>d.id===entry.driverId);const hasPhotos=entry.photos&&entry.photos.length>0;return(
 <div key={entry.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 8px 6px 16px",borderLeft:"3px solid "+(entry.stopType==="pickup"?"#2563eb":c.accent),marginBottom:3,background:"#fff",borderRadius:"0 8px 8px 0"}}>
-<div style={{flex:1,minWidth:0}}>
+<div style={_s.f1m}>
 <div style={{display:"flex",alignItems:"center",gap:4,flexWrap:"wrap"}}>
 {entry.stopType==="pickup"&&<span style={{fontSize:8,background:"#2563eb",color:"#fff",padding:"1px 4px",borderRadius:3,fontWeight:700}}>PU</span>}
 {entry.stopType!=="pickup"&&<span style={{fontSize:8,background:"#16a34a",color:"#fff",padding:"1px 4px",borderRadius:3,fontWeight:700}}>DEL</span>}
 <span style={{fontSize:11,color:c.accent,fontWeight:600}}>{entry.customer}</span>
-<span style={{fontSize:12,color:"#57534e",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{entry.stop}</span>
+<span style={_s.truncate}>{entry.stop}</span>
 {hasPhotos&&<span style={{fontSize:9,background:"#dbeafe",color:"#2563eb",padding:"1px 4px",borderRadius:3,fontWeight:600}}>{"📷"}{entry.photos.length}</span>}
 {entry.signature&&<span style={{fontSize:9,background:"#dcfce7",color:"#16a34a",padding:"1px 4px",borderRadius:3,fontWeight:600}}>{"✓"} POD</span>}
 </div>
@@ -5526,14 +5595,14 @@ else{showToast("Pick a weekday (Mon-Fri)");}
 </div>}
 </div>}
 
-{/* ═══ ADD ═══ */}
+{}
 {view==="add"&&!selCust&&!quoteMode&&<div>
 {preAssignDriver&&(()=>{const drv=drivers.find(d=>d.id===preAssignDriver);const di=drivers.findIndex(d=>d.id===preAssignDriver);return(<>
 <button onClick={()=>{setPreAssignDriver(null);setView("manifest");}} style={{background:"none",border:"none",color:"#2563eb",fontSize:13,cursor:"pointer",padding:"16px 4px 4px",fontWeight:600}}>← Back to Manifests</button>
-<div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 14px",margin:"4px 0 8px",background:"#f0fdf4",border:`2px solid ${DCOL[di]||"#16a34a"}`,borderRadius:12}}><div style={{display:"flex",alignItems:"center",gap:8}}><div style={{width:28,height:28,borderRadius:8,background:DCOL[di],display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,color:"#fff",fontWeight:700}}>{drv?.name?.charAt(0)}</div><div><div style={{fontSize:13,fontWeight:700}}>Adding for {drv?.name}</div><div style={{fontSize:10,color:"#16a34a"}}>Auto-assigned</div></div></div><button onClick={()=>setPreAssignDriver(null)} style={{background:"#e7e5e4",border:"none",borderRadius:6,padding:"4px 8px",cursor:"pointer",fontSize:10,color:"#57534e"}}>Clear</button></div>
+<div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 14px",margin:"4px 0 8px",background:"#f0fdf4",border:`2px solid ${DCOL[di]||"#16a34a"}`,borderRadius:12}}><div style={_s.flexC8}><div style={{width:28,height:28,borderRadius:8,background:DCOL[di],display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,color:"#fff",fontWeight:700}}>{drv?.name?.charAt(0)}</div><div><div style={{fontSize:13,fontWeight:700}}>Adding for {drv?.name}</div><div style={{fontSize:10,color:"#16a34a"}}>Auto-assigned</div></div></div><button onClick={()=>setPreAssignDriver(null)} style={{background:"#e7e5e4",border:"none",borderRadius:6,padding:"4px 8px",cursor:"pointer",fontSize:10,color:"#57534e"}}>Clear</button></div>
 </>);})()}
 
-{/* ═══ CUSTOMER GRID ═══ */}
+{}
 <h2 style={{margin:0,fontSize:16,fontWeight:600,padding:"16px 4px 8px"}}>Contract Customers</h2>
 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:20}}>
 {Object.keys(CUSTOMERS).map(cust=>{const c=CC[cust];const cd=CUSTOMERS[cust];return(<button key={cust} onClick={()=>setSelCust(cust)} style={{background:c.bg,border:"none",borderRadius:14,padding:"16px 14px",cursor:"pointer",textAlign:"left",position:"relative"}}>{cd.priority&&<span style={{position:"absolute",top:8,right:8,fontSize:9,background:"#f59e0b",color:"#fff",padding:"1px 5px",borderRadius:4,fontWeight:700}}>PRIORITY</span>}<div style={{fontSize:13,fontWeight:700,color:"#fff"}}>{cust}</div><div style={{fontSize:10,color:"rgba(255,255,255,0.6)",marginTop:4}}>{cd.rate_type==="hourly"?"$102.50/hr":`from ${cd.pickup}`}</div></button>);})}
@@ -5557,7 +5626,7 @@ else{showToast("Pick a weekday (Mon-Fri)");}
 </button>}
 </div>
 </div>}
-{/* ═══ ADD — Delivery List ═══ */}
+{}
 {view==="add"&&selCust&&<div>
 <button onClick={()=>{setSelCust(null);setMultiSelect(false);setMultiChecked([]);setShowAddCustomDel(false);setStopEditOpen(null);setConfirmDeleteStop(false);}} style={BB}>← {preAssignDriver?"Customers":"Back"}</button>
 {preAssignDriver&&(()=>{const drv=drivers.find(d=>d.id===preAssignDriver);const di=drivers.findIndex(d=>d.id===preAssignDriver);return(<div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",margin:"0 4px 8px",background:"#f0fdf4",border:`1px solid ${DCOL[di]||"#bbf7d0"}`,borderRadius:10}}><div style={{width:20,height:20,borderRadius:6,background:DCOL[di],display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:"#fff",fontWeight:700}}>{drv?.name?.charAt(0)}</div><span style={{fontSize:12,fontWeight:600,color:"#16a34a"}}>Auto-adding to {drv?.name}</span></div>);})()}
@@ -5571,7 +5640,7 @@ else{showToast("Pick a weekday (Mon-Fri)");}
 {(()=>{const puSrcs=PICKUP_SOURCES.filter(s=>s.customer===selCust);if(puSrcs.length<=1)return null;return(
 <div style={{margin:"0 4px 10px",padding:"10px 14px",background:"#eff6ff",border:"2px solid #2563eb",borderRadius:12}}>
 <div style={{fontSize:11,fontWeight:700,color:"#2563eb",marginBottom:6}}>Pickup Location</div>
-<div style={{display:"flex",gap:6}}>
+<div style={_s.flexG6}>
 {puSrcs.map(ps=>{const loc=ps.label.split(" - ").pop();return(
 <button key={ps.label} onClick={()=>setSelPickup(loc)} style={{flex:1,padding:"10px 8px",borderRadius:8,border:selPickup===loc?"2px solid #2563eb":"2px solid #e7e5e4",cursor:"pointer",fontSize:13,fontWeight:700,background:selPickup===loc?"#2563eb":"#fff",color:selPickup===loc?"#fff":"#57534e",textAlign:"center"}}>{loc}</button>
 );})}
@@ -5584,7 +5653,7 @@ else{showToast("Pick a weekday (Mon-Fri)");}
 </button>
 {multiSelect&&multiChecked.length>0&&<button onClick={()=>{const allDels=[...CUSTOMERS[selCust].deliveries,...(customStops[selCust]||[])];const stops=allDels.filter((_,i)=>multiChecked.includes(i));addMulti(selCust,stops,preAssignDriver||0);}} style={{background:"#16a34a",color:"#fff",border:"none",borderRadius:8,padding:"6px 12px",cursor:"pointer",fontSize:12,fontWeight:600}}>Add {multiChecked.length} stops</button>}
 </div>
-{CUSTOMERS[selCust].roundTrip&&<button onClick={()=>{const cd=CUSTOMERS[selCust];addDel(selCust,CUSTOMERS[selCust].roundTrip.label,CUSTOMERS[selCust].roundTrip.rate,preAssignDriver||0,{fuelPct:(cd.fuel_surcharge&&!cd.fuel_included)?cd.fuel_surcharge:0,priority:cd.priority});}} style={{display:"block",width:"100%",textAlign:"left",background:"#fef3c7",border:"2px solid #fbbf24",borderRadius:12,padding:"14px 16px",marginBottom:12,cursor:"pointer"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><div><div style={{fontSize:14,fontWeight:700,color:"#92400e"}}>🔄 {CUSTOMERS[selCust].roundTrip.label}</div></div><span style={{fontVariantNumeric:"tabular-nums",fontSize:17,fontWeight:700,color:"#ea580c"}}>{fmt(CUSTOMERS[selCust].roundTrip.rate)}</span></div></button>}
+{CUSTOMERS[selCust].roundTrip&&<button onClick={()=>{const cd=CUSTOMERS[selCust];addDel(selCust,CUSTOMERS[selCust].roundTrip.label,CUSTOMERS[selCust].roundTrip.rate,preAssignDriver||0,{fuelPct:(cd.fuel_surcharge&&!cd.fuel_included)?cd.fuel_surcharge:0,priority:cd.priority});}} style={{display:"block",width:"100%",textAlign:"left",background:"#fef3c7",border:"2px solid #fbbf24",borderRadius:12,padding:"14px 16px",marginBottom:12,cursor:"pointer"}}><div style={_s.flexBtw}><div><div style={{fontSize:14,fontWeight:700,color:"#92400e"}}>🔄 {CUSTOMERS[selCust].roundTrip.label}</div></div><span style={{fontVariantNumeric:"tabular-nums",fontSize:17,fontWeight:700,color:"#ea580c"}}>{fmt(CUSTOMERS[selCust].roundTrip.rate)}</span></div></button>}
 {/* Merge hardcoded + custom stops for this customer, sorted alphabetically */}
 {(()=>{const hardcoded=CUSTOMERS[selCust].deliveries;const custom=customStops[selCust]||[];
 /* Tag each entry with its source for isCustom detection */
@@ -5630,7 +5699,7 @@ onSaveInstr={text=>setCustomInstr(p=>({...p,[stop]:text}))}
 {/* Add new delivery location for this customer */}
 {!showAddCustomDel?<button onClick={()=>{setShowAddCustomDel(true);setCustomDelName("");setCustomDelAddr("");setCustomDelRate("");setCustomDelNote("");}} style={{display:"block",width:"100%",marginTop:8,background:"#fafaf9",border:"2px dashed #d6d3d1",borderRadius:12,padding:"14px 16px",cursor:"pointer",textAlign:"center",color:"#78716c",fontSize:13,fontWeight:600}}>+ Add New Delivery Location</button>
 :<div style={{marginTop:8,background:"#fff",border:`2px solid ${CC[selCust].accent}`,borderRadius:14,padding:16}}>
-<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+<div style={_s.flexBtwMb10}>
 <span style={{fontSize:13,fontWeight:700,color:CC[selCust].accent}}>New {selCust} Delivery</span>
 <button onClick={()=>setShowAddCustomDel(false)} style={{background:"none",border:"none",fontSize:16,cursor:"pointer",color:"#78716c"}}>✕</button>
 </div>
@@ -5639,13 +5708,13 @@ onSaveInstr={text=>setCustomInstr(p=>({...p,[stop]:text}))}
 style={{border:"1px solid #d6d3d1",borderRadius:10,padding:"10px 14px",fontSize:14,outline:"none"}}/>
 <AddressInput value={customDelAddr} onChange={v=>setCustomDelAddr(v)} placeholder="Full address" style={{borderRadius:10,padding:"10px 14px"}}/>
 <div style={{display:"flex",gap:8}}>
-<div style={{flex:1}}>
-<label style={{fontSize:11,fontWeight:600,color:"#57534e",display:"block",marginBottom:4}}>Rate ($)</label>
+<div style={_s.f1}>
+<label style={_s.label}>Rate ($)</label>
 <input value={customDelRate} onChange={e=>setCustomDelRate(e.target.value)} placeholder={CUSTOMERS[selCust].rate_type==="hourly"?"Hourly":"0.00"} type="number" inputMode="decimal" step="0.01"
 style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:10,padding:"10px 14px",fontSize:14,fontWeight:700,outline:"none"}}/>
 </div>
-<div style={{flex:1}}>
-<label style={{fontSize:11,fontWeight:600,color:"#57534e",display:"block",marginBottom:4}}>Note (optional)</label>
+<div style={_s.f1}>
+<label style={_s.label}>Note (optional)</label>
 <input value={customDelNote} onChange={e=>setCustomDelNote(e.target.value)} placeholder="Gate code, hours…"
 style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:10,padding:"10px 14px",fontSize:13,outline:"none"}}/>
 </div>
@@ -5684,10 +5753,48 @@ Add {customDelName.trim()||"Delivery"} to {selCust}
 </div>
 </div>}
 
-{/* ═══ STOP EDIT MODAL ═══ */}
+{}
+{!showAddPickup?<button onClick={()=>{setShowAddPickup(true);setPuCustomName("");setPuCustomAddr("");setPuWeight("");setPuRate("");setPuMiles("");setPuNote("");setPuDelName("");setPuDelAddr("");setPuCalcError("");}} style={{display:"block",width:"100%",marginTop:8,background:"#eff6ff",border:"2px dashed #93c5fd",borderRadius:12,padding:"14px 16px",cursor:"pointer",textAlign:"center",color:"#2563eb",fontSize:13,fontWeight:600}}>📦 Schedule a Pickup for {selCust}</button>
+:<div style={{marginTop:8,background:"#fff",border:"2px solid #2563eb",borderRadius:14,padding:16}}>
+<div style={{fontSize:13,fontWeight:700,color:"#2563eb",marginBottom:10}}>📦 Pickup for {selCust}</div>
+<div style={_s.label}>Picking up from (supplier/vendor)</div>
+<div style={{display:"flex",gap:4}}>
+<input value={puCustomName} onChange={e=>setPuCustomName(e.target.value)} placeholder="Pickup location name" style={_s.input12}/>
+<input value={puCustomAddr} onChange={e=>setPuCustomAddr(e.target.value)} placeholder="Pickup address" style={_s.input12}/>
+</div>
+<div style={{...(_s.label),marginTop:10}}>Delivering to</div>
+{PICKUP_SOURCES.filter(s=>s.customer===selCust).map((src,i)=><button key={i} onClick={()=>{setPuDelName(src.label);setPuDelAddr(src.addr);}} style={{display:"block",width:"100%",textAlign:"left",padding:"8px 12px",marginBottom:3,borderRadius:8,cursor:"pointer",background:puDelName===src.label?"#f0fdf4":"#f8fafc",border:puDelName===src.label?"2px solid #16a34a":"1px solid #e2e8f0",fontSize:12}}><span style={{fontWeight:600,color:"#16a34a"}}>{src.label}</span> <span style={{fontSize:10,color:"#94a3b8"}}>{src.addr}</span></button>)}
+<div style={{display:"flex",gap:4,marginTop:4}}>
+<input value={puDelName} onChange={e=>setPuDelName(e.target.value)} placeholder={"Delivery name (default: "+selCust+")"} style={_s.input12}/>
+<input value={puDelAddr} onChange={e=>setPuDelAddr(e.target.value)} placeholder="Delivery address" style={_s.input12}/>
+</div>
+<div style={{display:"flex",gap:6,marginTop:8}}>
+<div style={_s.f1}><div style={_s.labelSm}>Weight (lbs)</div><input type="number" inputMode="numeric" value={puWeight} onChange={e=>setPuWeight(e.target.value)} placeholder="0" style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"7px 10px",fontSize:12,fontWeight:700,outline:"none",textAlign:"center"}}/></div>
+<div style={_s.f1}><div style={_s.labelSm}>Rate ($)</div><input type="number" value={puRate} onChange={e=>setPuRate(e.target.value)} placeholder={puMiles?fmt(calcQuoteRate(puMiles,false,false,false).total):"$"} style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"7px 10px",fontSize:12,fontWeight:700,outline:"none",textAlign:"center"}}/></div>
+<div style={_s.f1}><div style={_s.labelSm}>Miles</div><input type="number" value={puMiles} onChange={e=>setPuMiles(e.target.value)} placeholder="0" style={{width:"100%",border:puMiles?"2px solid #16a34a":"1px solid #d6d3d1",borderRadius:8,padding:"7px 10px",fontSize:12,fontWeight:700,outline:"none",textAlign:"center",background:puMiles?"#f0fdf4":"#fff"}}/></div>
+</div>
+{puMiles&&<div style={{fontSize:11,color:"#16a34a",fontWeight:700,marginTop:4}}>Auto rate: {fmt(calcQuoteRate(puMiles,false,false,false).total)}</div>}
+{puCustomAddr&&puDelAddr&&<button onClick={()=>calcPuMiles(puCustomAddr,puDelAddr)} disabled={puCalcLoading} style={{width:"100%",marginTop:6,background:"#1c1917",color:"#fff",border:"none",borderRadius:8,padding:"8px",fontSize:12,fontWeight:600,cursor:"pointer",opacity:puCalcLoading?0.6:1}}>{puCalcLoading?"Calculating…":"📍 Calculate Distance"}</button>}
+{puCalcError&&<div style={{fontSize:11,color:"#dc2626",marginTop:4}}>{puCalcError}</div>}
+<input value={puNote} onChange={e=>setPuNote(e.target.value)} placeholder="Notes..." style={{width:"100%",marginTop:6,border:"1px solid #d6d3d1",borderRadius:8,padding:"7px 10px",fontSize:12,outline:"none"}}/>
+{puCustomName.trim()&&<button onClick={()=>{
+const cd=CUSTOMERS[selCust];const drvId=preAssignDriver||0;
+const delStop=puDelName.trim()||selCust;
+const rate=parseFloat(puRate)||(puMiles?calcQuoteRate(puMiles,false,false,false).total:0);
+const weight=parseInt(puWeight)||0;
+if(puCustomAddr.trim())_customAddrCache[puCustomName.trim()]=puCustomAddr.trim();
+if(puDelAddr.trim())_customAddrCache[delStop]=puDelAddr.trim();
+addDel(selCust,puCustomName.trim(),0,drvId,{stopType:"pickup",addr:puCustomAddr.trim(),note:puNote.trim()||null,pickupFrom:puCustomName.trim(),weight});
+addDel(selCust,delStop,rate,drvId,{stopType:"delivery",addr:puDelAddr.trim()||getAddr(delStop),note:(puNote.trim()?puNote.trim()+" | ":"")+(puMiles?puMiles+"mi":""),weight,fuelPct:(cd.fuel_surcharge&&!cd.fuel_included)?cd.fuel_surcharge:0,isHourly:cd.rate_type==="hourly",priority:cd.priority});
+setShowAddPickup(false);showToast("PU "+puCustomName.trim()+" → DEL "+delStop);
+}} style={{width:"100%",marginTop:8,background:"#2563eb",color:"#fff",border:"none",borderRadius:10,padding:"12px",fontSize:14,fontWeight:600,cursor:"pointer"}}>📦 Pickup {puCustomName.trim()} → {puDelName.trim()||selCust}</button>}
+<button onClick={()=>setShowAddPickup(false)} style={{width:"100%",marginTop:4,background:"#f5f5f4",border:"1px solid #e7e5e4",borderRadius:8,padding:"8px",fontSize:12,fontWeight:600,color:"#78716c",cursor:"pointer"}}>Cancel</button>
+</div>}
+
+{}
 {stopEditOpen&&stopEditOpen.cust===selCust&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:200,display:"flex",alignItems:"center",justifyContent:"center",padding:20}} onClick={()=>{setStopEditOpen(null);setConfirmDeleteStop(false);}}>
 <div style={{background:"#fff",borderRadius:20,padding:24,width:"100%",maxWidth:440,boxShadow:"0 24px 64px rgba(0,0,0,0.25)"}} onClick={e=>e.stopPropagation()}>
-<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+<div style={_s.flexBtwMb16}>
 <div>
 <h3 style={{margin:0,fontSize:17,fontWeight:700,color:CC[selCust]?.accent||"#1c1917"}}>⚙ Edit Stop</h3>
 <div style={{fontSize:11,color:"#78716c",marginTop:2}}>{stopEditOpen.isCustom?"Custom stop":"Built-in stop"}{!stopEditOpen.isCustom&&stopOverrides[stopEditOpen.cust+"::"+stopEditOpen.stop]?" (modified)":""} — saves to Firebase</div>
@@ -5696,22 +5803,22 @@ Add {customDelName.trim()||"Delivery"} to {selCust}
 </div>
 <div style={{display:"flex",flexDirection:"column",gap:10}}>
 <div>
-<label style={{fontSize:11,fontWeight:600,color:"#57534e",display:"block",marginBottom:4}}>Stop Name</label>
+<label style={_s.label}>Stop Name</label>
 <input value={stopEditName} onChange={e=>setStopEditName(e.target.value)} placeholder="Stop name"
 style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:10,padding:"10px 14px",fontSize:14,fontWeight:600,outline:"none"}}/>
 </div>
 <div>
-<label style={{fontSize:11,fontWeight:600,color:"#57534e",display:"block",marginBottom:4}}>Address</label>
+<label style={_s.label}>Address</label>
 <AddressInput value={stopEditAddr} onChange={v=>setStopEditAddr(v)} placeholder="Full address" style={{borderRadius:10,padding:"10px 14px"}}/>
 </div>
 <div style={{display:"flex",gap:10}}>
-<div style={{flex:1}}>
-<label style={{fontSize:11,fontWeight:600,color:"#57534e",display:"block",marginBottom:4}}>Rate ($)</label>
+<div style={_s.f1}>
+<label style={_s.label}>Rate ($)</label>
 <input value={stopEditRate} onChange={e=>setStopEditRate(e.target.value)} placeholder="0.00" type="number" inputMode="decimal" step="0.01"
 style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:10,padding:"10px 14px",fontSize:14,fontWeight:700,outline:"none"}}/>
 </div>
-<div style={{flex:1}}>
-<label style={{fontSize:11,fontWeight:600,color:"#57534e",display:"block",marginBottom:4}}>Note</label>
+<div style={_s.f1}>
+<label style={_s.label}>Note</label>
 <input value={stopEditNote} onChange={e=>setStopEditNote(e.target.value)} placeholder="Optional"
 style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:10,padding:"10px 14px",fontSize:13,outline:"none"}}/>
 </div>
@@ -5741,13 +5848,13 @@ return confirmDeleteStop
 {view==="add"&&quoteMode&&<QuoteBuilder customerName={quoteMode.name} pickupOptions={quoteMode.pickups} onAdd={addDel} onBack={()=>setQuoteMode(null)} drivers={drivers} drvEntries={drvEntries}/>}
 </div>
 
-{/* ═══ 2-WAY MESSAGING PANEL ═══ */}
+{}
 {showMsgPanel&&<div style={{position:"fixed",inset:0,zIndex:200,display:"flex",flexDirection:"column"}}>
 <div onClick={()=>setShowMsgPanel(false)} style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.5)"}}/>
 <div style={{position:"relative",marginTop:"auto",background:"#fff",borderRadius:"20px 20px 0 0",maxHeight:"85vh",display:"flex",flexDirection:"column",zIndex:1,minHeight:400}}>
 {/* Header */}
 <div style={{padding:"14px 20px 10px",borderBottom:"1px solid #e7e5e4",flexShrink:0}}>
-<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+<div style={_s.flexBtwMb10}>
 <div style={{fontSize:16,fontWeight:700,color:BRAND.main}}>{"💬"} Messages</div>
 <button onClick={()=>setShowMsgPanel(false)} style={{background:"#f5f5f4",border:"none",borderRadius:8,padding:"6px 10px",cursor:"pointer",fontSize:14,color:"#78716c"}}>{"✕"}</button>
 </div>
@@ -5792,15 +5899,15 @@ style={{background:msgInput.trim()?BRAND.main:"#e7e5e4",color:msgInput.trim()?"#
 </div>
 </div>}
 
-{/* ═══ AI CHAT DRAWER ═══ */}
+{}
 {showChat&&<div style={{position:"fixed",inset:0,zIndex:200,display:"flex",flexDirection:"column"}}>
 <div onClick={()=>setShowChat(false)} style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.5)"}}/>
 <div style={{position:"relative",marginTop:"auto",background:"#fff",borderRadius:"20px 20px 0 0",maxHeight:"85vh",display:"flex",flexDirection:"column",zIndex:1}}>
 {/* Chat header */}
 <div style={{padding:"16px 20px 12px",borderBottom:"1px solid #e7e5e4",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
-<div style={{display:"flex",alignItems:"center",gap:10}}>
+<div style={_s.flexC10}>
 <div style={{width:36,height:36,borderRadius:12,background:"linear-gradient(135deg, #d97706, #ea580c)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18}}>🤖</div>
-<div><div style={{fontSize:15,fontWeight:700}}>Dispatch AI</div><div style={{fontSize:10,color:"#78716c"}}>Knows your routes, rates & customers</div></div>
+<div><div style={{fontSize:15,fontWeight:700}}>Dispatch AI</div><div style={_s.sub}>Knows your routes, rates & customers</div></div>
 </div>
 <button onClick={()=>setShowChat(false)} style={{background:"#f5f5f4",border:"none",borderRadius:8,padding:"6px 10px",cursor:"pointer",fontSize:14,color:"#78716c"}}>✕</button>
 </div>
@@ -5879,7 +5986,7 @@ style={{background:(chatInput.trim()||chatImage)&&!chatLoading?"#d97706":"#e7e5e
 {/* Driver Link Modal — Mobile */}
 {showLinkModal&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",padding:20}} onClick={()=>setShowLinkModal(null)}>
 <div style={{background:"#fff",borderRadius:20,padding:24,width:"100%",maxWidth:400,boxShadow:"0 24px 64px rgba(0,0,0,0.25)"}} onClick={e=>e.stopPropagation()}>
-<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+<div style={_s.flexBtwMb16}>
 <h3 style={{margin:0,fontSize:17,fontWeight:700}}>🔗 {showLinkModal.name}'s Link</h3>
 <button onClick={()=>setShowLinkModal(null)} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:"#78716c",lineHeight:1}}>✕</button>
 </div>
@@ -5906,7 +6013,7 @@ style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,width:"
 );
 }
 
-/* ══════════════ STANDALONE DRIVER PAGE ══════════════ */
+
 /* No pricing. No other drivers. No dispatch controls. Just their stops. */
 function DriverPage({driverSlug}){
 const[wo,setWo]=useState(0);
@@ -5998,7 +6105,7 @@ useEffect(()=>{
   }
 },[authenticated,driverId]);
 
-/* ── LIVE GPS TRACKING — share location to Firestore every 60 seconds ── */
+
 useEffect(()=>{
   if(!authenticated||!driverId)return;
   let watchId=null;
@@ -6113,7 +6220,7 @@ return(
 {toast&&<div style={{position:"fixed",top:20,left:"50%",transform:"translateX(-50%)",background:"#16a34a",color:"#fff",padding:"10px 24px",borderRadius:12,fontWeight:600,fontSize:14,zIndex:999,boxShadow:"0 8px 32px rgba(22,163,74,0.3)",animation:"slideDown 0.3s ease"}}>✓ {toast}</div>}
 
 <div style={{background:BRAND.dark,color:"#fff",padding:"16px 20px"}}>
-<div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+<div style={_s.flexBtw}>
 <div>
 <h1 style={{margin:0}}><img src={LOGO_WHITE} alt="Davis Delivery" style={{height:26,objectFit:"contain"}}/></h1>
 <p style={{margin:"2px 0 0",fontSize:11,color:"#93c5fd",letterSpacing:"0.08em"}}>DRIVER MANIFEST</p>
@@ -6125,14 +6232,14 @@ return(
 </div>
 
 <div style={{padding:"16px 16px 0"}}>
-<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+<div style={_s.flexBtwMb8}>
 <div>
 <h2 style={{margin:0,fontSize:18,fontWeight:700}}>{driver.name}</h2>
 <p style={{margin:0,fontSize:13,color:"#78716c"}}>{wd[sd].name} — {wd[sd].date}</p>
 </div>
 <div style={{textAlign:"right"}}>
 <div style={{fontSize:22,fontWeight:700,color:"#16a34a"}}>{completed}/{total}</div>
-<div style={{fontSize:11,color:"#78716c"}}>completed</div>
+<div style={_s.sub11}>completed</div>
 </div>
 </div>
 {/* Day picker */}
@@ -6161,7 +6268,7 @@ return(
 const isRouteChange=n.type==="route_change"||n.message?.includes("ROUTE CHANGED");
 return(
 <div key={n.id} style={{background:isRouteChange?"#fef2f2":"#fef3c7",border:isRouteChange?"2px solid #dc2626":"1px solid #fde68a",borderRadius:10,padding:"10px 14px",marginBottom:6,display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8,animation:isRouteChange?"routeAlert 0.5s ease":"none"}}>
-<div style={{flex:1}}>
+<div style={_s.f1}>
 <div style={{fontSize:12,fontWeight:700,color:isRouteChange?"#dc2626":"#92400e"}}>{isRouteChange?"🔄 Route Changed":"📢 Dispatch"}</div>
 <div style={{fontSize:12,color:"#1c1917",whiteSpace:"pre-wrap",marginTop:2}}>{n.message}</div>
 <div style={{fontSize:10,color:"#a8a29e",marginTop:4}}>{n.time}</div>
@@ -6170,7 +6277,7 @@ return(
 </div>);})}
 </div>}
 
-{total===0&&<div style={{textAlign:"center",padding:"60px 20px",color:"#a8a29e"}}><div style={{fontSize:48,marginBottom:12}}>🚚</div><p style={{fontSize:16,fontWeight:600,margin:"0 0 4px"}}>No stops yet</p><p style={{fontSize:13,margin:0}}>Dispatch hasn't loaded your manifest yet.<br/>Pull down to refresh.</p></div>}
+{total===0&&<div style={_s.emptyState2}><div style={{fontSize:48,marginBottom:12}}>🚚</div><p style={{fontSize:16,fontWeight:600,margin:"0 0 4px"}}>No stops yet</p><p style={{fontSize:13,margin:0}}>Dispatch hasn't loaded your manifest yet.<br/>Pull down to refresh.</p></div>}
 
 <div style={{padding:"0 16px 100px"}}>
 {/* Leaving warehouse ETA */}
@@ -6180,7 +6287,7 @@ return(
 <span style={{fontSize:18}}>{"🏠"}</span>
 <div>
 <div style={{fontSize:14,fontWeight:700,color:BRAND.main}}>Leaving Warehouse</div>
-<div style={{fontSize:11,color:"#78716c"}}>ETA to first stop: {entries[0].stop}</div>
+<div style={_s.sub11}>ETA to first stop: {entries[0].stop}</div>
 </div>
 </div>
 <div style={{display:"flex",gap:6,alignItems:"center"}}>
@@ -6207,10 +6314,10 @@ return(
 <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4,flexWrap:"wrap"}}>
 <span style={{fontSize:13,fontWeight:700,color:"#a8a29e",fontVariantNumeric:"tabular-nums"}}>{i+1}.</span>
 {isPickup&&<span style={{fontSize:9,background:"#2563eb",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700}}>PICKUP</span>}
-{!isPickup&&<span style={{fontSize:9,background:"#16a34a",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700}}>DELIVERY</span>}
-{entry.priority&&<span style={{fontSize:9,background:"#f59e0b",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700}}>PRIORITY</span>}
-{departed&&<span style={{fontSize:9,background:"#16a34a",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700}}>DONE</span>}
-{arrived&&!departed&&<span style={{fontSize:9,background:"#f59e0b",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700}}>ON SITE</span>}
+{!isPickup&&<span style={_s.tag9Green}>DELIVERY</span>}
+{entry.priority&&<span style={_s.tag9Amber}>PRIORITY</span>}
+{departed&&<span style={_s.tag9Green}>DONE</span>}
+{arrived&&!departed&&<span style={_s.tag9Amber}>ON SITE</span>}
 {wantsShipPlan&&<span style={{fontSize:9,background:"#ea580c",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700}}>SHIP PLAN REQ</span>}
 {entry.dueBy&&<span style={{fontSize:9,background:entry.dueBy.includes("-")?"#7c3aed":entry.dueBy.startsWith("After")?"#2563eb":"#dc2626",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700,display:"inline-flex",alignItems:"center",gap:2}}>{"\u23F0"} {entry.dueBy}</span>}
 </div>
@@ -6235,7 +6342,7 @@ style={{width:"100%",border:isReturn&&!shipVal.trim()?"2px solid #dc2626":"1px s
 {shipVal.trim()&&<button onClick={()=>{setShipPlanD(entry.id,shipVal.trim());showToast("Ship Plan # saved");}} style={{display:"block",width:"100%",marginTop:6,background:"#16a34a",color:"#fff",border:"none",borderRadius:8,padding:"8px",fontSize:12,fontWeight:600,cursor:"pointer"}}>Save Ship Plan #</button>}
 </div>
 )}
-{entry.shipPlan&&<div style={{marginTop:6,background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:8,padding:"6px 12px"}}><span style={{fontSize:10,color:"#16a34a",fontWeight:600}}>Ship Plan #:</span> <span style={{fontSize:14,fontWeight:700}}>{entry.shipPlan}</span></div>}
+{entry.shipPlan&&<div style={{marginTop:6,background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:8,padding:"6px 12px"}}><span style={{fontSize:10,color:"#16a34a",fontWeight:600}}>Ship Plan #:</span> <span style={_s.bold14}>{entry.shipPlan}</span></div>}
 {/* NO note shown — notes often contain pricing info */}
 {addr&&<a href={`https://maps.google.com/maps/dir/?api=1&destination=${encodeURIComponent(addr)}`} target="_blank" rel="noopener"
 style={{display:"inline-flex",alignItems:"center",gap:6,background:BRAND.main,color:"#fff",border:"none",borderRadius:10,padding:"10px 16px",cursor:"pointer",fontSize:13,fontWeight:600,marginTop:8,textDecoration:"none",width:"100%",justifyContent:"center"}}>
@@ -6259,7 +6366,7 @@ style={{flex:1,border:"1px solid #d6d3d1",borderRadius:8,padding:"8px",fontSize:
 <input placeholder="mins" type="number" inputMode="numeric" defaultValue={entry.eta||""} style={{width:70,border:"1px solid #d6d3d1",borderRadius:8,padding:"8px",fontSize:13,fontWeight:700,outline:"none",textAlign:"center"}}
 onBlur={e=>{if(e.target.value){const select=e.target.parentElement.querySelector("select");const dest=select?select.value:"";setEtaD(entry.id,e.target.value,dest||entry.etaDest);}}}/>
 </div>
-<div style={{display:"flex",gap:6}}>
+<div style={_s.flexG6}>
 <label style={{display:"flex",alignItems:"center",gap:4,background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:8,padding:"8px 12px",cursor:"pointer",fontSize:12,fontWeight:600,color:"#2563eb",flex:1,justifyContent:"center"}}>
 {"📷"} Photo
 <input type="file" accept="image/*" capture="environment" style={{display:"none"}}
@@ -6283,7 +6390,7 @@ showToast("Liftgate request sent to dispatch");
 {entry.photos.map((p,pi)=><img key={pi} src={p} alt="delivery" style={{width:60,height:60,objectFit:"cover",borderRadius:8,border:"1px solid #e7e5e4"}}/>)}
 </div>
 )}
-{entry.signature&&<div style={{marginTop:8,background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:8,padding:"8px 12px"}}><span style={{fontSize:10,color:"#16a34a",fontWeight:600}}>Received by:</span> <span style={{fontSize:14,fontWeight:700}}>{entry.signature}</span></div>}
+{entry.signature&&<div style={{marginTop:8,background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:8,padding:"8px 12px"}}><span style={{fontSize:10,color:"#16a34a",fontWeight:600}}>Received by:</span> <span style={_s.bold14}>{entry.signature}</span></div>}
 {sigStop===entry.id&&<div style={{marginTop:8}}><SignaturePad onSave={d=>{addSignature(entry.id,d);setSigStop(null);showToast("Signature saved");}} onCancel={()=>setSigStop(null)}/></div>}
 </div>
 );
@@ -6295,7 +6402,7 @@ showToast("Liftgate request sent to dispatch");
 <div style={{position:"relative",marginTop:"auto",background:"#fff",borderRadius:"20px 20px 0 0",maxHeight:"85vh",display:"flex",flexDirection:"column",zIndex:1,minHeight:360}}>
 {/* Header */}
 <div style={{padding:"14px 20px 10px",borderBottom:"1px solid #e7e5e4",flexShrink:0}}>
-<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+<div style={_s.flexBtwMb10}>
 <div style={{fontSize:16,fontWeight:700,color:BRAND.main}}>{"💬"} Messages</div>
 <button onClick={()=>setShowDriverMsg(false)} style={{background:"#f5f5f4",border:"none",borderRadius:8,padding:"6px 10px",cursor:"pointer",fontSize:14,color:"#78716c"}}>{"✕"}</button>
 </div>
@@ -6340,7 +6447,7 @@ style={{background:driverMsgInput.trim()?BRAND.main:"#e7e5e4",color:driverMsgInp
 );
 }
 
-/* ══════════════ ROUTER — export default ══════════════ */
+
 export default function App(){
 const hash=useHashRoute();
 
