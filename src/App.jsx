@@ -1304,13 +1304,14 @@ style={{display:"flex",alignItems:"center",gap:6,padding:"8px",marginBottom:expa
 {entry.pickupDueBy&&<span style={{fontSize:9,background:"#16a34a",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700,display:"inline-flex",alignItems:"center",gap:2}}>{"📦"} {entry.pickupDueBy}</span>}
 <span style={{fontSize:12,fontWeight:700,color:"#1c1917"}}>{entry.stop}</span>
 </div>
-<div style={{fontSize:10,color:c.accent,fontWeight:600}}>{entry.customer}{entry.pickupFrom&&entry.stopType!=="pickup"?<span style={{color:"#78716c",fontWeight:500}}> — {entry.pickupFrom}</span>:""}</div>
-{addr&&<div style={{fontSize:10,color:"#78716c",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{addr}</div>}
+<div style={{fontSize:10,color:c.accent,fontWeight:600}}>{entry.customer}</div>
+{addr&&<div style={{fontSize:11,color:"#57534e",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{addr}</div>}
 {entry.note&&<div style={{fontSize:10,color:"#a8a29e"}}>{entry.note}</div>}
 {hasI&&!expanded&&<div style={{fontSize:10,color:"#2563eb",marginTop:2}}>📋 {entry.instructions}</div>}
 {!hasI&&!expanded&&<div style={{fontSize:9,color:"#d6d3d1",marginTop:2}}>tap to add instructions</div>}
 {entry.shipPlan&&!expanded&&<div style={{fontSize:10,color:"#ea580c",fontWeight:700,marginTop:1}}>SP# {entry.shipPlan}</div>}
-{entry.weight>0&&!expanded&&<div style={{fontSize:10,color:BRAND.main,fontWeight:700,marginTop:1}}>{entry.weight.toLocaleString()} lbs {(entry.loadNum||1)>1?"(Load "+(entry.loadNum||1)+")":""}</div>}
+{entry.weight>0&&!expanded&&<div style={{display:"flex",alignItems:"center",gap:6,marginTop:1}}><span style={{fontSize:10,color:BRAND.main,fontWeight:700}}>{entry.weight.toLocaleString()} lbs {(entry.loadNum||1)>1?"(Load "+(entry.loadNum||1)+")":""}</span>{entry.pickupFrom&&entry.stopType!=="pickup"&&<span style={{fontSize:9,color:"#78716c",fontWeight:500}}>from {entry.pickupFrom}</span>}</div>}
+{!(entry.weight>0)&&!expanded&&entry.pickupFrom&&entry.stopType!=="pickup"&&<div style={{fontSize:9,color:"#78716c",fontWeight:500,marginTop:1}}>from {entry.pickupFrom}</div>}
 </div>
 {/* Right column: rate, buttons, assign */}
 <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:3,flexShrink:0}}>
