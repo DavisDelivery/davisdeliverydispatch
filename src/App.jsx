@@ -65,9 +65,13 @@ const _fbCfg={apiKey:"AIzaSyDY2OceDzBWMHPR3C3O1oxktrCIy3mKMqU",authDomain:"glory
   s.type="module";
   s.textContent=`
     import{initializeApp}from"https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-    import{getFirestore,doc,setDoc,getDoc,onSnapshot,collection,addDoc,updateDoc,deleteDoc,query,orderBy}from"https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+    import{getFirestore,doc,setDoc,getDoc,onSnapshot,collection,addDoc,updateDoc,deleteDoc,query,orderBy,enableIndexedDbPersistence}from"https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+    import{getStorage,ref as storageRef,uploadBytes,getDownloadURL}from"https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
     const app=initializeApp(${JSON.stringify(_fbCfg)});
     const db=getFirestore(app);
+    const storage=getStorage(app);
+    /* Enable offline persistence — data cached locally, syncs when online */
+    enableIndexedDbPersistence(db).catch(e=>{console.warn("[FB] Offline persistence failed:",e.code);});
     console.log("[FB] SDK loaded, creating ops...");
 
     /* Every operation is a closure that calls the SDK directly */
@@ -112,6 +116,12 @@ const _fbCfg={apiKey:"AIzaSyDY2OceDzBWMHPR3C3O1oxktrCIy3mKMqU",authDomain:"glory
           const docs=snap.docs.map(d=>({id:d.id,...d.data()}));
           cb(docs);
         },errCb||(()=>{}));
+      },
+      /* Upload a file to Firebase Storage and return download URL */
+      uploadFile:async(path,blob)=>{
+        const ref=storageRef(storage,path);
+        await uploadBytes(ref,blob);
+        return await getDownloadURL(ref);
       }
     };
     window._fbLoaded=true;
@@ -395,7 +405,7 @@ const DAYS = ["Monday","Tuesday","Wednesday","Thursday","Friday"];
 
 /* -- BRAND COLORS -- */
 const BRAND={main:"#1e5b92",dark:"#134b7f",light:"#357bb7",pale:"#e8f0f8",bg:"#f0f5fa"};
-const APP_VERSION="3.10.51";
+const APP_VERSION="3.10.56";
 const LOGO_URI="data:image/png;base64,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";
 const LOGO_WHITE="data:image/png;base64,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";
 
@@ -733,12 +743,13 @@ document.head.appendChild(s);
 }
 
 
-function GoogleMapView({stops,drivers,height,onStopClick,activeDriver,activeLoad,showSearch,searchLabel,onAssignStop}){
+function GoogleMapView({stops,drivers,height,onStopClick,activeDriver,activeLoad,showSearch,searchLabel,onAssignStop,driverLocs}){
 const containerRef=useRef(null);
 const mapInstanceRef=useRef(null);
 const markersRef=useRef([]);       /* [{marker, infoWindow, labelOverlay, stopId}] */
 const polylinesRef=useRef([]);
 const labelsRef=useRef([]);
+const driverMarkersRef=useRef([]); /* live driver location markers */
 const searchInputRef=useRef(null);
 const[useRoadRoutes,setUseRoadRoutes]=useState(false);
 const[showTraffic,setShowTraffic]=useState(false);
@@ -1034,6 +1045,37 @@ if(showTraffic){
   if(trafficLayerRef.current)trafficLayerRef.current.setMap(null);
 }
 },[showTraffic,mapReady]);
+
+/* Live driver location markers */
+useEffect(()=>{
+const map=mapInstanceRef.current;
+if(!map||!mapReady||!driverLocs)return;
+/* Remove old driver markers */
+driverMarkersRef.current.forEach(m=>m.setMap(null));
+driverMarkersRef.current=[];
+/* Create new markers for each driver with a location */
+drivers.forEach((drv,di)=>{
+  const loc=driverLocs[drv.id];
+  if(!loc||!loc.lat||!loc.lng)return;
+  const col=DCOL[di]||BRAND.main;
+  const initials=drv.name.split(" ").map(w=>w[0]).join("").toUpperCase();
+  const age=loc.updatedAt?Math.round((Date.now()-loc.updatedAt)/60000):null;
+  const ageLabel=age!==null?(age<1?"just now":age<60?age+"m ago":Math.round(age/60)+"h ago"):"";
+  /* Custom SVG marker with driver initials */
+  const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="40" height="48" viewBox="0 0 40 48"><defs><filter id="s" x="-20%" y="-10%" width="140%" height="130%"><feDropShadow dx="0" dy="2" stdDeviation="2" flood-opacity="0.3"/></filter></defs><path d="M20 47 C20 47 3 28 3 18 A17 17 0 0 1 37 18 C37 28 20 47 20 47Z" fill="${col}" filter="url(#s)" stroke="#fff" stroke-width="2"/><circle cx="20" cy="18" r="11" fill="#fff"/><text x="20" y="22" text-anchor="middle" font-size="11" font-weight="800" font-family="system-ui" fill="${col}">${initials}</text></svg>`;
+  const marker=new window.google.maps.Marker({
+    position:{lat:loc.lat,lng:loc.lng},
+    map,
+    icon:{url:"data:image/svg+xml;charset=UTF-8,"+encodeURIComponent(svg),scaledSize:new window.google.maps.Size(40,48),anchor:new window.google.maps.Point(20,48)},
+    title:drv.name+(ageLabel?" ("+ageLabel+")":""),
+    zIndex:1000+di
+  });
+  const infoContent=`<div style="font-family:system-ui;padding:4px"><div style="font-size:13px;font-weight:700;color:${col}">${drv.name}</div><div style="font-size:11px;color:#78716c;margin-top:2px">📍 Live location${ageLabel?" · "+ageLabel:""}</div>${age!==null&&age>30?'<div style="font-size:10px;color:#dc2626;margin-top:2px">⚠ Location may be stale</div>':""}</div>`;
+  const info=new window.google.maps.InfoWindow({content:infoContent});
+  marker.addListener("click",()=>{if(openInfoRef.current)openInfoRef.current.close();info.open(map,marker);openInfoRef.current=info;});
+  driverMarkersRef.current.push(marker);
+});
+},[driverLocs,drivers,mapReady]);
 
 return(
 <div style={{position:"relative",borderRadius:14,overflow:"hidden",border:"1px solid #d6d3d1",boxShadow:"0 2px 12px rgba(0,0,0,0.08)",height:typeof height==="string"&&height.includes("%")?height:undefined}}>{showSearch&&(
@@ -1580,7 +1622,7 @@ function getCoords(addr){
 }
 
 
-function RouteBuilder({entries,drivers,onAssign,onAssignBulk,onReorder,onBack,getDriverCapacity:getDrvCap}){
+function RouteBuilder({entries,drivers,onAssign,onAssignBulk,onReorder,onBack,getDriverCapacity:getDrvCap,driverLocs}){
 const[activeDriver,setActiveDriver]=useState(null);
 /* Filter out pickups — routing only cares about deliveries */
 const deliveryEntries=entries.filter(e=>e.stopType!=="pickup");
@@ -1636,11 +1678,29 @@ const rbSortFurthest=(drvId)=>{const ids=routeOrders[drvId]||[];if(ids.length<2)
 const rbSortByTime=(drvId)=>{const ids=routeOrders[drvId]||[];if(ids.length<2)return;const es=ids.map(id=>deliveryEntries.find(e=>e.id===id)).filter(Boolean);const{pu,tm,rg}=_rbSplit(es);tm.sort((a,b)=>_rbParseTime(a.dueBy)-_rbParseTime(b.dueBy));rg.sort((a,b)=>_rbDistO(a)-_rbDistO(b));_rbApply(drvId,[...pu,...tm,...rg]);};
 const rbSortShortest=(drvId)=>{const ids=routeOrders[drvId]||[];if(ids.length<2)return;const es=ids.map(id=>deliveryEntries.find(e=>e.id===id)).filter(Boolean);const{pu}=_rbSplit(es);const all=es.filter(e=>!pu.includes(e));const sorted=[];const rem=[...all];let cur=pu.length?(_rbCoord(pu[pu.length-1])||_rbOrigin):_rbOrigin;while(rem.length){let bi=0,bd=Infinity;rem.forEach((e,i)=>{const c=_rbCoord(e);if(!c)return;const d=_rbDist(cur,c);if(d<bd){bd=d;bi=i;}});const nx=rem.splice(bi,1)[0];const nc=_rbCoord(nx);if(nc)cur=nc;sorted.push(nx);}_rbApply(drvId,[...pu,...sorted]);};
 const rbSortReverse=(drvId)=>{const ids=routeOrders[drvId]||[];if(ids.length<2)return;const es=ids.map(id=>deliveryEntries.find(e=>e.id===id)).filter(Boolean);const{pu}=_rbSplit(es);const np=es.filter(e=>!pu.includes(e));np.reverse();_rbApply(drvId,[...pu,...np]);};
+const rbSortGoogle=(drvId)=>{
+const ids=routeOrders[drvId]||[];if(ids.length<2)return;
+if(!window.google?.maps?.DirectionsService)return;
+const es=ids.map(id=>deliveryEntries.find(e=>e.id===id)).filter(Boolean);const{pu}=_rbSplit(es);
+const dels=es.filter(e=>!pu.includes(e));
+if(dels.length<2||dels.length>23)return;
+const coords=dels.map(e=>_rbCoord(e)).filter(Boolean);
+if(coords.length!==dels.length){rbSortShortest(drvId);return;}
+const svc=new window.google.maps.DirectionsService();
+svc.route({origin:_rbOrigin,destination:coords[coords.length-1],waypoints:coords.slice(0,-1).map(c=>({location:c,stopover:true})),travelMode:window.google.maps.TravelMode.DRIVING,optimizeWaypoints:true},(result,status)=>{
+  if(status==="OK"&&result.routes[0]?.waypoint_order){
+    const order=result.routes[0].waypoint_order;
+    const reordered=[...order.map(i=>dels[i]),dels[dels.length-1]];
+    _rbApply(drvId,[...pu,...reordered]);
+  }else{rbSortShortest(drvId);}
+});
+};
 const RB_SORT_OPTIONS=[
 {icon:"📍",label:"Closest → Furthest",fn:rbSortClosest},
 {icon:"🏁",label:"Furthest → Closest",fn:rbSortFurthest},
 {icon:"⏰",label:"By Time Constraint",fn:rbSortByTime},
 {icon:"🧭",label:"Shortest Distance",fn:rbSortShortest},
+{icon:"🗺",label:"Google Optimized",fn:rbSortGoogle},
 {icon:"🔄",label:"Reverse Route",fn:rbSortReverse},
 ];
 
@@ -1764,7 +1824,7 @@ style={{display:"flex",alignItems:"center",gap:6,padding:"8px 14px",borderRadius
 {/* MAP */}
 <div style={{margin:"0 4px"}}>
 <GoogleMapView stops={stopsWithCoords} drivers={drivers} height={400} onStopClick={handleStopClick} activeDriver={activeDriver} showSearch={true} searchLabel="Search address…"
-onAssignStop={activeDriver?(stopId,drvId)=>handleStopClick(stopId):null}/>
+onAssignStop={activeDriver?(stopId,drvId)=>handleStopClick(stopId):null} driverLocs={driverLocs}/>
 </div>
 
 {/* Stats bar */}
@@ -1859,7 +1919,7 @@ style={{display:"block",width:"calc(100% - 8px)",margin:"12px 4px",background:"#
 }
 
 
-function DeliveryListItem({stop,rate,note,addr,curInstr,checked,multiSelect,accent,onCheck,onAdd,onSaveInstr,isCustom,onOpenEdit}){
+function DeliveryListItem({stop,rate,note,addr,curInstr,checked,multiSelect,accent,onCheck,onAdd,onSaveInstr,isCustom,onOpenEdit,pickupSources}){
 const[expanded,setExpanded]=useState(false);
 const[instrText,setInstrText]=useState(curInstr||"");
 const[dueVal,setDueVal]=useState("");
@@ -1867,11 +1927,12 @@ const[dueType,setDueType]=useState("by");
 const[pickupDueVal,setPickupDueVal]=useState("");
 const[pickupDueType,setPickupDueType]=useState("by");
 const[weightVal,setWeightVal]=useState("");
+const[pickupLoc,setPickupLoc]=useState("");
 const hasInstr=curInstr?.trim();
 const HOURS=["8 AM","9 AM","10 AM","11 AM","12 PM","1 PM","2 PM"];
 const dueLabel=dueVal?(dueType==="by"?"By "+dueVal:"After "+dueVal):"";
 const pickupDueLabel=pickupDueVal?(pickupDueType==="by"?"Pickup By "+pickupDueVal:"Pickup After "+pickupDueVal):"";
-const addWithExtras=()=>{onAdd(dueLabel||null,parseFloat(weightVal)||0,pickupDueLabel||null);setDueVal("");setPickupDueVal("");setWeightVal("");};
+const addWithExtras=()=>{onAdd(dueLabel||null,parseFloat(weightVal)||0,pickupDueLabel||null,pickupLoc||null);setDueVal("");setPickupDueVal("");setWeightVal("");setPickupLoc("");};
 return(
 <div style={{marginBottom:6}}>
 <div style={{display:"flex",width:"100%",textAlign:"left",background:checked?"#eff6ff":dueLabel||pickupDueLabel?"#fef2f2":"#fff",border:checked?"2px solid #2563eb":dueLabel||pickupDueLabel?"1px solid #fca5a5":"1px solid #e7e5e4",borderRadius:expanded?"12px 12px 0 0":12,padding:"12px 16px",borderLeft:`4px solid ${accent}`,alignItems:"center",gap:10}}>
@@ -1935,8 +1996,15 @@ style={{flex:1,border:"1px solid #d6d3d1",borderRadius:8,padding:"6px 10px",font
 {weightVal&&<button onClick={e=>{e.stopPropagation();setWeightVal("");}} style={{background:"#fff",border:"1px solid #d6d3d1",borderRadius:5,padding:"2px 6px",cursor:"pointer",fontSize:10,color:"#78716c"}}>Clear</button>}
 </div>
 </div>
+{/* Pickup location override for multi-pickup customers */}
+{pickupSources&&pickupSources.length>1&&<div style={{marginTop:8,background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:10,padding:"8px 10px"}}>
+<label style={{fontSize:11,fontWeight:600,color:"#2563eb",display:"block",marginBottom:4}}>Pickup from:</label>
+<div style={{display:"flex",gap:4}}>
+{pickupSources.map(ps=>{const loc=ps.label.split(" - ").pop();return(<button key={loc} onClick={e=>{e.stopPropagation();setPickupLoc(pickupLoc===loc?"":loc);}} style={{flex:1,padding:"6px",borderRadius:6,border:"none",cursor:"pointer",fontSize:11,fontWeight:700,background:pickupLoc===loc?"#2563eb":"#e7e5e4",color:pickupLoc===loc?"#fff":"#57534e"}}>{loc}</button>);})}
+</div>
+{pickupLoc&&<div style={{fontSize:10,color:"#2563eb",fontWeight:600,marginTop:3}}>Will pick up from {pickupLoc}</div>}
+</div>}
 <div style={{display:"flex",gap:6,marginTop:8,justifyContent:"space-between",alignItems:"center"}}>
-{/* Bottom-left: permanent edit gear */}
 {onOpenEdit&&<button onClick={e=>{e.stopPropagation();onOpenEdit();}} style={{background:"#f5f5f4",border:"1px solid #e7e5e4",borderRadius:8,padding:"5px 10px",cursor:"pointer",fontSize:10,fontWeight:700,color:"#57534e",display:"flex",alignItems:"center",gap:4}}>⚙ Edit Stop</button>}
 {!onOpenEdit&&<div/>}
 <div style={_s.flexG6}>
@@ -2246,13 +2314,35 @@ useEffect(()=>{
     }
   });
   const unsubEmser=subscribeEmserHours((fbEmH)=>{
-    /* Update prev refs so save effect doesn't re-save Firebase data */
-    Object.entries(fbEmH).forEach(([k,v])=>{prevEmHRef.current[k]=v;});
-    setEmH(prev=>{const s=JSON.stringify(prev),n=JSON.stringify(fbEmH);return s===n?prev:fbEmH;});
+    setEmH(prev=>{
+      const merged={...prev};
+      let changed=false;
+      Object.entries(fbEmH).forEach(([k,v])=>{
+        const prevVal=prevEmHRef.current[k];
+        const localVal=prev[k];
+        /* Only accept Firebase data if local hasn't changed since last sync */
+        if(localVal===prevVal||localVal===undefined){
+          if(v!==localVal){merged[k]=v;changed=true;}
+        }
+        prevEmHRef.current[k]=v;
+      });
+      return changed?merged:prev;
+    });
   });
   const unsubNotes=subscribeDispatchNotes((fbNotes)=>{
-    Object.entries(fbNotes).forEach(([k,v])=>{prevNotesRef.current[k]=v;});
-    setDispNotes(prev=>{const merged={...prev,...fbNotes};return JSON.stringify(prev)===JSON.stringify(merged)?prev:merged;});
+    setDispNotes(prev=>{
+      const merged={...prev};
+      let changed=false;
+      Object.entries(fbNotes).forEach(([k,v])=>{
+        const prevVal=prevNotesRef.current[k];
+        const localVal=prev[k];
+        if(localVal===prevVal||localVal===undefined||localVal===""){
+          if(v!==localVal){merged[k]=v;changed=true;}
+        }
+        prevNotesRef.current[k]=v;
+      });
+      return changed?merged:prev;
+    });
   });
   const unsubShifts=subscribeEmserShifts((fbShifts)=>{
     setEmserShifts(prev=>{
@@ -2557,7 +2647,7 @@ const autoDueBy=ex.dueBy||(stop==="Atlanta Flooring - Suwanee"?"9:30–1:00 PM"
 const autoDeliverAfter=(cust==="Specialty"&&!ex.dueBy)?"Pickup 7:30 AM — Specialty":null;
 const entry={id:Date.now()+Math.random(),customer:cust,stop,baseRate:rate,fuelPct:ex.fuelPct||0,isHourly:ex.isHourly||false,note:ex.note||null,driverId:drvId,addr:ex.addr||getAddr(stop),stopType:ex.stopType||"delivery",priority:ex.priority||(cd?.priority)||false,instructions:ex.instructions!==undefined?ex.instructions:instrForStop,status:null,arrivedAt:null,departedAt:null,eta:null,photos:[],signature:null,dueBy:autoDueBy||autoDeliverAfter||null,weight:ex.weight||0,loadNum:ex.loadNum||1,pickupFrom:ex.pickupFrom||selPickup||null,pickupDueBy:ex.pickupDueBy||null};
 
-setLog(p=>({...p,[dk]:[...(p[dk]||[]),entry]}));
+setLog(p=>{let all=[...(p[dk]||[]),entry];if(entry.stopType==="delivery"&&entry.driverId>0)all=rebuildPickupsFor(all,cust);return{...p,[dk]:all};});
 if(stop==="DCO Eatonton"&&cust==="Emser Tile"){
 setEmH(p=>{const key=`${emDk}-emser`;const cur=p[key]||4;return{...p,[key]:cur+1,[`${emDk}-eatonton-bonus`]:true};});
 showToast("DCO Eatonton added — +1 bonus hr applied");
@@ -2578,7 +2668,7 @@ const autoDue=isSpecialty?"Pickup 7:30 AM — Specialty"
 :null;
 return{id:Date.now()+Math.random(),customer:cust,stop,baseRate:rate,fuelPct:(cd.fuel_surcharge&&!cd.fuel_included)?cd.fuel_surcharge:0,isHourly:cd.rate_type==="hourly",note:isStr?null:s.n||null,driverId:drvId,addr:getAddr(stop),stopType:"delivery",priority:cd.priority||false,instructions:instrForStop,status:null,arrivedAt:null,departedAt:null,eta:null,photos:[],signature:null,dueBy:autoDue,weight:0,loadNum:1};
 });
-setLog(p=>({...p,[dk]:[...(p[dk]||[]),...newEntries]}));
+setLog(p=>{let all=[...(p[dk]||[]),...newEntries];if(drvId>0){const custs=new Set(newEntries.filter(e=>e.stopType==="delivery").map(e=>e.customer));custs.forEach(c=>{all=rebuildPickupsFor(all,c);});}return{...p,[dk]:all};});
 showToast(`${stops.length} stops added`);setMultiSelect(false);setMultiChecked([]);
 };
 
@@ -2653,13 +2743,13 @@ showToast(entry.stop+" deleted");
 
 const rmFromDriver=(id)=>{const entry=dl.find(e=>e.id===id);if(!entry)return;if(entry.driverId===0){deleteDel(id);}else{reassign(id,0);showToast("Moved to Unassigned");}};
 
-const reassign=(eid,did)=>{
+const reassign=(eid,did,newLoadNum)=>{
 const entry=dl.find(e=>e.id===eid);
 const oldDid=entry?.driverId;
 setLog(p=>{
-let all=[...(p[dk]||[])].map(e=>e.id===eid?{...e,driverId:did}:e);
+let all=[...(p[dk]||[])].map(e=>e.id===eid?{...e,driverId:did,...(newLoadNum?{loadNum:newLoadNum}:{})}:e);
 const movedEntry=all.find(e=>e.id===eid);
-if(movedEntry&&movedEntry.stopType==="delivery"&&did!==oldDid){
+if(movedEntry&&movedEntry.stopType==="delivery"&&(did!==oldDid||newLoadNum)){
 all=rebuildPickupsFor(all,movedEntry.customer);
 }
 return{...p,[dk]:all};
@@ -2759,13 +2849,29 @@ setSplitEntry(null);
 showToast("Split — Load 2 moved to Unassigned");
 };
 const updateStatus=(eid,status)=>{const now=new Date().toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,status,arrivedAt:status==="arrived"?now:e.arrivedAt,departedAt:status==="departed"?now:e.departedAt}:e)}));};
-const addPhoto=(eid,dataUrl)=>setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,photos:[...(e.photos||[]),dataUrl]}:e)}));
+const addPhoto=(eid,dataUrl)=>{
+/* Upload to Firebase Storage if available, otherwise store base64 */
+if(window._fbOps?.uploadFile){
+  const blob=fetch(dataUrl).then(r=>r.blob()).catch(()=>null);
+  blob.then(b=>{
+    if(!b){setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,photos:[...(e.photos||[]),dataUrl]}:e)}));return;}
+    const path=`photos/${emDk}/${eid}_${Date.now()}.jpg`;
+    window._fbOps.uploadFile(path,b).then(url=>{
+      setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,photos:[...(e.photos||[]),url]}:e)}));
+    }).catch(()=>{
+      setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,photos:[...(e.photos||[]),dataUrl]}:e)}));
+    });
+  });
+}else{
+  setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,photos:[...(e.photos||[]),dataUrl]}:e)}));
+}
+};
 const addSignature=(eid,dataUrl)=>setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,signature:dataUrl}:e)}));
 const setShipPlan=(eid,num)=>setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,shipPlan:num}:e)}));
 const setEta=(eid,mins,dest)=>setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,eta:mins,etaDest:dest||null}:e)}));
 const setDueBy=(eid,time)=>setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,dueBy:time||null}:e)}));
 const setWeight=(eid,w)=>setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,weight:parseFloat(w)||0}:e)}));
-const setLoadNum=(eid,n)=>setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,loadNum:n}:e)}));
+const setLoadNum=(eid,n)=>{setLog(p=>{let all=[...(p[dk]||[])].map(e=>e.id===eid?{...e,loadNum:n}:e);const entry=all.find(e=>e.id===eid);if(entry&&entry.stopType==="delivery")all=rebuildPickupsFor(all,entry.customer);return{...p,[dk]:all};});};
 
 
 const TRUCK_LIMITS={default:10000,heavy:13500};
@@ -2823,11 +2929,12 @@ const getShiftSummary=(dayKey)=>{
   return{byDriver,totalMins};
 };
 
-const addEmserShift=(driverId)=>{setEmserShifts(p=>({...p,[emDk]:[...(p[emDk]||[]),{id:Date.now()+Math.random(),driverId,start:"",end:""}]}));};
+const addEmserShift=(driverId)=>{setEmserShifts(p=>{const updated=[...(p[emDk]||[]),{id:Date.now()+Math.random(),driverId,start:"",end:""}];prevShiftsRef.current[emDk]=JSON.stringify(updated);return{...p,[emDk]:updated};});};
 const updateEmserShift=(shiftId,field,val)=>{setEmserShifts(p=>{const updated=(p[emDk]||[]).map(s=>s.id===shiftId?{...s,[field]:val}:s);prevShiftsRef.current[emDk]=JSON.stringify(updated);return{...p,[emDk]:updated};});};
 const removeEmserShift=(shiftId)=>{
   setEmserShifts(p=>{
     const updated=(p[emDk]||[]).filter(s=>s.id!==shiftId);
+    prevShiftsRef.current[emDk]=JSON.stringify(updated);
     const next={...p,[emDk]:updated};
     /* If all shifts removed, revert Emser hours to default 4 */
     if(updated.length===0){
@@ -2913,12 +3020,36 @@ const sortFurthest=(drvId)=>{const de=drvEntries(drvId);if(de.length<2)return;co
 const sortByTime=(drvId)=>{const de=drvEntries(drvId);if(de.length<2)return;const{pu,tm,rg}=_sSplit(de);tm.sort((a,b)=>_sParseTime(a.dueBy)-_sParseTime(b.dueBy));rg.sort((a,b)=>_sDistO(a)-_sDistO(b));_sApply(drvId,[...pu,...tm,...rg],"⏰ By Time Constraint");};
 const sortShortest=(drvId)=>{const de=drvEntries(drvId);if(de.length<2)return;const{pu}=_sSplit(de);const all=de.filter(e=>!pu.includes(e));const sorted=[];const rem=[...all];let cur=pu.length?(_sCoord(pu[pu.length-1])||_sOrigin):_sOrigin;while(rem.length){let bi=0,bd=Infinity;rem.forEach((e,i)=>{const c=_sCoord(e);if(!c)return;const d=_sDist(cur,c);if(d<bd){bd=d;bi=i;}});const nx=rem.splice(bi,1)[0];const nc=_sCoord(nx);if(nc)cur=nc;sorted.push(nx);}_sApply(drvId,[...pu,...sorted],"🧭 Shortest Distance");};
 const sortReverse=(drvId)=>{const de=drvEntries(drvId);if(de.length<2)return;const{pu}=_sSplit(de);const np=de.filter(e=>!pu.includes(e));np.reverse();_sApply(drvId,[...pu,...np],"🔄 Route Reversed");};
+const sortGoogle=(drvId)=>{
+const de=drvEntries(drvId);if(de.length<2)return;
+if(!window.google?.maps?.DirectionsService){showToast("Google Maps not loaded");return;}
+const{pu}=_sSplit(de);const dels=de.filter(e=>!pu.includes(e));
+if(dels.length<2){showToast("Need 2+ delivery stops");return;}
+if(dels.length>23){showToast("Max 23 stops for API optimization");return;}
+showToast("⏳ Calculating optimal route...");
+const coords=dels.map(e=>{const addr=e.addr||getAddr(e.stop);return getCoords(addr);}).filter(Boolean);
+if(coords.length!==dels.length){showToast("Some stops missing coordinates — using straight-line");sortShortest(drvId);return;}
+const origin=_sOrigin;const dest=coords[coords.length-1];
+const waypoints=coords.slice(0,-1).map(c=>({location:c,stopover:true}));
+const svc=new window.google.maps.DirectionsService();
+svc.route({origin,destination:dest,waypoints,travelMode:window.google.maps.TravelMode.DRIVING,optimizeWaypoints:true},(result,status)=>{
+  if(status==="OK"&&result.routes[0]?.waypoint_order){
+    const order=result.routes[0].waypoint_order;
+    const reordered=[...order.map(i=>dels[i]),dels[dels.length-1]];
+    const legs=result.routes[0].legs;
+    const totalMi=legs.reduce((s,l)=>s+(l.distance?.value||0),0)/1609.34;
+    const totalMin=legs.reduce((s,l)=>s+(l.duration?.value||0),0)/60;
+    _sApply(drvId,[...pu,...reordered],`🗺 Google Optimized — ${Math.round(totalMi)}mi, ~${Math.round(totalMin)}min`);
+  }else{showToast("API failed — using straight-line fallback");sortShortest(drvId);}
+});
+};
 
 const SORT_OPTIONS=[
 {icon:"📍",label:"Closest → Furthest",desc:"Nearest stops first",fn:sortClosest},
 {icon:"🏁",label:"Furthest → Closest",desc:"Furthest stops first",fn:sortFurthest},
 {icon:"⏰",label:"By Time Constraint",desc:"Deadlines first",fn:sortByTime},
 {icon:"🧭",label:"Shortest Distance",desc:"Best path between all",fn:sortShortest},
+{icon:"🗺",label:"Google Optimized",desc:"Actual driving route (API)",fn:sortGoogle},
 {icon:"🔄",label:"Reverse Route",desc:"Flip current order",fn:sortReverse},
 ];
 const insertPickup=(drvId,afterIdx)=>{if(!pickupStop)return;const forLabel=pickupForDel?` → ${pickupForDel}`:"";const entry={id:Date.now()+Math.random(),customer:pickupCustomer||"Pickup",stop:`${pickupCustomer||"Pickup"}${forLabel}`,baseRate:0,fuelPct:0,isHourly:false,note:pickupNote||(pickupForDel?`Picking up for ${pickupForDel}`:null),driverId:drvId,addr:pickupAddr||"",stopType:"pickup",priority:false,pickupFrom:pickupStop,pickupFor:pickupForDel,instructions:"",status:null,arrivedAt:null,departedAt:null,eta:null,photos:[],signature:null};setLog(p=>{const all=[...(p[dk]||[])];const de=all.filter(e=>e.driverId===drvId);const rest=all.filter(e=>e.driverId!==drvId);de.splice(afterIdx+1,0,entry);return{...p,[dk]:[...rest,...de]};});setInsertPickupFor(null);setPickupCustomer("");setPickupStop("");setPickupAddr("");setPickupForDel("");setPickupNote("");showToast(`Pickup added`);};
@@ -3433,6 +3564,37 @@ const rpOptRev=(did)=>{const ids=rpOrders[did]||[];if(ids.length<2)return;const 
 const np=es.filter(e=>!pu.includes(e));np.reverse();
 rpSet(did,[...pu,...np],"🔄 Route Reversed");};
 
+/* 6. Google Directions API optimized route */
+const rpOptGoogle=(did)=>{
+const ids=rpOrders[did]||[];if(ids.length<2)return;
+if(!window.google?.maps?.DirectionsService){showToast("Google Maps not loaded");return;}
+const es=ids.map(id=>rpE(id)).filter(Boolean);const{pu}=rpSplit(es);
+const dels=es.filter(e=>!pu.includes(e));
+if(dels.length<2){showToast("Need 2+ delivery stops");return;}
+if(dels.length>23){showToast("Max 23 stops for API optimization");return;}
+showToast("⏳ Calculating optimal route...");
+const coords=dels.map(e=>rpC(e)).filter(Boolean);
+if(coords.length!==dels.length){showToast("Some stops missing coordinates");rpOptShort(did);return;}
+const origin=rpO;
+const dest=coords[coords.length-1];
+const waypoints=coords.slice(0,-1).map(c=>({location:c,stopover:true}));
+const svc=new window.google.maps.DirectionsService();
+svc.route({origin,destination:dest,waypoints,travelMode:window.google.maps.TravelMode.DRIVING,optimizeWaypoints:true},(result,status)=>{
+  if(status==="OK"&&result.routes[0]?.waypoint_order){
+    const order=result.routes[0].waypoint_order;
+    /* waypoint_order maps to dels[0..n-2], dest stays last */
+    const reordered=[...order.map(i=>dels[i]),dels[dels.length-1]];
+    const legs=result.routes[0].legs;
+    const totalMi=legs.reduce((s,l)=>s+(l.distance?.value||0),0)/1609.34;
+    const totalMin=legs.reduce((s,l)=>s+(l.duration?.value||0),0)/60;
+    rpSet(did,[...pu,...reordered],`🗺 Google Optimized — ${Math.round(totalMi)}mi, ~${Math.round(totalMin)}min`);
+  }else{
+    showToast("API optimization failed — using straight-line fallback");
+    rpOptShort(did);
+  }
+});
+};
+
 
 const rpClick=(entryId)=>{if(!rpActive)return;
 /* Find all entries at the same stop name + address */
@@ -3576,6 +3738,7 @@ style={{width:"100%",background:"linear-gradient(135deg, #2563eb, #1d4ed8)",colo
 {icon:"🏁",label:"Furthest → Closest",desc:"Furthest stops first",fn:rpOptFar},
 {icon:"⏰",label:"By Time Constraint",desc:"Deadlines first",fn:rpOptTime},
 {icon:"🧭",label:"Shortest Distance",desc:"Best path between all",fn:rpOptShort},
+{icon:"🗺",label:"Google Optimized",desc:"Actual driving route (API)",fn:rpOptGoogle},
 {icon:"🔄",label:"Reverse Route",desc:"Flip current order",fn:rpOptRev},
 ].map((opt,oi)=><button key={oi} onClick={()=>opt.fn(drv.id)}
 style={{display:"flex",alignItems:"center",gap:8,width:"100%",textAlign:"left",background:"none",border:"none",padding:"9px 10px",cursor:"pointer",borderRadius:8,fontSize:11,fontWeight:600,color:"#1c1917"}}
@@ -3700,7 +3863,7 @@ style={{display:"flex",alignItems:"center",gap:5,cursor:"pointer",padding:isA?"4
 </div>
 
 <GoogleMapView stops={mapS} drivers={drivers} height={"100%"} showSearch={true} searchLabel="Search address…"
-activeDriver={rpActive} onStopClick={rpClick} onAssignStop={rpActive?(sid)=>rpClick(sid):null}/>
+activeDriver={rpActive} onStopClick={rpClick} onAssignStop={rpActive?(sid)=>rpClick(sid):null} driverLocs={driverLocs}/>
 </div>
 
 </div>);
@@ -4367,7 +4530,7 @@ style={{background:isDrgOver?"#dcfce7":isDrgSrc?"#fef9c3":done?"#f0fdf4":onSite?
 {entry.signature&&<div style={{fontSize:9,color:"#16a34a",marginTop:1}}>✍ {entry.signature}</div>}
 {entry.photos&&entry.photos.length>0&&<div style={{display:"flex",gap:3,marginTop:3}}>{entry.photos.map((p,pi)=><img key={pi} src={p} alt="" style={{width:24,height:24,objectFit:"cover",borderRadius:4,border:"1px solid #e7e5e4"}}/>)}</div>}
 <div style={_s.flexG3Mt4}>
-<select value={entry.driverId+":"+(entry.loadNum||1)} onChange={e=>{e.stopPropagation();const v=e.target.value;if(v==="0:1"){reassign(entry.id,0);return;}const[did,ln]=v.split(":").map(Number);if(did!==entry.driverId)reassign(entry.id,did);if(ln)setLoadNum(entry.id,ln);}} style={{background:"#f5f5f4",border:"1px solid #e7e5e4",borderRadius:5,padding:"2px 4px",fontSize:9,color:"#57534e",cursor:"pointer",maxWidth:80}}><option value="0:1">{entry.driverId>0?"↩ Unassign":"Assign"}</option>{drivers.flatMap(dd=>{const nl=getDriverLoadOptions(dd.id);const opts=[<option key={dd.id+":1"} value={dd.id+":1"}>{dd.name}</option>];for(let ln=2;ln<=nl;ln++)opts.push(<option key={dd.id+":"+ln} value={dd.id+":"+ln}>{dd.name.split(" ").map(w=>w[0]).join("")+" L"+ln}</option>);return opts;})}</select>
+<select value={entry.driverId+":"+(entry.loadNum||1)} onChange={e=>{e.stopPropagation();const v=e.target.value;if(v==="0:1"){reassign(entry.id,0);return;}const[did,ln]=v.split(":").map(Number);reassign(entry.id,did,ln);}} style={{background:"#f5f5f4",border:"1px solid #e7e5e4",borderRadius:5,padding:"2px 4px",fontSize:9,color:"#57534e",cursor:"pointer",maxWidth:80}}><option value="0:1">{entry.driverId>0?"↩ Unassign":"Assign"}</option>{drivers.flatMap(dd=>{const nl=getDriverLoadOptions(dd.id);const opts=[<option key={dd.id+":1"} value={dd.id+":1"}>{dd.name}</option>];for(let ln=2;ln<=nl;ln++)opts.push(<option key={dd.id+":"+ln} value={dd.id+":"+ln}>{dd.name.split(" ").map(w=>w[0]).join("")+" L"+ln}</option>);return opts;})}</select>
 <button onClick={()=>moveInDriver(drv.id,eIdx,-1)} style={{background:"#f5f5f4",border:"1px solid #e7e5e4",borderRadius:4,padding:"1px 5px",cursor:"pointer",fontSize:9,color:"#78716c"}} title="Move up">▲</button>
 <button onClick={()=>moveInDriver(drv.id,eIdx,1)} style={{background:"#f5f5f4",border:"1px solid #e7e5e4",borderRadius:4,padding:"1px 5px",cursor:"pointer",fontSize:9,color:"#78716c"}} title="Move down">▼</button>
 <input type="number" inputMode="numeric" value={entry.weight||""} onChange={e=>setWeight(entry.id,e.target.value)} onClick={e=>e.stopPropagation()} placeholder="lbs" style={{width:52,border:"1px solid #d6d3d1",borderRadius:4,padding:"2px 4px",fontSize:9,fontWeight:700,outline:"none",textAlign:"center",background:entry.weight?"#f0f5fa":"#fff"}}/>
@@ -4430,7 +4593,7 @@ style={{background:isDrgOver?"#dcfce7":isDrgSrc?"#fef9c3":done?"#f0fdf4":onSite?
 {entry.note&&<div style={{fontSize:9,color:"#a8a29e",marginTop:1}}>{entry.note}</div>}
 {entry.weight>0&&<div style={{fontSize:9,color:BRAND.main,fontWeight:700,marginTop:1}}>{entry.weight.toLocaleString()} lbs</div>}
 <div style={{display:"flex",gap:3,marginTop:4,alignItems:"center"}}>
-<select value={"0:1"} onChange={e=>{const v=e.target.value;if(v==="0:1")return;const[did,ln]=v.split(":").map(Number);reassign(entry.id,did);if(ln)setLoadNum(entry.id,ln);}} style={{background:"#f5f5f4",border:"1px solid #e7e5e4",borderRadius:5,padding:"3px 6px",fontSize:10,color:"#57534e",cursor:"pointer"}}>
+<select value={"0:1"} onChange={e=>{const v=e.target.value;if(v==="0:1")return;const[did,ln]=v.split(":").map(Number);reassign(entry.id,did,ln);}} style={{background:"#f5f5f4",border:"1px solid #e7e5e4",borderRadius:5,padding:"3px 6px",fontSize:10,color:"#57534e",cursor:"pointer"}}>
 <option value="0:1">Assign...</option>{drivers.flatMap(dd=>{const nl=getDriverLoadOptions(dd.id);const opts=[<option key={dd.id+":1"} value={dd.id+":1"}>{dd.name}</option>];for(let ln=2;ln<=nl;ln++)opts.push(<option key={dd.id+":"+ln} value={dd.id+":"+ln}>{dd.name.split(" ").map(w=>w[0]).join("")+" L"+ln}</option>);return opts;})}
 </select>
 <input type="number" inputMode="numeric" value={entry.weight||""} onChange={e=>setWeight(entry.id,e.target.value)} onClick={e=>e.stopPropagation()} placeholder="lbs" style={{width:52,border:"1px solid #d6d3d1",borderRadius:4,padding:"3px 4px",fontSize:9,fontWeight:700,outline:"none",textAlign:"center",background:entry.weight?"#f0f5fa":"#fff"}}/>
@@ -4485,7 +4648,7 @@ style={{display:"flex",alignItems:"center",gap:4,padding:"4px 8px",borderRadius:
 </div>
 <GoogleMapView stops={stopsWithCoords2} drivers={drivers} height={Math.max(500,window.innerHeight-280)} showSearch={true} searchLabel="Search address on map…"
 activeDriver={mapActiveDrv} activeLoad={mapActiveLoad}
-onAssignStop={mapActiveDrv?(stopId,drvId)=>{assignInOrder(stopId,mapActiveDrv,mapActiveLoad);}:null}/>
+onAssignStop={mapActiveDrv?(stopId,drvId)=>{assignInOrder(stopId,mapActiveDrv,mapActiveLoad);}:null} driverLocs={driverLocs}/>
 </div>);
 })()}
 
@@ -5180,6 +5343,7 @@ onAssign={(eid,did)=>reassign(eid,did)}
 onAssignBulk={(eids,did)=>reassignBulk(eids,did)}
 onReorder={(drvId,orderedIds)=>reorderDriver(drvId,orderedIds)}
 onBack={()=>setView("manifest")}
+driverLocs={driverLocs}
 getDriverCapacity={getDriverCapacity}/>}
 </div>}
 
@@ -5751,9 +5915,10 @@ const hasOverride=!!ovr;
 return(<div key={item.origIdx} style={{position:"relative"}}>
 <DeliveryListItem stop={stop} rate={rate} note={note} addr={addr} curInstr={curInstr} checked={checked} multiSelect={multiSelect} accent={CC[selCust].accent}
 isCustom={isCustom}
+pickupSources={PICKUP_SOURCES.filter(s=>s.customer===selCust)}
 onOpenEdit={()=>openStopEdit(selCust,item.origIdx,isCustom,origStop,addr,rate,note)}
 onCheck={()=>setMultiChecked(p=>p.includes(item.origIdx)?p.filter(x=>x!==item.origIdx):[...p,item.origIdx])}
-onAdd={(dueBy,weight,pickupDueBy)=>{const cd=CUSTOMERS[selCust];addDel(selCust,stop,rate||0,preAssignDriver||0,{isHourly:cd.rate_type==="hourly",fuelPct:(cd.fuel_surcharge&&!cd.fuel_included)?cd.fuel_surcharge:0,note:note||null,addr,priority:cd.priority,dueBy:dueBy||null,weight:weight||0,pickupDueBy:pickupDueBy||null});}}
+onAdd={(dueBy,weight,pickupDueBy,pickupLoc)=>{const cd=CUSTOMERS[selCust];addDel(selCust,stop,rate||0,preAssignDriver||0,{isHourly:cd.rate_type==="hourly",fuelPct:(cd.fuel_surcharge&&!cd.fuel_included)?cd.fuel_surcharge:0,note:note||null,addr,priority:cd.priority,dueBy:dueBy||null,weight:weight||0,pickupDueBy:pickupDueBy||null,pickupFrom:pickupLoc||null});}}
 onSaveInstr={text=>setCustomInstr(p=>({...p,[stop]:text}))}
 />
 </div>);})}{custHidden.length>0&&<div style={{marginTop:10,background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:12,padding:"10px 14px"}}>
@@ -6202,8 +6367,32 @@ const saveDriverLog=useCallback((newLog)=>{
 },[dk,wo,sd]);
 
 const updateStatus=(eid,status)=>{const now=new Date().toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});setLog(p=>{const n={...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,status,arrivedAt:status==="arrived"?now:e.arrivedAt,departedAt:status==="departed"?now:e.departedAt}:e)};saveDriverLog(n);return n;});};
-const addPhoto=(eid,dataUrl)=>setLog(p=>{const n={...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,photos:[...(e.photos||[]),dataUrl]}:e)};saveDriverLog(n);return n;});
-const addSignature=(eid,sig)=>setLog(p=>{const n={...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,signature:sig}:e)};saveDriverLog(n);return n;});
+const addPhoto=(eid,dataUrl)=>{
+if(window._fbOps?.uploadFile){
+  fetch(dataUrl).then(r=>r.blob()).then(b=>{
+    const path=`photos/${dk}/${eid}_${Date.now()}.jpg`;
+    return window._fbOps.uploadFile(path,b);
+  }).then(url=>{
+    setLog(p=>{const n={...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,photos:[...(e.photos||[]),url]}:e)};saveDriverLog(n);return n;});
+  }).catch(()=>{
+    setLog(p=>{const n={...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,photos:[...(e.photos||[]),dataUrl]}:e)};saveDriverLog(n);return n;});
+  });
+}else{
+  setLog(p=>{const n={...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,photos:[...(e.photos||[]),dataUrl]}:e)};saveDriverLog(n);return n;});
+}};
+const addSignature=(eid,sig)=>{
+if(window._fbOps?.uploadFile){
+  fetch(sig).then(r=>r.blob()).then(b=>{
+    const path=`signatures/${dk}/${eid}_${Date.now()}.png`;
+    return window._fbOps.uploadFile(path,b);
+  }).then(url=>{
+    setLog(p=>{const n={...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,signature:url}:e)};saveDriverLog(n);return n;});
+  }).catch(()=>{
+    setLog(p=>{const n={...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,signature:sig}:e)};saveDriverLog(n);return n;});
+  });
+}else{
+  setLog(p=>{const n={...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,signature:sig}:e)};saveDriverLog(n);return n;});
+}};
 const setShipPlanD=(eid,num)=>setLog(p=>{const n={...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,shipPlan:num}:e)};saveDriverLog(n);return n;});
 const setEtaD=(eid,mins,dest)=>setLog(p=>{const n={...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,eta:mins,etaDest:dest||null}:e)};saveDriverLog(n);return n;});
 
