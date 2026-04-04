@@ -405,7 +405,7 @@ const DAYS = ["Monday","Tuesday","Wednesday","Thursday","Friday"];
 
 /* -- BRAND COLORS -- */
 const BRAND={main:"#1e5b92",dark:"#134b7f",light:"#357bb7",pale:"#e8f0f8",bg:"#f0f5fa"};
-const APP_VERSION="3.10.81";
+const APP_VERSION="3.10.87";
 const LOGO_URI="data:image/png;base64,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";
 const LOGO_WHITE="data:image/png;base64,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";
 
@@ -713,6 +713,7 @@ return(
 <div style={{width:20,height:20,borderRadius:5,border:`2px solid ${isChecked?"#16a34a":"#d6d3d1"}`,background:isChecked?"#16a34a":"#fff",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:12,fontWeight:700,flexShrink:0}}>{isChecked?"✓":""}</div>
 <div style={_s.f1m}>
 <div style={{fontSize:12,fontWeight:600,color:"#1c1917"}}>{s.stop}</div>
+{s.customer&&<div style={{fontSize:9,color:s.customer==="Florida Tile"?"#16a34a":s.customer==="Emser Tile"?"#2563eb":"#78716c",fontWeight:700}}>{s.customer}{s.rate?" — $"+s.rate:""}</div>}
 {(s.weight||s.note)&&<div style={_s.sub}>{s.weight?Math.round(s.weight/1000)+"K lbs":""}{s.weight&&s.note?" · ":""}{s.note||""}</div>}
 </div>
 </div>);})}
@@ -1360,14 +1361,20 @@ onChange={e=>{if(e.target.files[0]){const r=new FileReader();r.onload=ev=>onPhot
 }
 
 
-function QuoteBuilder({customerName,pickupOptions,onAdd,onBack,drivers,drvEntries}){
+function QuoteBuilder({customerName,pickupOptions,onAdd,onAddQuote,onBack,drivers,drvEntries}){
 const hasMultiPickup=pickupOptions&&pickupOptions.length>1;
 const[miles,setMiles]=useState("");const[liftgate,setLiftgate]=useState(false);const[gravel,setGravel]=useState(false);const[extraPallets,setExtraPallets]=useState(false);const[customStop,setCustomStop]=useState("");const[pickupName,setPickupName]=useState(hasMultiPickup?"":pickupOptions?.[0]?.label||"");const[originAddr,setOriginAddr]=useState(hasMultiPickup?"":pickupOptions?.[0]?.addr||"");const[selectedPickup,setSelectedPickup]=useState(hasMultiPickup?null:pickupOptions?.[0]?.label||"custom");const[destAddr,setDestAddr]=useState("");const[calcLoading,setCalcLoading]=useState(false);const[calcError,setCalcError]=useState("");const[apiKey,setApiKey]=useState(()=>{try{return window.__gbApiKey||"AIzaSyB29mVeZXedDhLVT3eMVgl07EsOneWCUu4";}catch{return"AIzaSyB29mVeZXedDhLVT3eMVgl07EsOneWCUu4";}});const[showApiInput,setShowApiInput]=useState(false);
 const mi=parseFloat(miles)||0;const baseTier=getBaseTier(mi);const fuelAmt=liftgate?0:baseTier*0.15;const total=baseTier+fuelAmt+(liftgate?75:0)+(gravel?25:0)+(extraPallets?25:0);const isOneOff=customerName==="One-Off Delivery";
 const calcDistance=async()=>{if(!originAddr||!destAddr){setCalcError("Enter both addresses");return;}if(!apiKey){setShowApiInput(true);setCalcError("Set API key first");return;}setCalcLoading(true);setCalcError("");try{const svc=new window.google.maps.DistanceMatrixService();svc.getDistanceMatrix({origins:[originAddr],destinations:[destAddr],travelMode:window.google.maps.TravelMode.DRIVING,unitSystem:window.google.maps.UnitSystem.IMPERIAL},(resp,status)=>{setCalcLoading(false);if(status==="OK"&&resp.rows[0]?.elements[0]?.status==="OK")setMiles(parseFloat(resp.rows[0].elements[0].distance.text.replace(/,/g,"")).toFixed(1));else setCalcError("Could not calculate");});}catch{setCalcLoading(false);setCalcError("Maps API error");}};
 const loadMaps=k=>{if(window.google?.maps?.DistanceMatrixService)return;const s=document.createElement("script");s.src=`https://maps.googleapis.com/maps/api/js?key=${k}&libraries=places,geometry`;s.async=true;document.head.appendChild(s);};
 const saveKey=k=>{setApiKey(k);window.__gbApiKey=k;if(k)loadMaps(k);setShowApiInput(false);};
-const addQuote=drvId=>{const stopName=customStop||customerName||(isOneOff?"One-Off":"Quote");const puInfo=pickupName?`PU: ${pickupName}${originAddr?" ("+originAddr.split(",")[0]+")":""}`:null;const note=[puInfo,`${mi}mi`,liftgate?"LG":"Fuel",gravel?"Gravel":"",extraPallets?"4-5 Pallets":""].filter(Boolean).join(" | ");onAdd(isOneOff?"One-Off Delivery":"Quote Delivery",stopName,total,drvId,{note,addr:destAddr,stopType:"delivery",pickupFrom:pickupName||null});};
+const addQuote=drvId=>{const stopName=customStop||customerName||(isOneOff?"One-Off":"Quote");const cust=isOneOff?"One-Off Delivery":"Quote Delivery";const noteItems=[`${mi}mi`,liftgate?"LG":"Fuel",gravel?"Gravel":"",extraPallets?"4-5 Pallets":""].filter(Boolean).join(" | ");
+if(pickupName&&originAddr&&onAddQuote){
+  onAddQuote(cust,{puStop:pickupName,puAddr:originAddr,puNote:`Picking up for ${stopName}`},{delStop:stopName,delAddr:destAddr,delRate:total,delNote:"from "+pickupName+" | "+noteItems,pickupFrom:pickupName},drvId);
+}else{
+  onAdd(cust,stopName,total,drvId,{note:(pickupName?"from "+pickupName+" | ":"")+noteItems,addr:destAddr,stopType:"delivery",pickupFrom:pickupName||null});
+}
+};
 return(
 <div>
 <button onClick={onBack} style={BB}>← Back</button>
@@ -2275,6 +2282,8 @@ const[aiQuoteInput,setAiQuoteInput]=useState("");
 const[aiQuoteLoading,setAiQuoteLoading]=useState(false);
 const[qCust,setQCust]=useState("");
 const[qPickup,setQPickup]=useState(""); /* selected pickup location for quote customers */
+const[qPickupName,setQPickupName]=useState(""); /* pickup customer name */
+const[qPickupAddr,setQPickupAddr]=useState(""); /* pickup address */
 const[qStop,setQStop]=useState("");
 const[qCustomMode,setQCustomMode]=useState(false);
 const[qAddr,setQAddr]=useState("");
@@ -2287,17 +2296,16 @@ const[qExtraPallets,setQExtraPallets]=useState(false);
 const[qCalcLoading,setQCalcLoading]=useState(false);
 const[qCalcError,setQCalcError]=useState("");
 const calcQuoteMiles=()=>{
-  /* Determine origin: pickup address from selected customer/pickup */
-  let origin="";
-  const qc=QUOTE_CUSTOMERS.find(q=>q.name===qCust);
-  if(qc&&qc.pickups){
-    if(qPickup){const p=qc.pickups.find(x=>x.label===qPickup);if(p)origin=p.addr;}
-    else if(qc.pickups.length===1)origin=qc.pickups[0].addr;
+  let origin=qPickupAddr||"";
+  if(!origin){
+    const qc=QUOTE_CUSTOMERS.find(q=>q.name===qCust);
+    if(qc&&qc.pickups){
+      if(qPickup){const p=qc.pickups.find(x=>x.label===qPickup);if(p)origin=p.addr;}
+      else if(qc.pickups.length===1)origin=qc.pickups[0].addr;
+    }
+    if(!origin){const ps=PICKUP_SOURCES.find(s=>s.customer===qCust);if(ps)origin=ps.addr;}
   }
-  if(!origin){/* Try PICKUP_SOURCES for contract customers */
-    const ps=PICKUP_SOURCES.find(s=>s.customer===qCust);if(ps)origin=ps.addr;
-  }
-  if(!origin||!qAddr){setQCalcError(!origin?"Select pickup location first":"Enter delivery address");return;}
+  if(!origin||!qAddr){setQCalcError(!origin?"Enter pickup address":"Enter delivery address");return;}
   if(!window.google?.maps?.DistanceMatrixService){setQCalcError("Google Maps not loaded");return;}
   setQCalcLoading(true);setQCalcError("");
   try{
@@ -2670,10 +2678,10 @@ const miles=parseFloat(qMiles)||0;
 const manualRate=parseFloat(qRate)||0;
 const calc=miles>0?calcQuoteRate(miles,qLiftgate,qGravel,qExtraPallets):null;
 const finalRate=manualRate||calc?.total||0;
-const q={id:Date.now()+Math.random(),num:savedQuotes.length+1,customer:qCust,stop:qStop,addr:qAddr,rate:finalRate,miles:miles||null,liftgate:qLiftgate,gravel:qGravel,extraPallets:qExtraPallets,note:qNote,pickup:qPickup||null,calc,createdAt:new Date().toISOString(),status:"pending"};
+const q={id:Date.now()+Math.random(),num:savedQuotes.length+1,customer:qCust,stop:qStop,addr:qAddr,rate:finalRate,miles:miles||null,liftgate:qLiftgate,gravel:qGravel,extraPallets:qExtraPallets,note:qNote,pickup:qPickup||null,pickupName:qPickupName||null,pickupAddr:qPickupAddr||null,calc,createdAt:new Date().toISOString(),status:"pending"};
 setSavedQuotes(p=>[q,...p]);
 saveQuoteToFB(q).catch(e=>console.error("Quote save:",e));
-setQCust("");setQStop("");setQAddr("");setQRate("");setQNote("");setQMiles("");setQLiftgate(false);setQGravel(false);setQExtraPallets(false);setQPickup("");setQCustomMode(false);setQuoteFormOpen(false);
+setQCust("");setQStop("");setQAddr("");setQRate("");setQNote("");setQMiles("");setQLiftgate(false);setQGravel(false);setQExtraPallets(false);setQPickup("");setQPickupName("");setQPickupAddr("");setQCustomMode(false);setQuoteFormOpen(false);
 showToast("Quote #"+q.num+" saved");
 };
 const pushQuoteToDay=(quoteId,targetDk)=>{
@@ -2724,6 +2732,18 @@ showToast("AI Quote #"+q.num+" created: "+fmt(q.rate));
 setAiQuoteInput("");
 }catch(e){console.error("AI quote error:",e);showToast("AI quote failed — try again or create manually");}
 finally{setAiQuoteLoading(false);}
+};
+
+const addQuoteWithPickup=(cust,pu,del,drvId)=>{
+setLog(p=>{
+let all=[...(p[dk]||[])];
+const puEntry={id:Date.now()+Math.random(),customer:cust,stop:pu.puStop,baseRate:0,fuelPct:0,isHourly:false,note:pu.puNote,driverId:drvId,addr:pu.puAddr,stopType:"pickup",priority:false,instructions:"",status:null,arrivedAt:null,departedAt:null,eta:null,photos:[],signature:null,dueBy:null,weight:0,loadNum:1,pickupFrom:pu.puStop,manualPickup:true};
+const delEntry={id:Date.now()+Math.random()+0.001,customer:cust,stop:del.delStop,baseRate:del.delRate,fuelPct:0,isHourly:false,note:del.delNote,driverId:drvId,addr:del.delAddr,stopType:"delivery",priority:false,instructions:"",status:null,arrivedAt:null,departedAt:null,eta:null,photos:[],signature:null,dueBy:null,weight:0,loadNum:1,pickupFrom:del.pickupFrom};
+if(drvId>0){let insertIdx=all.length;for(let i=all.length-1;i>=0;i--){if(all[i].driverId===drvId){insertIdx=i+1;break;}}all.splice(insertIdx,0,puEntry,delEntry);}
+else{all.push(puEntry,delEntry);}
+return{...p,[dk]:all};
+});
+showToast("PU "+pu.puStop+" + DEL "+del.delStop+" added");
 };
 
 const addDel=(cust,stop,rate,drvId,ex={})=>{
@@ -3422,10 +3442,11 @@ You can help with:
 - Answering questions about customer rates, addresses, instructions
 - Flagging scheduling conflicts between time-constrained stops
 - Drafting invoice summaries
-- PARSING DISPATCH PHOTOS: When the user sends a photo of a dispatch email (e.g. from Emser Tile), extract each delivery stop and respond with ONLY a JSON block like this:
+- PARSING DISPATCH PHOTOS: When the user sends a photo of a dispatch email or describes deliveries, extract each delivery stop and respond with a JSON block like this:
 \`\`\`json
-{"stops":[{"stop":"Customer Name","weight":5000,"note":"from Norcross"},{"stop":"Another Customer","weight":8000,"note":"from Roswell"}]}
+{"stops":[{"stop":"Customer Name","customer":"Florida Tile","weight":5000,"note":"from Norcross","rate":175},{"stop":"Another Customer","customer":"Emser Tile","weight":8000,"note":"from Roswell","rate":0}]}
 \`\`\`
+CRITICAL: Always include the "customer" field. Many stops exist in BOTH Emser Tile and Florida Tile. The user will tell you which customer — use that. If the user says "Florida Tile deliveries", set customer to "Florida Tile" for ALL stops. If the user says "Emser" or doesn't specify, use "Emser Tile". For Florida Tile, include the flat rate from the rate sheet. For Emser (hourly), rate should be 0.
 Match stop names to known customers: AFD = "Atlanta Flooring - Suwanee", ELITE = "Elite Flooring - Norcross", FWORX = "Floorworx - Norcross", IDLEWOOD = "Idlewood - Norcross", VALUFLOR = "Valufloor - Doraville", BEC = "BEC - Alpharetta", PEACHWOOD = "Peachwood Floor Covering", AMERICAN FLOORING = "American Flooring Services", DCO = varies by location, HILLMAN = "Hillman - Sugar Hill", BRITTS = "Britts - Lawrenceville", STOCCO = "Stocco - Alpharetta", NE CORNER = "NE Corner - Flowery Branch", PREMIER = "Premier - Suwanee", PROSOURCE = varies by location, VANGUARD = "Vanguard - Norcross", SE COMMERCIAL = "SE Commercial - Woodstock", PRECISION = "Precision Flooring - Norcross", ATL WEST = "Atlanta West - Lithia Springs", ATL FLOORING = "Atlanta Flooring - Suwanee", SHERWIN = varies by location, GEL = "Gel & Associates - Atlanta", STRATHMORE = "Strathmore - Atlanta", FLOORING DESIGN = "Flooring Design Group - Doraville", D3 = "D3 - Woodstock", PRESTIGIOUS = "Prestigious - Alpharetta", MADISON = "Madison Flooring Group", CONSTRUCTION RESOURCES = "Construction Resources - Decatur", BFC = "Builders Floor Coverings - Decatur", BUILDERS = "Builders Floor Coverings - Decatur", NOCO = "NOCO Contracting", PEACHWOOD SUWANEE = "Peachwood Floor Covering", ADVANCE = "Advanced Flooring Design - Mableton", ADV FLOORING = "Advanced Flooring Design - Mableton".
 Include weight in lbs. When weight is listed as a number followed by K (e.g. 8K), multiply by 1000 (8K = 8000 lbs). When weight is listed with LBS (e.g. 500 LBS), use as-is (500 LBS = 500 lbs). Do NOT convert LBS values to thousands. Note which pickup location (Norcross or Roswell) each stop comes from. Stops listed under "ROSWELL:" are from Roswell pickup; all others default to Norcross. If a stop appears under BOTH Norcross and Roswell sections, list it twice with the appropriate pickup noted.
 
@@ -4381,48 +4402,72 @@ style={{flex:1,border:"1px solid #d6d3d1",borderRadius:10,padding:"10px 14px",fo
 </div>
 {quoteFormOpen&&<div style={{background:"#fff",border:"2px solid #16a34a",borderRadius:16,padding:"18px 20px",marginBottom:20}}>
 <div style={{fontSize:14,fontWeight:700,color:"#16a34a",marginBottom:14}}>New Quote</div>
-<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
-<div>
-<label style={_s.label}>Customer</label>
+{/* Customer */}
+<div style={{marginBottom:12}}>
+<label style={_s.label}>Customer (who is this quote for?)</label>
 <select value={qCust} onChange={e=>{setQCust(e.target.value);setQStop("");setQPickup("");setQCustomMode(false);}} style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px",fontSize:13,outline:"none",background:"#fff"}}>
 <option value="">Select customer...</option>{allCustNames.map(c=><option key={c} value={c}>{c}</option>)}<option value="__manual">Manual Entry</option>
 </select>
 </div>
-{(()=>{const qc=QUOTE_CUSTOMERS.find(q=>q.name===qCust);if(qc&&qc.pickups&&qc.pickups.length>1)return(<div style={{gridColumn:"1 / -1",marginBottom:4}}>
-<label style={{fontSize:11,fontWeight:600,color:qPickup?"#57534e":"#dc2626",display:"block",marginBottom:4}}>⚠ Pickup Location</label>
-<div style={_s.flexG6}>
-{qc.pickups.map(p=><button key={p.label} onClick={()=>setQPickup(p.label)} style={{padding:"8px 16px",borderRadius:8,border:qPickup===p.label?"2px solid #2563eb":"2px solid #e7e5e4",cursor:"pointer",fontSize:13,fontWeight:700,background:qPickup===p.label?"#2563eb":"#fff",color:qPickup===p.label?"#fff":"#57534e"}}>{p.label}</button>)}
+{/* Pickup Info */}
+<div style={{background:"#eff6ff",border:"2px solid #2563eb",borderRadius:12,padding:"12px 14px",marginBottom:12}}>
+<div style={{fontSize:12,fontWeight:700,color:"#2563eb",marginBottom:8}}>📦 Pickup From</div>
+{(()=>{const qc=QUOTE_CUSTOMERS.find(q=>q.name===qCust);if(qc&&qc.pickups&&qc.pickups.length>1)return(<div style={{marginBottom:8}}>
+<div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:4}}>
+{qc.pickups.map(p=><button key={p.label} onClick={()=>{setQPickup(p.label);setQPickupName(p.label);setQPickupAddr(p.addr);}} style={{padding:"6px 14px",borderRadius:8,border:qPickup===p.label?"2px solid #2563eb":"2px solid #e7e5e4",cursor:"pointer",fontSize:12,fontWeight:700,background:qPickup===p.label?"#2563eb":"#fff",color:qPickup===p.label?"#fff":"#57534e"}}>{p.label}</button>)}
 </div>
-{qPickup&&<div style={{fontSize:11,color:"#78716c",marginTop:4}}>{qc.pickups.find(p=>p.label===qPickup)?.addr}</div>}
 </div>);return null;})()}
+<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
 <div>
-<label style={_s.label}>Delivery To</label>
+<label style={{fontSize:10,fontWeight:600,color:"#2563eb",display:"block",marginBottom:3}}>Pickup Customer / Name</label>
+<input value={qPickupName} onChange={e=>setQPickupName(e.target.value)} placeholder="e.g. ABC Warehouse" style={{width:"100%",border:"1px solid #bfdbfe",borderRadius:8,padding:"8px 10px",fontSize:13,outline:"none",background:"#fff"}}/>
+</div>
+<div style={{gridColumn:"1 / -1"}}>
+<label style={{fontSize:10,fontWeight:600,color:"#2563eb",display:"block",marginBottom:3}}>Pickup Address</label>
+<AddressInput value={qPickupAddr} onChange={setQPickupAddr} placeholder="Pickup address"/>
+</div>
+</div>
+</div>
+{/* Delivery Info */}
+<div style={{background:"#f0fdf4",border:"2px solid #16a34a",borderRadius:12,padding:"12px 14px",marginBottom:12}}>
+<div style={{fontSize:12,fontWeight:700,color:"#16a34a",marginBottom:8}}>📍 Delivering To</div>
+<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+<div style={{gridColumn:"1 / -1"}}>
+<label style={{fontSize:10,fontWeight:600,color:"#16a34a",display:"block",marginBottom:3}}>Delivery Stop / Customer Name</label>
 {qCust&&qCust!=="__manual"&&getDeliveries(qCust).length>0&&qStop!=="__custom"&&!qCustomMode?
-<select value={qStop} onChange={e=>{if(e.target.value==="__custom"){setQStop("");setQCustomMode(true);}else{setQStop(e.target.value);setQCustomMode(false);}}} style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px",fontSize:13,outline:"none",background:"#fff"}}>
+<select value={qStop} onChange={e=>{if(e.target.value==="__custom"){setQStop("");setQCustomMode(true);}else{setQStop(e.target.value);setQCustomMode(false);}}} style={{width:"100%",border:"1px solid #bbf7d0",borderRadius:8,padding:"8px 10px",fontSize:13,outline:"none",background:"#fff"}}>
 <option value="">Select stop...</option>{getDeliveries(qCust).map(d=><option key={d.s} value={d.s}>{d.s}{d.r?" — $"+d.r:""}</option>)}<option value="__custom">Custom location...</option>
 </select>
-:<div><input value={qStop} onChange={e=>setQStop(e.target.value)} placeholder="Custom location name..." autoFocus style={{width:"100%",border:"2px solid #16a34a",borderRadius:8,padding:"8px 10px",fontSize:13,outline:"none",background:"#f0fdf4"}}/>
-{qCust&&qCust!=="__manual"&&getDeliveries(qCust).length>0&&<button onClick={()=>{setQStop("");setQCustomMode(false);}} style={{marginTop:4,background:"none",border:"none",color:"#2563eb",fontSize:11,cursor:"pointer",fontWeight:600}}>← Back to stop list</button>}
+:<div><input value={qStop} onChange={e=>setQStop(e.target.value)} placeholder="e.g. Smith Residence" style={{width:"100%",border:"1px solid #bbf7d0",borderRadius:8,padding:"8px 10px",fontSize:13,outline:"none",background:"#fff"}}/>
+{qCust&&qCust!=="__manual"&&getDeliveries(qCust).length>0&&<button onClick={()=>{setQStop("");setQCustomMode(false);}} style={{marginTop:3,background:"none",border:"none",color:"#2563eb",fontSize:10,cursor:"pointer",fontWeight:600}}>← Back to stop list</button>}
 </div>}
 </div>
+<div style={{gridColumn:"1 / -1"}}>
+<label style={{fontSize:10,fontWeight:600,color:"#16a34a",display:"block",marginBottom:3}}>Delivery Address</label>
+<AddressInput value={qAddr} onChange={setQAddr} placeholder="Delivery address"/>
 </div>
-<div style={{marginBottom:12}}>
-<label style={_s.label}>Address</label>
-<AddressInput value={qAddr} onChange={setQAddr} placeholder="Delivery address" style={{fontSize:13}}/>
-{qAddr&&<button onClick={calcQuoteMiles} disabled={qCalcLoading} style={{marginTop:6,background:"#1c1917",color:"#fff",border:"none",borderRadius:8,padding:"8px 16px",fontSize:12,fontWeight:600,cursor:"pointer",opacity:qCalcLoading?0.6:1}}>{qCalcLoading?"Calculating…":"📍 Calculate Distance"}</button>}
-{qCalcError&&<div style={{fontSize:11,color:"#dc2626",marginTop:4}}>{qCalcError}</div>}
 </div>
-<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
+</div>
+{/* Mileage Calculator */}
+<div style={{background:"#f5f5f4",border:"1px solid #e7e5e4",borderRadius:12,padding:"12px 14px",marginBottom:12}}>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+<span style={{fontSize:12,fontWeight:700,color:"#57534e"}}>📏 Distance & Rate</span>
+{(qPickupAddr||qAddr)&&<button onClick={calcQuoteMiles} disabled={qCalcLoading||!qPickupAddr||!qAddr} style={{background:qPickupAddr&&qAddr&&!qCalcLoading?"#1c1917":"#a8a29e",color:"#fff",border:"none",borderRadius:8,padding:"6px 14px",fontSize:11,fontWeight:600,cursor:qPickupAddr&&qAddr?"pointer":"default"}}>{qCalcLoading?"Calculating…":"Calculate Miles"}</button>}
+</div>
+{qCalcError&&<div style={{fontSize:11,color:"#dc2626",marginBottom:6}}>{qCalcError}</div>}
+<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
 <div>
-<label style={_s.label}>Distance (miles)</label>
-<input type="number" value={qMiles} onChange={e=>setQMiles(e.target.value)} placeholder="0" style={{width:"100%",border:qMiles?"2px solid #16a34a":"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px",fontSize:13,fontWeight:700,outline:"none",textAlign:"center",background:qMiles?"#f0fdf4":"#fff"}}/>
-{qMiles&&<div style={{fontSize:11,color:"#16a34a",fontWeight:700,marginTop:4}}>Auto: {fmt(calcQuoteRate(qMiles,qLiftgate,qGravel,qExtraPallets).total)}</div>}
+<label style={{fontSize:10,fontWeight:600,color:"#57534e",display:"block",marginBottom:3}}>Miles</label>
+<input type="number" value={qMiles} onChange={e=>setQMiles(e.target.value)} placeholder="0" style={{width:"100%",border:qMiles?"2px solid #16a34a":"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px",fontSize:14,fontWeight:700,outline:"none",textAlign:"center",background:qMiles?"#f0fdf4":"#fff"}}/>
 </div>
 <div>
-<label style={_s.label}>Rate Override</label>
-<input type="number" value={qRate} onChange={e=>setQRate(e.target.value)} placeholder={qMiles?"Auto-calculated":"Manual rate"} style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px",fontSize:13,fontWeight:700,outline:"none",textAlign:"center"}}/>
+<label style={{fontSize:10,fontWeight:600,color:"#57534e",display:"block",marginBottom:3}}>Rate Override</label>
+<input type="number" value={qRate} onChange={e=>setQRate(e.target.value)} placeholder={qMiles?"Auto: "+fmt(calcQuoteRate(qMiles,qLiftgate,qGravel,qExtraPallets).total):"$"} style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px",fontSize:14,fontWeight:700,outline:"none",textAlign:"center"}}/>
 </div>
 </div>
+{qMiles>0&&!qRate&&<div style={{fontSize:12,fontWeight:700,color:"#16a34a",marginTop:6,textAlign:"center"}}>Auto Rate: {fmt(calcQuoteRate(qMiles,qLiftgate,qGravel,qExtraPallets).total)} ({fmt(calcQuoteRate(qMiles,qLiftgate,qGravel,qExtraPallets).base)} base + {fmt(calcQuoteRate(qMiles,qLiftgate,qGravel,qExtraPallets).fuel)} {qLiftgate?"liftgate":"fuel"})</div>}
+</div>
+{/* Add-ons */}
 <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}}>
 <label style={{display:"flex",alignItems:"center",gap:5,cursor:"pointer",fontSize:12,fontWeight:600,color:qLiftgate?"#d97706":"#78716c",background:qLiftgate?"#fef3c7":"#f5f5f4",padding:"6px 12px",borderRadius:8,border:qLiftgate?"1px solid #fde68a":"1px solid #e7e5e4"}}>
 <input type="checkbox" checked={qLiftgate} onChange={e=>setQLiftgate(e.target.checked)} style={{accentColor:"#d97706"}}/> Liftgate +$75</label>
@@ -4431,6 +4476,7 @@ style={{flex:1,border:"1px solid #d6d3d1",borderRadius:10,padding:"10px 14px",fo
 <label style={{display:"flex",alignItems:"center",gap:5,cursor:"pointer",fontSize:12,fontWeight:600,color:qExtraPallets?"#d97706":"#78716c",background:qExtraPallets?"#fef3c7":"#f5f5f4",padding:"6px 12px",borderRadius:8,border:qExtraPallets?"1px solid #fde68a":"1px solid #e7e5e4"}}>
 <input type="checkbox" checked={qExtraPallets} onChange={e=>setQExtraPallets(e.target.checked)} style={{accentColor:"#d97706"}}/> 4-5 Pallets +$25</label>
 </div>
+{/* Notes */}
 <div style={{marginBottom:12}}>
 <label style={_s.label}>Notes</label>
 <textarea value={qNote} onChange={e=>setQNote(e.target.value)} placeholder="Additional details..." rows={2} style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px",fontSize:13,outline:"none",resize:"vertical",fontFamily:"inherit"}}/>
@@ -4456,7 +4502,8 @@ style={{flex:1,border:"1px solid #d6d3d1",borderRadius:10,padding:"10px 14px",fo
 {q.extraPallets&&<span style={{fontSize:9,background:"#fef3c7",color:"#92400e",padding:"1px 4px",borderRadius:3}}>4-5P</span>}
 </div>
 <div style={{fontSize:15,fontWeight:700}}>{q.stop}</div>
-{q.addr&&<div style={{fontSize:11,color:"#78716c",marginTop:1}}>{q.addr}</div>}
+{q.addr&&<div style={{fontSize:11,color:"#78716c",marginTop:1}}>📍 {q.addr}</div>}
+{(q.pickupName||q.pickupAddr)&&<div style={{fontSize:11,color:"#2563eb",marginTop:2,fontWeight:600}}>📦 PU: {q.pickupName||""}{q.pickupAddr?" — "+q.pickupAddr.split(",")[0]:""}</div>}
 {q.note&&<div style={{fontSize:11,color:"#57534e",marginTop:2}}>{q.note}</div>}
 <div style={{fontSize:10,color:"#a8a29e",marginTop:4}}>{new Date(q.createdAt).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})} at {new Date(q.createdAt).toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"})}</div>
 </div>
@@ -5020,8 +5067,16 @@ style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,width:"
 {msg.role==="user"?(msg._text||"📷 Photo"):typeof msg.content==="string"?msg.content.replace(/```json[\s\S]*?```/g,"").trim():""}
 </div>
 {msg._stops&&msg._stops.length>0&&<ParsedStopsCard stops={msg._stops} onAddSelected={(selected)=>{
-selected.forEach(s=>{addDel("Emser Tile",s.stop,0,0,{isHourly:true,weight:s.weight||0,note:s.note||null});});
-showToast(selected.length+" Emser stops added");
+selected.forEach(s=>{
+const cust=s.customer||"Emser Tile";
+const cd=CUSTOMERS[cust];
+const isHourly=cd?.rate_type==="hourly";
+const rate=s.rate||0;
+const fuelPct=(cd?.fuel_surcharge&&!cd?.fuel_included)?cd.fuel_surcharge:0;
+addDel(cust,s.stop,isHourly?0:rate,0,{isHourly,weight:s.weight||0,note:s.note||null,fuelPct});
+});
+const custName=selected[0]?.customer||"Emser Tile";
+showToast(selected.length+" "+custName+" stops added");
 }}/>}
 </div>
 </div>
@@ -5904,41 +5959,59 @@ return(<div>
 </div>
 {quoteFormOpen&&<div style={{background:"#fff",border:"2px solid #16a34a",borderRadius:14,padding:"14px 16px",marginBottom:16}}>
 <div style={{fontSize:13,fontWeight:700,color:"#16a34a",marginBottom:12}}>New Quote</div>
-<label style={_s.label}>Customer</label>
-<select value={qCust} onChange={e=>{setQCust(e.target.value);setQStop("");setQPickup("");setQCustomMode(false);}} style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px",fontSize:13,outline:"none",background:"#fff",marginBottom:10}}>
+{/* Customer */}
+<label style={_s.label}>Customer (who is this for?)</label>
+<select value={qCust} onChange={e=>{setQCust(e.target.value);setQStop("");setQPickup("");setQPickupName("");setQPickupAddr("");setQCustomMode(false);}} style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px",fontSize:13,outline:"none",background:"#fff",marginBottom:10}}>
 <option value="">Select customer...</option>{allCustNames.map(c=><option key={c} value={c}>{c}</option>)}<option value="__manual">Manual Entry</option>
 </select>
-{(()=>{const qc=QUOTE_CUSTOMERS.find(q=>q.name===qCust);if(qc&&qc.pickups&&qc.pickups.length>1)return(<div style={{marginBottom:10}}>
-<label style={{fontSize:11,fontWeight:600,color:qPickup?"#57534e":"#dc2626",display:"block",marginBottom:4}}>⚠ Pickup Location</label>
+{/* Pickup Info */}
+<div style={{background:"#eff6ff",border:"2px solid #2563eb",borderRadius:10,padding:"10px 12px",marginBottom:10}}>
+<div style={{fontSize:11,fontWeight:700,color:"#2563eb",marginBottom:6}}>📦 Pickup From</div>
+{(()=>{const qc=QUOTE_CUSTOMERS.find(q=>q.name===qCust);if(qc&&qc.pickups&&qc.pickups.length>1)return(<div style={{marginBottom:6}}>
 <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-{qc.pickups.map(p=><button key={p.label} onClick={()=>setQPickup(p.label)} style={{padding:"8px 14px",borderRadius:8,border:qPickup===p.label?"2px solid #2563eb":"2px solid #e7e5e4",cursor:"pointer",fontSize:13,fontWeight:700,background:qPickup===p.label?"#2563eb":"#fff",color:qPickup===p.label?"#fff":"#57534e"}}>{p.label}</button>)}
+{qc.pickups.map(p=><button key={p.label} onClick={()=>{setQPickup(p.label);setQPickupName(p.label);setQPickupAddr(p.addr);}} style={{padding:"6px 12px",borderRadius:8,border:qPickup===p.label?"2px solid #2563eb":"2px solid #e7e5e4",cursor:"pointer",fontSize:12,fontWeight:700,background:qPickup===p.label?"#2563eb":"#fff",color:qPickup===p.label?"#fff":"#57534e"}}>{p.label}</button>)}
 </div>
-{qPickup&&<div style={{fontSize:11,color:"#78716c",marginTop:4}}>{qc.pickups.find(p=>p.label===qPickup)?.addr}</div>}
 </div>);return null;})()}
-<label style={_s.label}>Delivery To</label>
+<label style={{fontSize:10,fontWeight:600,color:"#2563eb",display:"block",marginBottom:2}}>Pickup Customer / Name</label>
+<input value={qPickupName} onChange={e=>setQPickupName(e.target.value)} placeholder="e.g. ABC Warehouse" style={{width:"100%",border:"1px solid #bfdbfe",borderRadius:8,padding:"8px 10px",fontSize:13,outline:"none",background:"#fff",marginBottom:6}}/>
+<label style={{fontSize:10,fontWeight:600,color:"#2563eb",display:"block",marginBottom:2}}>Pickup Address</label>
+<AddressInput value={qPickupAddr} onChange={setQPickupAddr} placeholder="Pickup address"/>
+</div>
+{/* Delivery Info */}
+<div style={{background:"#f0fdf4",border:"2px solid #16a34a",borderRadius:10,padding:"10px 12px",marginBottom:10}}>
+<div style={{fontSize:11,fontWeight:700,color:"#16a34a",marginBottom:6}}>📍 Delivering To</div>
+<label style={{fontSize:10,fontWeight:600,color:"#16a34a",display:"block",marginBottom:2}}>Delivery Stop / Customer Name</label>
 {qCust&&qCust!=="__manual"&&getDeliveries2(qCust).length>0&&qStop!=="__custom"&&!qCustomMode?
-<select value={qStop} onChange={e=>{if(e.target.value==="__custom"){setQStop("");setQCustomMode(true);}else{setQStop(e.target.value);setQCustomMode(false);}}} style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px",fontSize:13,outline:"none",background:"#fff",marginBottom:10}}>
+<select value={qStop} onChange={e=>{if(e.target.value==="__custom"){setQStop("");setQCustomMode(true);}else{setQStop(e.target.value);setQCustomMode(false);}}} style={{width:"100%",border:"1px solid #bbf7d0",borderRadius:8,padding:"8px 10px",fontSize:13,outline:"none",background:"#fff",marginBottom:6}}>
 <option value="">Select stop...</option>{getDeliveries2(qCust).map(d=><option key={d.s} value={d.s}>{d.s}{d.r?" — $"+d.r:""}</option>)}<option value="__custom">Custom location...</option>
 </select>
-:<div style={{marginBottom:10}}><input value={qStop} onChange={e=>setQStop(e.target.value)} placeholder="Custom location name..." autoFocus style={{width:"100%",border:"2px solid #16a34a",borderRadius:8,padding:"8px 10px",fontSize:13,outline:"none",background:"#f0fdf4"}}/>
-{qCust&&qCust!=="__manual"&&getDeliveries2(qCust).length>0&&<button onClick={()=>{setQStop("");setQCustomMode(false);}} style={{marginTop:4,background:"none",border:"none",color:"#2563eb",fontSize:11,cursor:"pointer",fontWeight:600}}>← Back to stop list</button>}
+:<div style={{marginBottom:6}}><input value={qStop} onChange={e=>setQStop(e.target.value)} placeholder="e.g. Smith Residence" style={{width:"100%",border:"1px solid #bbf7d0",borderRadius:8,padding:"8px 10px",fontSize:13,outline:"none",background:"#fff"}}/>
+{qCust&&qCust!=="__manual"&&getDeliveries2(qCust).length>0&&<button onClick={()=>{setQStop("");setQCustomMode(false);}} style={{marginTop:3,background:"none",border:"none",color:"#2563eb",fontSize:10,cursor:"pointer",fontWeight:600}}>← Back to stop list</button>}
 </div>}
-<label style={_s.label}>Address</label>
-<div style={{marginBottom:10}}><AddressInput value={qAddr} onChange={setQAddr} placeholder="Delivery address" style={{fontSize:13}}/></div>
-{qAddr&&<button onClick={calcQuoteMiles} disabled={qCalcLoading} style={{width:"100%",background:"#1c1917",color:"#fff",border:"none",borderRadius:8,padding:"10px",fontSize:13,fontWeight:600,cursor:"pointer",marginBottom:10,opacity:qCalcLoading?0.6:1}}>{qCalcLoading?"Calculating…":"📍 Calculate Distance"}</button>}
-{qCalcError&&<div style={{fontSize:11,color:"#dc2626",marginBottom:8}}>{qCalcError}</div>}
-<div style={{display:"flex",gap:10,marginBottom:10}}>
-<div style={_s.f1}><label style={_s.label}>Miles</label><input type="number" value={qMiles} onChange={e=>setQMiles(e.target.value)} placeholder="0" style={{width:"100%",border:qMiles?"2px solid #16a34a":"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px",fontSize:13,fontWeight:700,outline:"none",textAlign:"center",background:qMiles?"#f0fdf4":"#fff"}}/></div>
-<div style={_s.f1}><label style={_s.label}>Rate Override</label><input type="number" value={qRate} onChange={e=>setQRate(e.target.value)} placeholder={qMiles?"Auto":"$"} style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px",fontSize:13,fontWeight:700,outline:"none",textAlign:"center"}}/></div>
+<label style={{fontSize:10,fontWeight:600,color:"#16a34a",display:"block",marginBottom:2}}>Delivery Address</label>
+<AddressInput value={qAddr} onChange={setQAddr} placeholder="Delivery address"/>
 </div>
-{qMiles&&<div style={{fontSize:12,color:"#16a34a",fontWeight:700,marginBottom:8}}>Auto: {fmt(calcQuoteRate(qMiles,qLiftgate,qGravel,qExtraPallets).total)}</div>}
+{/* Distance & Rate */}
+<div style={{background:"#f5f5f4",border:"1px solid #e7e5e4",borderRadius:10,padding:"10px 12px",marginBottom:10}}>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+<span style={{fontSize:11,fontWeight:700,color:"#57534e"}}>📏 Distance & Rate</span>
+<button onClick={calcQuoteMiles} disabled={qCalcLoading||!qPickupAddr||!qAddr} style={{background:qPickupAddr&&qAddr&&!qCalcLoading?"#1c1917":"#a8a29e",color:"#fff",border:"none",borderRadius:6,padding:"5px 12px",fontSize:10,fontWeight:600,cursor:qPickupAddr&&qAddr?"pointer":"default"}}>{qCalcLoading?"Calculating…":"Calculate Miles"}</button>
+</div>
+{qCalcError&&<div style={{fontSize:10,color:"#dc2626",marginBottom:6}}>{qCalcError}</div>}
+<div style={{display:"flex",gap:8,marginBottom:6}}>
+<div style={_s.f1}><label style={{fontSize:10,fontWeight:600,color:"#57534e",display:"block",marginBottom:2}}>Miles</label><input type="number" value={qMiles} onChange={e=>setQMiles(e.target.value)} placeholder="0" style={{width:"100%",border:qMiles?"2px solid #16a34a":"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px",fontSize:14,fontWeight:700,outline:"none",textAlign:"center",background:qMiles?"#f0fdf4":"#fff"}}/></div>
+<div style={_s.f1}><label style={{fontSize:10,fontWeight:600,color:"#57534e",display:"block",marginBottom:2}}>Rate Override</label><input type="number" value={qRate} onChange={e=>setQRate(e.target.value)} placeholder={qMiles?"Auto":"$"} style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px",fontSize:14,fontWeight:700,outline:"none",textAlign:"center"}}/></div>
+</div>
+{qMiles>0&&!qRate&&<div style={{fontSize:11,fontWeight:700,color:"#16a34a",textAlign:"center"}}>Auto: {fmt(calcQuoteRate(qMiles,qLiftgate,qGravel,qExtraPallets).total)} ({fmt(calcQuoteRate(qMiles,qLiftgate,qGravel,qExtraPallets).base)} base + {fmt(calcQuoteRate(qMiles,qLiftgate,qGravel,qExtraPallets).fuel)} {qLiftgate?"liftgate":"fuel"})</div>}
+</div>
+{/* Add-ons */}
 <div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap"}}>
 <label style={{display:"flex",alignItems:"center",gap:4,cursor:"pointer",fontSize:11,fontWeight:600,color:qLiftgate?"#92400e":"#78716c",background:qLiftgate?"#fef3c7":"#f5f5f4",padding:"5px 10px",borderRadius:7,border:qLiftgate?"1px solid #fde68a":"1px solid #e7e5e4"}}>
-<input type="checkbox" checked={qLiftgate} onChange={e=>setQLiftgate(e.target.checked)}/> Liftgate</label>
+<input type="checkbox" checked={qLiftgate} onChange={e=>setQLiftgate(e.target.checked)}/> Liftgate +$75</label>
 <label style={{display:"flex",alignItems:"center",gap:4,cursor:"pointer",fontSize:11,fontWeight:600,color:qGravel?"#92400e":"#78716c",background:qGravel?"#fef3c7":"#f5f5f4",padding:"5px 10px",borderRadius:7,border:qGravel?"1px solid #fde68a":"1px solid #e7e5e4"}}>
-<input type="checkbox" checked={qGravel} onChange={e=>setQGravel(e.target.checked)}/> Gravel</label>
+<input type="checkbox" checked={qGravel} onChange={e=>setQGravel(e.target.checked)}/> Gravel +$25</label>
 <label style={{display:"flex",alignItems:"center",gap:4,cursor:"pointer",fontSize:11,fontWeight:600,color:qExtraPallets?"#92400e":"#78716c",background:qExtraPallets?"#fef3c7":"#f5f5f4",padding:"5px 10px",borderRadius:7,border:qExtraPallets?"1px solid #fde68a":"1px solid #e7e5e4"}}>
-<input type="checkbox" checked={qExtraPallets} onChange={e=>setQExtraPallets(e.target.checked)}/> 4-5 Pallets</label>
+<input type="checkbox" checked={qExtraPallets} onChange={e=>setQExtraPallets(e.target.checked)}/> 4-5 Pallets +$25</label>
 </div>
 <label style={_s.label}>Notes</label>
 <textarea value={qNote} onChange={e=>setQNote(e.target.value)} placeholder="Details..." rows={2} style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px",fontSize:12,outline:"none",resize:"vertical",fontFamily:"inherit",marginBottom:10}}/>
@@ -5960,7 +6033,8 @@ return(<div>
 <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
 <div style={_s.f1}>
 <div style={_s.bold14}>{q.stop}</div>
-{q.addr&&<div style={{fontSize:10,color:"#78716c",marginTop:1}}>{q.addr}</div>}
+{q.addr&&<div style={{fontSize:10,color:"#78716c",marginTop:1}}>📍 {q.addr}</div>}
+{(q.pickupName||q.pickupAddr)&&<div style={{fontSize:10,color:"#2563eb",marginTop:1,fontWeight:600}}>📦 PU: {q.pickupName||""}{q.pickupAddr?" — "+q.pickupAddr.split(",")[0]:""}</div>}
 {q.note&&<div style={{fontSize:10,color:"#57534e",marginTop:2}}>{q.note}</div>}
 <div style={{fontSize:9,color:"#a8a29e",marginTop:3}}>{new Date(q.createdAt).toLocaleDateString("en-US",{month:"short",day:"numeric"})} {new Date(q.createdAt).toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"})}</div>
 </div>
@@ -6309,7 +6383,7 @@ return confirmDeleteStop
 </div>}
 
 </div>}
-{view==="add"&&quoteMode&&<QuoteBuilder customerName={quoteMode.name} pickupOptions={quoteMode.pickups} onAdd={addDel} onBack={()=>setQuoteMode(null)} drivers={drivers} drvEntries={drvEntries}/>}
+{view==="add"&&quoteMode&&<QuoteBuilder customerName={quoteMode.name} pickupOptions={quoteMode.pickups} onAdd={addDel} onAddQuote={addQuoteWithPickup} onBack={()=>setQuoteMode(null)} drivers={drivers} drvEntries={drvEntries}/>}
 </div>
 
 {}
@@ -6397,8 +6471,16 @@ style={{background:msgInput.trim()?BRAND.main:"#e7e5e4",color:msgInput.trim()?"#
 </div>
 {/* Parsed stops — show Add All button */}
 {msg._stops&&msg._stops.length>0&&<ParsedStopsCard stops={msg._stops} onAddSelected={(selected)=>{
-selected.forEach(s=>{addDel("Emser Tile",s.stop,0,0,{isHourly:true,weight:s.weight||0,note:s.note||null});});
-showToast(selected.length+" Emser stops added");
+selected.forEach(s=>{
+const cust=s.customer||"Emser Tile";
+const cd=CUSTOMERS[cust];
+const isHourly=cd?.rate_type==="hourly";
+const rate=s.rate||0;
+const fuelPct=(cd?.fuel_surcharge&&!cd?.fuel_included)?cd.fuel_surcharge:0;
+addDel(cust,s.stop,isHourly?0:rate,0,{isHourly,weight:s.weight||0,note:s.note||null,fuelPct});
+});
+const custName=selected[0]?.customer||"Emser Tile";
+showToast(selected.length+" "+custName+" stops added");
 }}/>}
 </div>
 </div>
