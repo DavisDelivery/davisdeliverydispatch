@@ -2782,15 +2782,12 @@ const entry={id:Date.now()+Math.random(),customer:cust,stop,baseRate:finalBaseRa
 
 setLog(p=>{
 let all=[...(p[dk]||[])];
+/* Insert after the last entry for this driver (ensures bottom of route) */
 if(entry.driverId>0){
-  let insertIdx=all.length;
-  for(let i=all.length-1;i>=0;i--){
-    if(all[i].driverId===entry.driverId){insertIdx=i+1;break;}
-  }
-  all.splice(insertIdx,0,entry);
-}else{
-  all.push(entry);
-}
+  let lastIdx=-1;
+  for(let i=all.length-1;i>=0;i--){if(all[i].driverId===entry.driverId){lastIdx=i;break;}}
+  if(lastIdx>=0){all.splice(lastIdx+1,0,entry);}else{all.push(entry);}
+}else{all.push(entry);}
 if(entry.stopType==="delivery"&&entry.driverId>0)all=rebuildPickupsFor(all,cust);
 return{...p,[dk]:all};
 });
