@@ -379,7 +379,7 @@ const DAYS = ["Monday","Tuesday","Wednesday","Thursday","Friday"];
 /* -- BRAND COLORS -- */
 const BRAND={main:"#1e5b92",dark:"#134b7f",light:"#357bb7",pale:"#e8f0f8",bg:"#f0f5fa"};
 const DISTANCE_BONUS_STOPS=["DCO Eatonton","DCO Athens"];
-const APP_VERSION="3.11.37";
+const APP_VERSION="3.11.38";
 const LOGO_URI="https://davisdelivery.com/wp-content/uploads/2025/05/davis-white2-scaled.png";
 const LOGO_WHITE="https://davisdelivery.com/wp-content/uploads/2025/05/davis-white2-scaled.png";
 
@@ -2458,7 +2458,7 @@ useEffect(()=>{
   };
   const poll=async()=>{
     try{
-      const r=await fetch("/api/motive-gps");
+      const r=await fetch("/.netlify/functions/motive-gps");
       if(!r.ok)return;
       const data=await r.json();
       if(!data.vehicles)return;
