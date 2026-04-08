@@ -2462,7 +2462,7 @@ useEffect(()=>{
   };
   const poll=async()=>{
     try{
-      const r=await fetch("/.netlify/functions/motive-gps");
+      const r=await fetch("/api/motive-gps");
       if(!r.ok)return;
       const data=await r.json();
       if(!data.vehicles)return;
