@@ -1027,22 +1027,29 @@ driverMarkersRef.current=[];
 drivers.forEach((drv,di)=>{
   const loc=driverLocs[drv.id];
   if(!loc||!loc.lat||!loc.lng)return;
-  const col=DCOL[di]||BRAND.main;
+  const col=DCOL[di%DCOL.length]||BRAND.main;
+  const firstName=drv.name.split(" ")[0];
   const initials=drv.name.split(" ").map(w=>w[0]).join("").toUpperCase();
   const age=loc.updatedAt?(typeof loc.updatedAt==="string"?Math.round((Date.now()-new Date(loc.updatedAt).getTime())/60000):Math.round((Date.now()-loc.updatedAt)/60000)):null;
   const ageLabel=age!==null?(age<1?"just now":age<60?age+"m ago":Math.round(age/60)+"h ago"):"";
   const speedLabel=loc.speed>0?loc.speed+" mph":"";
   const truckLabel=loc.truck||"";
   const cityLabel=[loc.city,loc.locState].filter(Boolean).join(", ");
-  const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="40" height="48" viewBox="0 0 40 48"><defs><filter id="s" x="-20%" y="-10%" width="140%" height="130%"><feDropShadow dx="0" dy="2" stdDeviation="2" flood-opacity="0.3"/></filter></defs><path d="M20 47 C20 47 3 28 3 18 A17 17 0 0 1 37 18 C37 28 20 47 20 47Z" fill="${col}" filter="url(#s)" stroke="#fff" stroke-width="2"/><circle cx="20" cy="18" r="11" fill="#fff"/><text x="20" y="22" text-anchor="middle" font-size="11" font-weight="800" font-family="system-ui" fill="${col}">${initials}</text></svg>`;
+  const srcLabel=loc.source==="motive"?"Motive":"Cell GPS";
+  /* Larger marker with truck # shown on the pin + name label below */
+  const displayText=truckLabel?truckLabel:initials;
+  const pinW=truckLabel?Math.max(50,displayText.length*8+24):44;
+  const pinH=52;
+  const textSize=truckLabel?10:12;
+  const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="${pinW}" height="${pinH+18}" viewBox="0 0 ${pinW} ${pinH+18}"><defs><filter id="s${di}" x="-20%" y="-10%" width="140%" height="130%"><feDropShadow dx="0" dy="2" stdDeviation="2" flood-opacity="0.3"/></filter></defs><path d="M${pinW/2} ${pinH-1} C${pinW/2} ${pinH-1} 3 ${pinH*0.58} 3 ${pinH*0.37} A${pinW/2-3} ${pinW/2-3} 0 0 1 ${pinW-3} ${pinH*0.37} C${pinW-3} ${pinH*0.58} ${pinW/2} ${pinH-1} ${pinW/2} ${pinH-1}Z" fill="${col}" filter="url(#s${di})" stroke="#fff" stroke-width="2"/><circle cx="${pinW/2}" cy="${pinH*0.37}" r="13" fill="#fff"/><text x="${pinW/2}" y="${pinH*0.37+4}" text-anchor="middle" font-size="${textSize}" font-weight="800" font-family="system-ui" fill="${col}">${displayText}</text><rect x="${pinW/2-firstName.length*3.2-6}" y="${pinH+2}" width="${firstName.length*6.4+12}" height="14" rx="4" fill="${col}" opacity="0.9"/><text x="${pinW/2}" y="${pinH+12}" text-anchor="middle" font-size="9" font-weight="700" font-family="system-ui" fill="#fff">${firstName}</text></svg>`;
   const marker=new window.google.maps.Marker({
     position:{lat:loc.lat,lng:loc.lng},
     map,
-    icon:{url:"data:image/svg+xml;charset=UTF-8,"+encodeURIComponent(svg),scaledSize:new window.google.maps.Size(40,48),anchor:new window.google.maps.Point(20,48)},
-    title:drv.name+(ageLabel?" ("+ageLabel+")":""),
+    icon:{url:"data:image/svg+xml;charset=UTF-8,"+encodeURIComponent(svg),scaledSize:new window.google.maps.Size(pinW,pinH+18),anchor:new window.google.maps.Point(pinW/2,pinH)},
+    title:drv.name+(truckLabel?" — Truck "+truckLabel:"")+(ageLabel?" ("+ageLabel+")":""),
     zIndex:1000+di
   });
-  const infoContent=`<div style="font-family:system-ui;padding:4px"><div style="font-size:13px;font-weight:700;color:${col}">${drv.name}</div>${truckLabel?`<div style="font-size:11px;color:#57534e;margin-top:2px">🚚 ${truckLabel}</div>`:""}<div style="font-size:11px;color:#78716c;margin-top:2px">📍 ${cityLabel||"Live location"}${ageLabel?" · "+ageLabel:""}</div>${speedLabel?`<div style="font-size:11px;color:#2563eb;margin-top:2px">🏎 ${speedLabel}</div>`:""}${loc.state==="off"?'<div style="font-size:10px;color:#a8a29e;margin-top:2px">Engine off</div>':""}${age!==null&&age>30?'<div style="font-size:10px;color:#dc2626;margin-top:2px">⚠ Location may be stale</div>':""}</div>`;
+  const infoContent=`<div style="font-family:system-ui;padding:6px;min-width:160px"><div style="font-size:14px;font-weight:800;color:${col}">${drv.name}</div>${truckLabel?`<div style="font-size:12px;color:#57534e;margin-top:3px;font-weight:600">🚚 Truck ${truckLabel}</div>`:""}<div style="font-size:11px;color:#78716c;margin-top:3px">📍 ${cityLabel||"Live location"}${ageLabel?" · "+ageLabel:""}</div>${speedLabel?`<div style="font-size:12px;color:#2563eb;margin-top:3px;font-weight:600">🏎 ${speedLabel}</div>`:""}${loc.state==="off"?'<div style="font-size:11px;color:#a8a29e;margin-top:3px">Engine off</div>':""}${age!==null&&age>30?'<div style="font-size:11px;color:#dc2626;margin-top:3px;font-weight:600">⚠ Location may be stale</div>':"'}<div style="font-size:9px;color:#a8a29e;margin-top:4px;border-top:1px solid #e7e5e4;padding-top:3px">Source: ${srcLabel}</div></div>`;
   const info=new window.google.maps.InfoWindow({content:infoContent});
   marker.addListener("click",()=>{if(openInfoRef.current)openInfoRef.current.close();info.open(map,marker);openInfoRef.current=info;});
   driverMarkersRef.current.push(marker);
@@ -1615,14 +1622,27 @@ const COORDS={
 "11 Perimeter Center East, Atlanta, GA 30346":{lat:33.9259,lng:-84.3343},
 "1275 Oakbrook Drive, Suite D, Norcross, GA 30093":{lat:33.9174,lng:-84.1848},
 };
-const _dynamicCoords=(()=>{try{return JSON.parse(localStorage.getItem('dd_geocode_cache')||'{}');}catch(e){return{};}})();
+const _dynamicCoords=(()=>{
+  try{
+    /* v2 cache — forces re-geocode of all addresses through Google Maps API for accuracy */
+    const cacheKey='dd_geocode_cache_v2';
+    if(!localStorage.getItem(cacheKey)){
+      localStorage.removeItem('dd_geocode_cache'); /* clear old cache */
+      localStorage.setItem(cacheKey,'1');
+      return {};
+    }
+    return JSON.parse(localStorage.getItem('dd_geocode_cache')||'{}');
+  }catch(e){return{};}
+})();
 let _geocodeNotify=null; /* set by App to trigger re-render */
 let _geocodeSaveTimer=null;
 function _saveGeoCache(){if(_geocodeSaveTimer)clearTimeout(_geocodeSaveTimer);_geocodeSaveTimer=setTimeout(()=>{try{const toSave={};Object.entries(_dynamicCoords).forEach(([k,v])=>{if(!k.startsWith('_pending_')&&v&&v.lat)toSave[k]=v;});localStorage.setItem('dd_geocode_cache',JSON.stringify(toSave));}catch(e){}},1000);}
 function getCoords(addr){
   if(!addr)return null;
-  if(COORDS[addr])return COORDS[addr];
+  /* Prefer Google-geocoded coords over hardcoded — they're more accurate */
   if(_dynamicCoords[addr]&&_dynamicCoords[addr].lat)return _dynamicCoords[addr];
+  /* Fall back to hardcoded while geocoder runs */
+  const hardcoded=COORDS[addr]||null;
   if(!_dynamicCoords["_pending_"+addr]){
     _dynamicCoords["_pending_"+addr]=true;
     const nominatimFallback=(a)=>{fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(a)}&limit=1`,{headers:{"Accept":"application/json"}}).then(r=>r.json()).then(data=>{if(data[0]){_dynamicCoords[a]={lat:parseFloat(data[0].lat),lng:parseFloat(data[0].lon)};_saveGeoCache();if(_geocodeNotify)_geocodeNotify();}}).catch(()=>{});};
@@ -1640,7 +1660,7 @@ function getCoords(addr){
     }else{nominatimFallback(addr);}
     }catch(e){nominatimFallback(addr);}
   }
-  return null;
+  return hardcoded; /* show hardcoded position while geocoder resolves, then swap to accurate on next render */
 }
 
 function RouteBuilder({entries,drivers,onAssign,onAssignBulk,onReorder,onBack,getDriverCapacity:getDrvCap,driverLocs}){
