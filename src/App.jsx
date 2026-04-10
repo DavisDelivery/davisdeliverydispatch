@@ -2171,8 +2171,10 @@ return stored;
 const[mapActiveDrv,setMapActiveDrv]=useState(null); /* driver selected for click-to-assign on Live Routes map */
 const[mapActiveLoad,setMapActiveLoad]=useState(1); /* which load number for click-to-assign */
 const[driverLocs,setDriverLocs]=useState({}); /* {driverId: {lat,lng,updatedAt}} */
-const[gpsEnabled,setGpsEnabled]=useState(()=>{try{const s=localStorage.getItem("gpsEnabled");return s?JSON.parse(s):{1:true,2:true,3:true,4:true};}catch{return{1:true,2:true,3:true,4:true};}}); /* per-driver Motive GPS toggle */
+const[gpsEnabled,setGpsEnabled]=useState(()=>{try{const s=localStorage.getItem("gpsEnabled");return s?JSON.parse(s):{};}catch{return {};}}); /* per-driver Motive GPS toggle — empty = all off until user picks */
 const toggleGps=(driverId)=>setGpsEnabled(prev=>{const next={...prev,[driverId]:!prev[driverId]};try{localStorage.setItem("gpsEnabled",JSON.stringify(next));}catch{}return next;});
+const[gpsSearchTerm,setGpsSearchTerm]=useState(""); /* search/filter for GPS panel */
+const[gpsShowAll,setGpsShowAll]=useState(false); /* expand to show all drivers */
 const[invoices,setInvoices]=useState([]);
 const[showInvoice,setShowInvoice]=useState(null); /* customer name to generate invoice for */
 
@@ -2446,8 +2448,23 @@ useEffect(()=>{
 useEffect(()=>{
   const matchDriver=(motiveDriver)=>{
     if(!motiveDriver||!motiveDriver.name)return null;
-    const mName=motiveDriver.name.toLowerCase();
-    return drivers.find(d=>mName.includes(d.name.split(" ")[1]?.toLowerCase())||mName.includes(d.name.split(" ")[0]?.toLowerCase()));
+    const mName=motiveDriver.name.toLowerCase().trim();
+    const mParts=mName.split(/\s+/);
+    /* Priority 1: full name match (both first and last) */
+    const fullMatch=drivers.find(d=>{
+      const dParts=d.name.toLowerCase().split(/\s+/);
+      const dFirst=dParts[0]||"";const dLast=dParts[1]||"";
+      if(!dFirst||!dLast)return false;
+      return(mName.includes(dFirst)&&mName.includes(dLast));
+    });
+    if(fullMatch)return fullMatch;
+    /* Priority 2: last name match (more unique than first) */
+    const lastMatches=drivers.filter(d=>{const ln=d.name.split(/\s+/)[1]?.toLowerCase();return ln&&ln.length>2&&mParts.some(p=>p===ln);});
+    if(lastMatches.length===1)return lastMatches[0];
+    /* Priority 3: first name match (only if unique) */
+    const firstMatches=drivers.filter(d=>{const fn=d.name.split(/\s+/)[0]?.toLowerCase();return fn&&fn.length>2&&mParts.some(p=>p===fn);});
+    if(firstMatches.length===1)return firstMatches[0];
+    return null;
   };
   const poll=async()=>{
     try{
@@ -2460,7 +2477,7 @@ useEffect(()=>{
         if(!v.lat||!v.lng)return;
         const drv=matchDriver(v.driver);
         if(drv){
-          if(gpsEnabled[drv.id]===false)return;
+          if(gpsEnabled[drv.id]!==true)return; /* only track explicitly enabled drivers */
           locs[drv.id]={lat:v.lat,lng:v.lng,speed:v.speed,bearing:v.bearing,state:v.state,truck:v.number,city:v.city,locState:v.locState,updatedAt:v.locatedAt||data.fetchedAt,source:"motive"};
         }
       });
@@ -5109,51 +5126,86 @@ onAssignStop={mapActiveDrv?(stopId,drvId)=>{assignInOrder(stopId,mapActiveDrv,ma
 </div>
 </div>
 
+{(()=>{
+  const enabledDrivers=drivers.filter(d=>gpsEnabled[d.id]===true);
+  const enabledCount=enabledDrivers.length;
+  const searchLower=gpsSearchTerm.toLowerCase().trim();
+  const offDrivers=drivers.filter(d=>gpsEnabled[d.id]!==true);
+  const filteredOff=searchLower?offDrivers.filter(d=>d.name.toLowerCase().includes(searchLower)):offDrivers;
+  const showList=gpsShowAll||searchLower;
+  return(
 <div style={{background:"#f8f7f5",borderRadius:14,border:"1px solid #e7e5e4",padding:"12px 14px",marginTop:12}}>
 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
 <div style={_s.flexC6}>
 <span style={{fontSize:13}}>📡</span>
 <span style={{fontSize:12,fontWeight:700,color:"#1c1917"}}>Motive GPS</span>
+<span style={{fontSize:10,color:"#78716c",fontWeight:500,marginLeft:4}}>{enabledCount} active</span>
 </div>
 <span style={{fontSize:9,color:"#a8a29e",fontWeight:500}}>1 min polling</span>
 </div>
-{drivers.filter(d=>d.id<=3).map((drv,di)=>{
+{/* ENABLED / TRACKED DRIVERS */}
+{enabledDrivers.map((drv,di)=>{
   const loc=driverLocs[drv.id];
-  const on=gpsEnabled[drv.id]!==false;
-  const col=DCOL[di]||BRAND.main;
+  const on=true;
+  const col=DCOL[di%DCOL.length]||BRAND.main;
   const age=loc?.updatedAt?(typeof loc.updatedAt==="string"?Math.round((Date.now()-new Date(loc.updatedAt).getTime())/60000):Math.round((Date.now()-loc.updatedAt)/60000)):null;
-  const ageStr=age===null?"—":age<1?"just now":age<60?age+"m ago":Math.round(age/60)+"h ago";
-  const hasLoc=on&&loc&&loc.lat;
+  const ageStr=age===null?"\u2014":age<1?"just now":age<60?age+"m ago":Math.round(age/60)+"h ago";
+  const hasLoc=loc&&loc.lat;
   return(
-  <div key={drv.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",borderRadius:10,marginBottom:4,background:on?"#fff":"#f5f5f4",border:"1px solid "+(on?"#e7e5e4":"#ebebea"),transition:"all 0.2s"}}>
-    <div style={{width:28,height:28,borderRadius:8,background:on?col:"#d6d3d1",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:"#fff",fontWeight:700,flexShrink:0,transition:"background 0.2s"}}>
+  <div key={drv.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",borderRadius:10,marginBottom:4,background:"#fff",border:"1px solid #e7e5e4",transition:"all 0.2s"}}>
+    <div style={{width:28,height:28,borderRadius:8,background:col,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:"#fff",fontWeight:700,flexShrink:0,transition:"background 0.2s"}}>
       {drv.name.charAt(0)}
     </div>
     <div style={{flex:1,minWidth:0}}>
-      <div style={{fontSize:12,fontWeight:600,color:on?"#1c1917":"#a8a29e"}}>{drv.name.split(" ")[0]}</div>
-      {on&&hasLoc?(
+      <div style={{fontSize:12,fontWeight:600,color:"#1c1917"}}>{drv.name.split(" ")[0]}</div>
+      {hasLoc?(
         <div style={{fontSize:10,color:"#78716c",display:"flex",alignItems:"center",gap:4}}>
           {loc.city?<span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:80}}>{loc.city}{loc.locState?", "+loc.locState:""}</span>:<span>Located</span>}
-          {loc.speed>0&&<span style={{color:"#2563eb",fontWeight:600,flexShrink:0}}>· {loc.speed} mph</span>}
+          {loc.speed>0&&<span style={{color:"#2563eb",fontWeight:600,flexShrink:0}}>{"\u00b7"} {loc.speed} mph</span>}
         </div>
       ):(
-        <div style={{fontSize:10,color:"#a8a29e"}}>{on?"No data yet":"GPS off"}</div>
+        <div style={{fontSize:10,color:"#a8a29e"}}>No data yet</div>
       )}
     </div>
-    {on&&hasLoc&&(
+    {hasLoc&&(
       <div style={{fontSize:9,color:age!==null&&age>30?"#dc2626":"#78716c",background:age!==null&&age>30?"#fef2f2":"#f5f5f4",border:"1px solid "+(age!==null&&age>30?"#fca5a5":"#e7e5e4"),borderRadius:6,padding:"2px 6px",flexShrink:0,fontWeight:age!==null&&age>30?700:400}}>
-        {age!==null&&age>30?"⚠ ":""}{ageStr}
+        {age!==null&&age>30?"\u26a0 ":""}{ageStr}
       </div>
     )}
-    <button onClick={()=>{toggleGps(drv.id);if(on){setDriverLocs(prev=>{const n={...prev};delete n[drv.id];return n;});}}}
-      style={{flexShrink:0,width:36,height:20,borderRadius:10,border:"none",cursor:"pointer",background:on?col:"#d6d3d1",position:"relative",transition:"background 0.25s",padding:0}}
-      title={(on?"Disable":"Enable")+" GPS for "+drv.name}>
-      <span style={{position:"absolute",top:2,left:on?18:2,width:16,height:16,borderRadius:8,background:"#fff",boxShadow:"0 1px 4px rgba(0,0,0,0.25)",transition:"left 0.2s",display:"block"}}/>
+    <button onClick={()=>{toggleGps(drv.id);setDriverLocs(prev=>{const n={...prev};delete n[drv.id];return n;});}}
+      style={{flexShrink:0,width:36,height:20,borderRadius:10,border:"none",cursor:"pointer",background:col,position:"relative",transition:"background 0.25s",padding:0}}
+      title={"Disable GPS for "+drv.name}>
+      <span style={{position:"absolute",top:2,left:18,width:16,height:16,borderRadius:8,background:"#fff",boxShadow:"0 1px 4px rgba(0,0,0,0.25)",transition:"left 0.2s",display:"block"}}/>
     </button>
   </div>
   );
 })}
+{/* ADD TRUCKS SECTION */}
+<div style={{marginTop:8,borderTop:"1px solid #e7e5e4",paddingTop:8}}>
+  <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6}}>
+    <input value={gpsSearchTerm} onChange={e=>setGpsSearchTerm(e.target.value)} placeholder={"Search drivers ("+offDrivers.length+" available)..."} style={{flex:1,border:"1px solid #d6d3d1",borderRadius:8,padding:"6px 10px",fontSize:11,outline:"none",background:"#fff"}}/>
+    <button onClick={()=>{setGpsShowAll(p=>!p);setGpsSearchTerm("");}} style={{background:gpsShowAll?"#2563eb":"#e7e5e4",color:gpsShowAll?"#fff":"#57534e",border:"none",borderRadius:8,padding:"6px 10px",fontSize:10,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap"}}>
+      {gpsShowAll?"Hide":"Show All"}
+    </button>
+  </div>
+  {showList&&filteredOff.length>0&&(
+    <div style={{maxHeight:200,overflowY:"auto",borderRadius:8,border:"1px solid #e7e5e4",background:"#fff"}}>
+      {filteredOff.map(drv=>(
+        <div key={drv.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"6px 10px",borderBottom:"1px solid #f5f5f4",cursor:"pointer",transition:"background 0.15s"}}
+          onClick={()=>{toggleGps(drv.id);setGpsSearchTerm("");}}>
+          <span style={{fontSize:11,color:"#57534e"}}>{drv.name}</span>
+          <span style={{fontSize:9,color:"#2563eb",fontWeight:600}}>+ Track</span>
+        </div>
+      ))}
+    </div>
+  )}
+  {showList&&filteredOff.length===0&&searchLower&&(
+    <div style={{fontSize:10,color:"#a8a29e",textAlign:"center",padding:8}}>No matching drivers</div>
+  )}
 </div>
+</div>
+  );
+})()}
 </div>
 </div>
 
