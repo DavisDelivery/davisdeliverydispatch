@@ -278,7 +278,8 @@ const deleteQuoteFromFB=async(quoteId)=>{
 const subscribeQuotes=(cb)=>{
   let unsub;
   _whenFB(()=>{unsub=window._fbOps.onCol("quotes",(docs)=>{
-    docs.sort((a,b)=>(b.num||0)-(a.num||0));cb(docs);
+    const safe=docs.map(d=>({...d,rate:parseFloat(d.rate)||0,miles:d.miles!=null?parseFloat(d.miles)||null:null,num:parseInt(d.num)||0}));
+    safe.sort((a,b)=>(b.num||0)-(a.num||0));cb(safe);
   });});
   return()=>{if(unsub)unsub();};
 };
@@ -614,7 +615,7 @@ const fmtEta=(mins,setAt)=>{const m=parseInt(mins)||0;if(!m)return mins+" min";c
 
 function getWeekDates(off=0){const now=new Date();const d=now.getDay();const mon=new Date(now);mon.setDate(now.getDate()-(d===0?6:d-1)+off*7);return DAYS.map((name,i)=>{const dt=new Date(mon);dt.setDate(mon.getDate()+i);return{name,date:dt.toLocaleDateString("en-US",{month:"short",day:"numeric"}),iso:dt.toISOString().slice(0,10)}});}
 function getFbKey(wo,dayIdx){const now=new Date();const d=now.getDay();const mon=new Date(now);mon.setDate(now.getDate()-(d===0?6:d-1)+wo*7+dayIdx);const y=mon.getFullYear();const m=String(mon.getMonth()+1).padStart(2,'0');const dd=String(mon.getDate()).padStart(2,'0');return y+'-'+m+'-'+dd;}
-function fmt(n){return "$"+n.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g,",");}
+function fmt(n){const v=typeof n==="number"?n:parseFloat(n)||0;return "$"+v.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g,",");}
 
 function InlineRate({value,isHourly,onSave,accent}){
 const[editing,setEditing]=useState(false);
@@ -2813,7 +2814,7 @@ const data=await r.json();
 const text=data.content?.[0]?.text||data.text||"";
 const clean=text.replace(/```json|```/g,"").trim();
 const parsed=JSON.parse(clean);
-const q={id:Date.now()+Math.random(),num:savedQuotes.length+1,customer:parsed.customer||"One-Off Delivery",stop:parsed.stop||"",addr:parsed.addr||"",rate:parsed.rate||0,miles:parsed.miles||null,liftgate:parsed.liftgate||false,gravel:parsed.gravel||false,extraPallets:parsed.extraPallets||false,note:parsed.note||(parsed.breakdown||""),pickup:null,calc:null,createdAt:new Date().toISOString(),status:"pending",aiGenerated:true};
+const q={id:Date.now()+Math.random(),num:savedQuotes.length+1,customer:parsed.customer||"One-Off Delivery",stop:parsed.stop||"",addr:parsed.addr||"",rate:parseFloat(parsed.rate)||0,miles:parseFloat(parsed.miles)||null,liftgate:!!parsed.liftgate,gravel:!!parsed.gravel,extraPallets:!!parsed.extraPallets,note:parsed.note||(parsed.breakdown||""),pickup:null,calc:null,createdAt:new Date().toISOString(),status:"pending",aiGenerated:true};
 setSavedQuotes(p=>[q,...p]);
 saveQuoteToFB(q).catch(e=>console.error("Quote save:",e));
 showToast("AI Quote #"+q.num+" created: "+fmt(q.rate));
@@ -4724,11 +4725,11 @@ style={{flex:1,border:"1px solid #d6d3d1",borderRadius:10,padding:"10px 14px",fo
 {q.addr&&<div style={{fontSize:11,color:"#78716c",marginTop:1}}>📍 {q.addr}</div>}
 {(q.pickupName||q.pickupAddr)&&<div style={{fontSize:11,color:"#2563eb",marginTop:2,fontWeight:600}}>📦 PU: {q.pickupName||""}{q.pickupAddr?" — "+q.pickupAddr.split(",")[0]:""}</div>}
 {q.note&&<div style={{fontSize:11,color:"#57534e",marginTop:2}}>{q.note}</div>}
-<div style={{fontSize:10,color:"#a8a29e",marginTop:4}}>{new Date(q.createdAt).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})} at {new Date(q.createdAt).toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"})}</div>
+<div style={{fontSize:10,color:"#a8a29e",marginTop:4}}>{q.createdAt?new Date(q.createdAt).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})+" at "+new Date(q.createdAt).toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"}):""}</div>
 </div>
 <div style={{textAlign:"right",marginLeft:14,flexShrink:0}}>
-<div style={{fontSize:20,fontWeight:800,color:accepted?"#16a34a":"#1c1917",fontVariantNumeric:"tabular-nums"}}>{fmt(q.rate)}</div>
-{q.calc&&<div style={_s.sub}>{fmt(q.calc.base)}+{fmt(q.calc.fuel)} fuel</div>}
+<div style={{fontSize:20,fontWeight:800,color:accepted?"#16a34a":"#1c1917",fontVariantNumeric:"tabular-nums"}}>{fmt(q.rate||0)}</div>
+{q.calc&&<div style={_s.sub}>{fmt(q.calc?.base||0)}+{fmt(q.calc?.fuel||0)} fuel</div>}
 {!accepted&&<div style={{display:"flex",flexDirection:"column",gap:4,marginTop:8}}>
 {qPushDay&&qPushDay.quoteId===q.id?<div style={{display:"flex",flexDirection:"column",gap:4}}>
 <input type="date" onChange={e=>{if(e.target.value){
@@ -6441,11 +6442,11 @@ return(<div>
 {q.addr&&<div style={{fontSize:10,color:"#78716c",marginTop:1}}>📍 {q.addr}</div>}
 {(q.pickupName||q.pickupAddr)&&<div style={{fontSize:10,color:"#2563eb",marginTop:1,fontWeight:600}}>📦 PU: {q.pickupName||""}{q.pickupAddr?" — "+q.pickupAddr.split(",")[0]:""}</div>}
 {q.note&&<div style={{fontSize:10,color:"#57534e",marginTop:2}}>{q.note}</div>}
-<div style={{fontSize:9,color:"#a8a29e",marginTop:3}}>{new Date(q.createdAt).toLocaleDateString("en-US",{month:"short",day:"numeric"})} {new Date(q.createdAt).toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"})}</div>
+<div style={{fontSize:9,color:"#a8a29e",marginTop:3}}>{q.createdAt?new Date(q.createdAt).toLocaleDateString("en-US",{month:"short",day:"numeric"})+" "+new Date(q.createdAt).toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"}):""}</div>
 </div>
 <div style={{textAlign:"right",marginLeft:10,flexShrink:0}}>
-<div style={{fontSize:18,fontWeight:800,color:accepted?"#16a34a":"#1c1917",fontVariantNumeric:"tabular-nums"}}>{fmt(q.rate)}</div>
-{q.calc&&<div style={{fontSize:9,color:"#78716c"}}>{fmt(q.calc.base)}+{fmt(q.calc.fuel)}</div>}
+<div style={{fontSize:18,fontWeight:800,color:accepted?"#16a34a":"#1c1917",fontVariantNumeric:"tabular-nums"}}>{fmt(q.rate||0)}</div>
+{q.calc&&<div style={{fontSize:9,color:"#78716c"}}>{fmt(q.calc?.base||0)}+{fmt(q.calc?.fuel||0)}</div>}
 </div>
 </div>
 {!accepted&&<div style={{display:"flex",gap:6,marginTop:8}}>
