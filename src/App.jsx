@@ -187,6 +187,33 @@ const saveManifestDay=async(wo,sd,entries)=>{
     throw e;
   }
 };
+const saveManifestByKey=async(fbKey,entries)=>{
+  if(!window._fbOps){throw new Error("Firebase not loaded - _fbOps missing");}
+  if(!fbKey||!/^\d{4}-\d{2}-\d{2}$/.test(fbKey)){throw new Error("saveManifestByKey: invalid fbKey "+fbKey);}
+  if((!entries||entries.length===0)){
+    try{
+      const existing=await window._fbOps.read("manifests/"+fbKey);
+      if(existing&&existing.entries&&existing.entries.length>0){
+        console.warn("[SAVE] BLOCKED: Refusing to overwrite "+fbKey+" (has "+existing.entries.length+" entries) with empty array");
+        return;
+      }
+    }catch(readErr){
+      console.warn("[SAVE] BLOCKED: Cannot verify "+fbKey+", refusing empty write");
+      return;
+    }
+  }
+  const safe=(entries||[]).map(e=>{
+    const copy={...e};
+    copy.photos=(e.photos||[]).map((_,i)=>`photo_${e.id}_${i}`);
+    copy.signature=e.signature?"signed":null;
+    Object.keys(copy).forEach(k=>{if(copy[k]===undefined)delete copy[k];});
+    return copy;
+  });
+  autoBackup("save-"+fbKey,{key:fbKey,entries:safe});
+  console.log("[SAVE] Writing manifests/"+fbKey,"entries:",safe.length);
+  await window._fbOps.write("manifests/"+fbKey,{entries:safe,updatedAt:Date.now()});
+  console.log("[SAVE] OK manifests/"+fbKey);
+};
 const subscribeManifests=(wo,cb)=>{
   const unsubs=[];
   let cancelled=false;
@@ -1772,10 +1799,12 @@ if(ids.includes(entryId))return ids.indexOf(entryId)+1;
 return null;
 };
 const allCoords=stopsWithCoords.map(s=>s.coords);
-const minLat=Math.min(...allCoords.map(c=>c.lat))-0.02;
-const maxLat=Math.max(...allCoords.map(c=>c.lat))+0.02;
-const minLng=Math.min(...allCoords.map(c=>c.lng))-0.02;
-const maxLng=Math.max(...allCoords.map(c=>c.lng))+0.02;
+/* Guard: Math.min(...[])=Infinity which NaN-s the projection and white-screens Routes */
+const _hasCoords=allCoords.length>0;
+const minLat=_hasCoords?Math.min(...allCoords.map(c=>c.lat))-0.02:33.80;
+const maxLat=_hasCoords?Math.max(...allCoords.map(c=>c.lat))+0.02:34.10;
+const minLng=_hasCoords?Math.min(...allCoords.map(c=>c.lng))-0.02:-84.50;
+const maxLng=_hasCoords?Math.max(...allCoords.map(c=>c.lng))+0.02:-84.00;
 const mapW=460;const mapH=400;
 
 const toXY=(coords)=>({
@@ -2067,16 +2096,14 @@ useEffect(()=>{
     toSave.forEach(dayKey=>{
       const entries=log[dayKey]||[];
       const savedJson=JSON.stringify(entries);
-      const lastDash=dayKey.lastIndexOf("-");
-      const wOff=parseInt(dayKey.slice(0,lastDash));
-      const dIdx=parseInt(dayKey.slice(lastDash+1));
-      if(isNaN(wOff)||isNaN(dIdx)||dIdx<0||dIdx>4){
+      /* dayKey is the absolute Firestore date key YYYY-MM-DD after unification */
+      if(!/^\d{4}-\d{2}-\d{2}$/.test(dayKey)){
         dirtyDaysRef.current.delete(dayKey);
         done++;
         if(done===toSave.length)setSaveStatus("");
         return;
       }
-      saveManifestDay(wOff,dIdx,entries).then(()=>{
+      saveManifestByKey(dayKey,entries).then(()=>{
         prevLogRef.current[dayKey]=savedJson;
         /* Only clear dirty if current log matches what we saved.
            logRef.current is always the LATEST log, not the closure's stale copy. */
@@ -2276,7 +2303,7 @@ const calcPuMiles=(fromAddr,toAddr)=>{
   });}catch(e){setPuCalcLoading(false);setPuCalcError("Maps error");}
 };
 
-const wd=getWeekDates(wo);const dk=`${wo}-${sd}`;const dl=log[dk]||[];
+const wd=getWeekDates(wo);const dk=getFbKey(wo,sd);const dl=log[dk]||[];
 const emDk=getFbKey(wo,sd); /* date-based key for Emser hours/shifts */
 const showToast=useCallback(m=>{setToast(m);setTimeout(()=>setToast(null),2000);},[]);
 useEffect(()=>{rpOrdersRef.current=rpOrders;},[rpOrders]);
@@ -2446,10 +2473,12 @@ useEffect(()=>{
   };
   const poll=async()=>{
     try{
-      const r=await fetch("/api/motive-gps");
-      if(!r.ok)return;
+      const r=await fetch("/api/motive-gps",{headers:{"Accept":"application/json"}});
+      if(!r.ok){console.warn("[MOTIVE] /api/motive-gps HTTP",r.status,"- is the serverless function deployed?");return;}
+      const ct=(r.headers.get("content-type")||"").toLowerCase();
+      if(!ct.includes("application/json")){console.warn("[MOTIVE] /api/motive-gps returned non-JSON (",ct,") - likely the SPA fallback HTML. Deploy a serverless function at /api/motive-gps.");return;}
       const data=await r.json();
-      if(!data.vehicles)return;
+      if(!data||!data.vehicles){console.warn("[MOTIVE] response missing vehicles:",data);return;}
       const locs={};
       data.vehicles.forEach(v=>{
         if(!v.lat||!v.lng)return;
@@ -2483,7 +2512,7 @@ useEffect(()=>{
           }
           return e;
         });
-        const lk=`${wo}-${dayIdx}`;
+        const lk=fbKey; /* Firestore date key directly */
         if(dirtyDaysRef.current.has(lk)){
           return;
         }
@@ -3179,17 +3208,17 @@ const insertPickup=(drvId,afterIdx)=>{if(!pickupStop)return;const forLabel=picku
 const computeDay=(key,emKey)=>{const entries=log[key]||[];let base=0;let lgFees=0;if(entries.some(e=>e.isHourly)){const{totalMins}=getShiftSummary(emKey||key);const lgCount=entries.filter(e=>e.isHourly&&e.liftgateApplied&&!DISTANCE_BONUS_STOPS.includes(e.stop)).length;const distBonus=entries.filter(e=>e.isHourly&&DISTANCE_BONUS_STOPS.includes(e.stop)).length;if(totalMins>0){const billedMins=totalMins+(lgCount+distBonus)*60;base+=102.50*(Math.round(billedMins/15)*15/60);}else{base+=102.50*(emH[`${emKey||key}-emser`]||4);}}const fBC={};entries.forEach(e=>{if(e.isHourly)return;base+=e.baseRate;lgFees+=(e.liftgateFee||0);if(e.fuelPct>0){if(!fBC[e.customer])fBC[e.customer]={pct:e.fuelPct,base:0};fBC[e.customer].base+=e.baseRate;}});let fuel=0;Object.values(fBC).forEach(c=>{fuel+=c.base*c.pct;});return{base:base+lgFees,fuel,total:base+lgFees+fuel,fBC,lgFees};};
 
 const getDriverMiles=(drvId,dayKey)=>{const entries=(log[dayKey||dk]||[]).filter(e=>e.driverId===drvId);return calcRouteMiles(entries);};
-const getWeekDriverMiles=(drvId)=>{let total=0;for(let i=0;i<5;i++){total+=getDriverMiles(drvId,`${wo}-${i}`);}return total;};
+const getWeekDriverMiles=(drvId)=>{let total=0;for(let i=0;i<5;i++){total+=getDriverMiles(drvId,getFbKey(wo,i));}return total;};
 
 const generateInvoice=(custName)=>{
 const cd=CUSTOMERS[custName];if(!cd)return null;
 const weekDates=getWeekDates(wo);
 const lines=[];let grandBase=0,grandFuel=0;
 DAYS.forEach((day,i)=>{
-const dayEntries=(log[`${wo}-${i}`]||[]).filter(e=>e.customer===custName);
+const dayEntries=(log[getFbKey(wo,i)]||[]).filter(e=>e.customer===custName);
 if(!dayEntries.length)return;
 if(cd.rate_type==="hourly"){
-const _invFbKey=getFbKey(wo,i);const{totalMins:_invMins}=getShiftSummary(_invFbKey);const _invLG=(log[`${wo}-${i}`]||[]).filter(e=>e.isHourly&&e.liftgateApplied&&!DISTANCE_BONUS_STOPS.includes(e.stop)).length;const _invDist=(log[`${wo}-${i}`]||[]).filter(e=>e.isHourly&&DISTANCE_BONUS_STOPS.includes(e.stop)).length;const hrs=_invMins>0?Math.round((_invMins+(_invLG+_invDist)*60)/15)*15/60:(emH[`${_invFbKey}-emser`]||4);
+const _invFbKey=getFbKey(wo,i);const{totalMins:_invMins}=getShiftSummary(_invFbKey);const _invLG=(log[getFbKey(wo,i)]||[]).filter(e=>e.isHourly&&e.liftgateApplied&&!DISTANCE_BONUS_STOPS.includes(e.stop)).length;const _invDist=(log[getFbKey(wo,i)]||[]).filter(e=>e.isHourly&&DISTANCE_BONUS_STOPS.includes(e.stop)).length;const hrs=_invMins>0?Math.round((_invMins+(_invLG+_invDist)*60)/15)*15/60:(emH[`${_invFbKey}-emser`]||4);
 const amt=102.50*hrs;
 lines.push({day:weekDates[i].name,date:weekDates[i].date,desc:`Hourly: ${hrs}h × $102.50`,stops:dayEntries.map(e=>e.stop).join(", "),base:amt,fuel:0});
 grandBase+=amt;
@@ -3214,9 +3243,9 @@ setInvoices(p=>[inv,...p]);
 setShowInvoice(inv.id);
 showToast("Invoice generated for "+custName);
 };
-const dc=computeDay(dk,emDk);const wkD=DAYS.map((_,i)=>{const k=`${wo}-${i}`;return{entries:log[k]||[],calc:computeDay(k,getFbKey(wo,i))};});const wkT=wkD.reduce((s,d)=>s+d.calc.total,0);
+const dc=computeDay(dk,emDk);const wkD=DAYS.map((_,i)=>{const k=getFbKey(wo,i);return{entries:log[k]||[],calc:computeDay(k,getFbKey(wo,i))};});const wkT=wkD.reduce((s,d)=>s+d.calc.total,0);
 const wkF={};wkD.forEach(d=>{Object.entries(d.calc.fBC).forEach(([c,cf])=>{if(!wkF[c])wkF[c]={pct:cf.pct,base:0};wkF[c].base+=cf.base;});});
-const prevWkD=DAYS.map((_,i)=>{const k=`${wo-1}-${i}`;return{entries:log[k]||[],calc:computeDay(k,getFbKey(wo-1,i))};});
+const prevWkD=DAYS.map((_,i)=>{const k=getFbKey(wo-1,i);return{entries:log[k]||[],calc:computeDay(k,getFbKey(wo-1,i))};});
 const prevWkT=prevWkD.reduce((s,d)=>s+d.calc.total,0);
 const wowDelta=wkT-prevWkT;
 const wowPct=prevWkT>0?((wowDelta/prevWkT)*100):0;
@@ -3395,7 +3424,7 @@ if(custRevArr.length>1){
   h+=`</table></div>`;
 }
 return h;});};
-const printWeekly=()=>{printContent("Weekly",()=>{let h=`<div class="header"><div><h1>DAVIS DELIVERY — Weekly Summary</h1><div class="sub">${wd[0].date} — ${wd[4].date}</div></div><div class="total">${fmt(wkT)}</div></div>`;const wkShiftByDrv2={};let wkShiftTotal2=0;let wkBonusTotal2=0;DAYS.forEach((_,i)=>{const{byDriver,totalMins}=getShiftSummary(getFbKey(wo,i));wkShiftTotal2+=totalMins;const _dayEnts=log[`${wo}-${i}`]||[];const _dayLG=_dayEnts.filter(e=>e.isHourly&&e.liftgateApplied&&!DISTANCE_BONUS_STOPS.includes(e.stop)).length;const _dayDist=_dayEnts.filter(e=>e.isHourly&&DISTANCE_BONUS_STOPS.includes(e.stop)).length;wkBonusTotal2+=(_dayLG+_dayDist)*60;Object.entries(byDriver).forEach(([did,mins])=>{wkShiftByDrv2[did]=(wkShiftByDrv2[did]||0)+mins;});});if(wkShiftTotal2>0){const _wkBilled2=wkShiftTotal2+wkBonusTotal2;const hrs2=Math.round(_wkBilled2/15)*15/60;h+=`<div class="emser"><div><span class="lbl">⏱ Emser Week Total: ${formatMins(_wkBilled2)}</span><br><span style="font-size:10px;color:#64748b">${drivers.filter(d=>wkShiftByDrv2[d.id]).map(d=>`${d.name}: ${formatMins(wkShiftByDrv2[d.id])}`).join(" · ")}</span></div><span class="val">${fmt(102.50*hrs2)}</span></div>`;}const wkFuel={};DAYS.forEach((_,i)=>{const calc=wkD[i].calc;Object.entries(calc.fBC||{}).forEach(([cu,cf])=>{if(!wkFuel[cu])wkFuel[cu]={pct:cf.pct,base:0};wkFuel[cu].base+=cf.base;});});if(Object.keys(wkFuel).length>0){h+=`<div class="fuel"><div class="lbl">Week Fuel Surcharges</div>`;Object.entries(wkFuel).forEach(([cu,cf])=>{h+=`<div style="display:flex;justify-content:space-between;padding:2px 0"><span>${cu} (${fmt(cf.base)} × ${Math.round(cf.pct*100)}%)</span><b style="color:#d97706">${fmt(cf.base*cf.pct)}</b></div>`;});h+=`</div>`;}DAYS.forEach((day,i)=>{const{entries,calc}=wkD[i];const{totalMins:shiftMins}=getShiftSummary(getFbKey(wo,i));if(!entries.length&&!shiftMins)return;h+=`<div class="section"><div class="section-title"><span>${day} — ${wd[i].date}</span><span class="amt">${fmt(calc.total)}</span></div>`;if(shiftMins>0){const _wpLG=entries.filter(e=>e.isHourly&&e.liftgateApplied&&!DISTANCE_BONUS_STOPS.includes(e.stop)).length;const _wpDist=entries.filter(e=>e.isHourly&&DISTANCE_BONUS_STOPS.includes(e.stop)).length;const _wpBilled=shiftMins+(_wpLG+_wpDist)*60;const hrs=Math.round(_wpBilled/15)*15/60;h+=`<div style="padding:3px 10px;background:#eff6ff;border-left:3px solid #2563eb;margin-bottom:4px;font-size:11px"><b style="color:#2563eb">⏱ Emser ${formatMins(_wpBilled)}</b> — ${fmt(102.50*hrs)}</div>`;}h+=`<table><tr><th>Customer</th><th>Stop</th><th>Driver</th><th>Notes</th><th style="text-align:right">Rate</th></tr>`;entries.filter(e=>e.stopType!=="pickup").sort((a,b)=>a.customer.localeCompare(b.customer)).forEach(e=>{const drv=drivers.find(d=>d.id===e.driverId);h+=`<tr><td style="color:#57534e">${e.customer}</td><td><b>${e.stop}</b></td><td>${drv?drv.name:""}</td><td style="font-size:10px">${e.instructions?'<span class="instr">'+e.instructions+'</span> ':""}${e.shipPlan?'<b style="color:#ea580c">SP# '+e.shipPlan+'</b>':""}</td><td style="text-align:right;font-weight:700">${e.isHourly?"HR":fmt(e.baseRate)}</td></tr>`;});h+=`</table></div>`;});return h;});};
+const printWeekly=()=>{printContent("Weekly",()=>{let h=`<div class="header"><div><h1>DAVIS DELIVERY — Weekly Summary</h1><div class="sub">${wd[0].date} — ${wd[4].date}</div></div><div class="total">${fmt(wkT)}</div></div>`;const wkShiftByDrv2={};let wkShiftTotal2=0;let wkBonusTotal2=0;DAYS.forEach((_,i)=>{const{byDriver,totalMins}=getShiftSummary(getFbKey(wo,i));wkShiftTotal2+=totalMins;const _dayEnts=log[getFbKey(wo,i)]||[];const _dayLG=_dayEnts.filter(e=>e.isHourly&&e.liftgateApplied&&!DISTANCE_BONUS_STOPS.includes(e.stop)).length;const _dayDist=_dayEnts.filter(e=>e.isHourly&&DISTANCE_BONUS_STOPS.includes(e.stop)).length;wkBonusTotal2+=(_dayLG+_dayDist)*60;Object.entries(byDriver).forEach(([did,mins])=>{wkShiftByDrv2[did]=(wkShiftByDrv2[did]||0)+mins;});});if(wkShiftTotal2>0){const _wkBilled2=wkShiftTotal2+wkBonusTotal2;const hrs2=Math.round(_wkBilled2/15)*15/60;h+=`<div class="emser"><div><span class="lbl">⏱ Emser Week Total: ${formatMins(_wkBilled2)}</span><br><span style="font-size:10px;color:#64748b">${drivers.filter(d=>wkShiftByDrv2[d.id]).map(d=>`${d.name}: ${formatMins(wkShiftByDrv2[d.id])}`).join(" · ")}</span></div><span class="val">${fmt(102.50*hrs2)}</span></div>`;}const wkFuel={};DAYS.forEach((_,i)=>{const calc=wkD[i].calc;Object.entries(calc.fBC||{}).forEach(([cu,cf])=>{if(!wkFuel[cu])wkFuel[cu]={pct:cf.pct,base:0};wkFuel[cu].base+=cf.base;});});if(Object.keys(wkFuel).length>0){h+=`<div class="fuel"><div class="lbl">Week Fuel Surcharges</div>`;Object.entries(wkFuel).forEach(([cu,cf])=>{h+=`<div style="display:flex;justify-content:space-between;padding:2px 0"><span>${cu} (${fmt(cf.base)} × ${Math.round(cf.pct*100)}%)</span><b style="color:#d97706">${fmt(cf.base*cf.pct)}</b></div>`;});h+=`</div>`;}DAYS.forEach((day,i)=>{const{entries,calc}=wkD[i];const{totalMins:shiftMins}=getShiftSummary(getFbKey(wo,i));if(!entries.length&&!shiftMins)return;h+=`<div class="section"><div class="section-title"><span>${day} — ${wd[i].date}</span><span class="amt">${fmt(calc.total)}</span></div>`;if(shiftMins>0){const _wpLG=entries.filter(e=>e.isHourly&&e.liftgateApplied&&!DISTANCE_BONUS_STOPS.includes(e.stop)).length;const _wpDist=entries.filter(e=>e.isHourly&&DISTANCE_BONUS_STOPS.includes(e.stop)).length;const _wpBilled=shiftMins+(_wpLG+_wpDist)*60;const hrs=Math.round(_wpBilled/15)*15/60;h+=`<div style="padding:3px 10px;background:#eff6ff;border-left:3px solid #2563eb;margin-bottom:4px;font-size:11px"><b style="color:#2563eb">⏱ Emser ${formatMins(_wpBilled)}</b> — ${fmt(102.50*hrs)}</div>`;}h+=`<table><tr><th>Customer</th><th>Stop</th><th>Driver</th><th>Notes</th><th style="text-align:right">Rate</th></tr>`;entries.filter(e=>e.stopType!=="pickup").sort((a,b)=>a.customer.localeCompare(b.customer)).forEach(e=>{const drv=drivers.find(d=>d.id===e.driverId);h+=`<tr><td style="color:#57534e">${e.customer}</td><td><b>${e.stop}</b></td><td>${drv?drv.name:""}</td><td style="font-size:10px">${e.instructions?'<span class="instr">'+e.instructions+'</span> ':""}${e.shipPlan?'<b style="color:#ea580c">SP# '+e.shipPlan+'</b>':""}</td><td style="text-align:right;font-weight:700">${e.isHourly?"HR":fmt(e.baseRate)}</td></tr>`;});h+=`</table></div>`;});return h;});};
 
 const exportBackup=()=>{
   const backup={
@@ -3703,7 +3732,7 @@ return(
 </div>
 <div style={{display:"flex",gap:3,background:"#fff",borderRadius:10,padding:3,border:"1px solid #e7e5e4"}}>
 <button onClick={()=>setWo(w=>w-1)} style={{background:"transparent",border:"none",color:"#78716c",borderRadius:7,padding:"4px 10px",cursor:"pointer",fontSize:12}}>{"\u25C0"}</button>
-{wd.map((d,i)=>{const cnt=(log[`${wo}-${i}`]||[]).length;return(<button key={i} onClick={()=>setSd(i)} style={{border:"none",borderRadius:7,padding:"6px 14px",cursor:"pointer",background:sd===i?BRAND.main:"transparent",color:sd===i?"#fff":"#78716c",fontSize:12,fontWeight:sd===i?700:500,position:"relative"}}>
+{wd.map((d,i)=>{const cnt=(log[getFbKey(wo,i)]||[]).length;return(<button key={i} onClick={()=>setSd(i)} style={{border:"none",borderRadius:7,padding:"6px 14px",cursor:"pointer",background:sd===i?BRAND.main:"transparent",color:sd===i?"#fff":"#78716c",fontSize:12,fontWeight:sd===i?700:500,position:"relative"}}>
 {d.name.slice(0,3)} <span style={{fontSize:10,opacity:0.7}}>{d.date}</span>
 {cnt>0&&<span style={{position:"absolute",top:2,right:4,width:5,height:5,borderRadius:3,background:sd===i?"#fff":"#16a34a"}}/>}
 </button>);})}
@@ -4334,7 +4363,7 @@ return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius
 </div>
 </div>
 
-{(()=>{const wkShiftByDrv={};let wkShiftTotal=0;let wkBonusMins=0;DAYS.forEach((_,i)=>{const{byDriver,totalMins}=getShiftSummary(getFbKey(wo,i));wkShiftTotal+=totalMins;const _wkDE=log[`${wo}-${i}`]||[];wkBonusMins+=(_wkDE.filter(e=>e.isHourly&&e.liftgateApplied&&!DISTANCE_BONUS_STOPS.includes(e.stop)).length+_wkDE.filter(e=>e.isHourly&&DISTANCE_BONUS_STOPS.includes(e.stop)).length)*60;Object.entries(byDriver).forEach(([did,mins])=>{wkShiftByDrv[did]=(wkShiftByDrv[did]||0)+mins;});});if(!wkShiftTotal)return null;const wkShiftHrs=Math.round((wkShiftTotal+wkBonusMins)/15)*15/60;return(<div style={{background:"#eff6ff",border:"2px solid #2563eb",borderRadius:14,padding:"16px 18px",marginBottom:16}}>
+{(()=>{const wkShiftByDrv={};let wkShiftTotal=0;let wkBonusMins=0;DAYS.forEach((_,i)=>{const{byDriver,totalMins}=getShiftSummary(getFbKey(wo,i));wkShiftTotal+=totalMins;const _wkDE=log[getFbKey(wo,i)]||[];wkBonusMins+=(_wkDE.filter(e=>e.isHourly&&e.liftgateApplied&&!DISTANCE_BONUS_STOPS.includes(e.stop)).length+_wkDE.filter(e=>e.isHourly&&DISTANCE_BONUS_STOPS.includes(e.stop)).length)*60;Object.entries(byDriver).forEach(([did,mins])=>{wkShiftByDrv[did]=(wkShiftByDrv[did]||0)+mins;});});if(!wkShiftTotal)return null;const wkShiftHrs=Math.round((wkShiftTotal+wkBonusMins)/15)*15/60;return(<div style={{background:"#eff6ff",border:"2px solid #2563eb",borderRadius:14,padding:"16px 18px",marginBottom:16}}>
 <div style={_s.flexBtwMb10}>
 <span style={{fontSize:16,fontWeight:700,color:"#2563eb"}}>⏱ Emser Week Total</span>
 <span style={{fontSize:22,fontWeight:800,fontVariantNumeric:"tabular-nums",color:"#1d4ed8"}}>{fmt(102.50*wkShiftHrs)}</span>
@@ -4350,7 +4379,7 @@ return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius
 
 {Object.keys(wkF).length>0&&<div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:14,padding:"14px 16px",marginBottom:16}}><div style={_s.loadTitle}>Week Fuel Surcharges</div>{Object.entries(wkF).map(([cu,cf])=><div key={cu} style={_s.flexBtwP4}><span style={{fontSize:13}}>{cu} <span style={{fontSize:11,color:"#a8a29e"}}>{fmt(cf.base)} × {Math.round(cf.pct*100)}%</span></span><span style={_s.loadWeight}>{fmt(cf.base*cf.pct)}</span></div>)}</div>}
 
-{DAYS.map((day,i)=>{const{entries,calc}=wkD[i];const dayKey=`${wo}-${i}`;const{byDriver:shiftByDrv,totalMins:shiftMins}=getShiftSummary(getFbKey(wo,i));if(!entries.length&&!shiftMins)return null;return(<div key={day} style={{marginBottom:14}}>
+{DAYS.map((day,i)=>{const{entries,calc}=wkD[i];const dayKey=getFbKey(wo,i);const{byDriver:shiftByDrv,totalMins:shiftMins}=getShiftSummary(getFbKey(wo,i));if(!entries.length&&!shiftMins)return null;return(<div key={day} style={{marginBottom:14}}>
 <div style={{display:"flex",justifyContent:"space-between",padding:"8px 4px",borderBottom:"1px solid #e7e5e4",marginBottom:6}}><span style={_s.bold14}>{day} — {wd[i].date}</span><span style={{fontVariantNumeric:"tabular-nums",fontWeight:700,color:"#16a34a",fontSize:14}}>{fmt(calc.total)}</span></div>
 {shiftMins>0&&<div style={{display:"flex",alignItems:"center",gap:6,padding:"5px 8px 5px 14px",borderLeft:"3px solid #2563eb",marginBottom:3,background:"#eff6ff",borderRadius:"0 8px 8px 0",flexWrap:"wrap"}}>
 <span style={{fontSize:11,color:"#2563eb",fontWeight:700,flexShrink:0}}>⏱ Emser</span>
@@ -4645,7 +4674,7 @@ const nD=now.getDay();const nM=new Date(now);nM.setDate(now.getDate()-(nD===0?6:
 tM.setHours(0,0,0,0);nM.setHours(0,0,0,0);
 const weekOff=Math.round((tM-nM)/(7*24*60*60*1000));
 const dayIdx=tD===0?6:tD-1;
-if(dayIdx>=0&&dayIdx<=4){pushQuoteToDay(q.id,`${weekOff}-${dayIdx}`);}
+if(dayIdx>=0&&dayIdx<=4){pushQuoteToDay(q.id,getFbKey(weekOff,dayIdx));}
 else{showToast("Pick a weekday (Mon-Fri)");}
 }}} style={{border:"1px solid #16a34a",borderRadius:6,padding:"6px 8px",fontSize:12,outline:"none",background:"#f0fdf4",fontWeight:600}}/>
 <button onClick={()=>setQPushDay(null)} style={{background:"none",border:"none",fontSize:9,color:"#78716c",cursor:"pointer"}}>Cancel</button>
@@ -4654,7 +4683,7 @@ else{showToast("Pick a weekday (Mon-Fri)");}
 <button onClick={()=>{setSavedQuotes(p=>p.filter(x=>x.id!==q.id));deleteQuoteFromFB(q.id).catch(e=>console.error("Quote del:",e));showToast("Quote deleted");}} style={{background:"none",border:"none",color:"#dc2626",fontSize:9,cursor:"pointer",padding:"2px 0"}}>Delete</button>
 </div>}
 {accepted&&q.pushedTo&&<div style={{display:"flex",alignItems:"center",gap:8,marginTop:6}}>
-<span style={{fontSize:10,color:"#16a34a",fontWeight:600}}>✓ Pushed to {DAYS[parseInt(q.pushedTo.split("-")[1])]||""}</span>
+<span style={{fontSize:10,color:"#16a34a",fontWeight:600}}>✓ Pushed to {(()=>{try{if(/^\d{4}-\d{2}-\d{2}$/.test(q.pushedTo)){const d=new Date(q.pushedTo+"T12:00:00");return isNaN(d)?q.pushedTo:d.toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"});}const parts=q.pushedTo.split("-");return DAYS[parseInt(parts[parts.length-1])]||q.pushedTo;}catch(e){return q.pushedTo;}})()}</span>
 <button onClick={()=>unplanQuote(q.id)} style={{background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:6,padding:"3px 10px",cursor:"pointer",fontSize:10,color:"#dc2626",fontWeight:600}}>Unplan</button>
 </div>}
 </div>
@@ -5507,7 +5536,7 @@ return(
 </div>
 {showDatePicker&&<div style={{background:"#292524",borderRadius:10,padding:"10px 14px",marginBottom:10,display:"flex",alignItems:"center",gap:8}}><span style={{fontSize:12,color:"#a8a29e"}}>Jump to:</span><input type="date" onChange={e=>{if(e.target.value)jumpToDate(e.target.value);}} style={{flex:1,background:"#1c1917",border:"1px solid #44403c",borderRadius:8,padding:"8px 12px",color:"#f5f5f4",fontSize:14,outline:"none",colorScheme:"dark"}}/><button onClick={()=>setShowDatePicker(false)} style={{background:"#44403c",border:"none",borderRadius:6,padding:"6px 10px",cursor:"pointer",fontSize:11,color:"#d6d3d1"}}>✕</button></div>}
 <div style={{display:"flex",gap:4}}>
-{wd.map((d,i)=>{const cnt=(log[`${wo}-${i}`]||[]).length;return(<button key={i} onClick={()=>{setSd(i);setView("manifest");}} style={{flex:1,border:"none",borderRadius:10,padding:"8px 2px 6px",cursor:"pointer",background:sd===i?"#fff":BRAND.dark+"dd",color:sd===i?BRAND.main:"#93c5fd"}}><div style={{fontSize:10,fontWeight:600}}>{d.name.slice(0,3).toUpperCase()}</div><div style={{fontSize:11,fontVariantNumeric:"tabular-nums",marginTop:2}}>{d.date}</div>{cnt>0&&<div style={{width:6,height:6,borderRadius:3,background:sd===i?"#1c1917":"#16a34a",margin:"4px auto 0"}}/>}</button>);})}
+{wd.map((d,i)=>{const cnt=(log[getFbKey(wo,i)]||[]).length;return(<button key={i} onClick={()=>{setSd(i);setView("manifest");}} style={{flex:1,border:"none",borderRadius:10,padding:"8px 2px 6px",cursor:"pointer",background:sd===i?"#fff":BRAND.dark+"dd",color:sd===i?BRAND.main:"#93c5fd"}}><div style={{fontSize:10,fontWeight:600}}>{d.name.slice(0,3).toUpperCase()}</div><div style={{fontSize:11,fontVariantNumeric:"tabular-nums",marginTop:2}}>{d.date}</div>{cnt>0&&<div style={{width:6,height:6,borderRadius:3,background:sd===i?"#1c1917":"#16a34a",margin:"4px auto 0"}}/>}</button>);})}
 </div>
 </div>
 
@@ -6018,14 +6047,14 @@ style={{flex:1,border:entry.shipPlan?"1px solid #bbf7d0":"1px solid #fca5a5",bor
 <div style={_s.flexC4}><div style={{width:8,height:8,borderRadius:2,background:"#16a34a"}}/><span style={{fontSize:9,color:"#a8a29e"}}>This wk</span></div>
 </div>
 </div>
-{(()=>{const wkShiftByDrv={};let wkShiftTotal=0;let wkBonusMins=0;DAYS.forEach((_,i)=>{const{byDriver,totalMins}=getShiftSummary(getFbKey(wo,i));wkShiftTotal+=totalMins;const _wkDE=log[`${wo}-${i}`]||[];wkBonusMins+=(_wkDE.filter(e=>e.isHourly&&e.liftgateApplied&&!DISTANCE_BONUS_STOPS.includes(e.stop)).length+_wkDE.filter(e=>e.isHourly&&DISTANCE_BONUS_STOPS.includes(e.stop)).length)*60;Object.entries(byDriver).forEach(([did,mins])=>{wkShiftByDrv[did]=(wkShiftByDrv[did]||0)+mins;});});if(!wkShiftTotal)return null;const wkShiftHrs=Math.round((wkShiftTotal+wkBonusMins)/15)*15/60;return(<div style={{background:"#eff6ff",border:"2px solid #2563eb",borderRadius:14,padding:"14px 16px",marginBottom:12}}>
+{(()=>{const wkShiftByDrv={};let wkShiftTotal=0;let wkBonusMins=0;DAYS.forEach((_,i)=>{const{byDriver,totalMins}=getShiftSummary(getFbKey(wo,i));wkShiftTotal+=totalMins;const _wkDE=log[getFbKey(wo,i)]||[];wkBonusMins+=(_wkDE.filter(e=>e.isHourly&&e.liftgateApplied&&!DISTANCE_BONUS_STOPS.includes(e.stop)).length+_wkDE.filter(e=>e.isHourly&&DISTANCE_BONUS_STOPS.includes(e.stop)).length)*60;Object.entries(byDriver).forEach(([did,mins])=>{wkShiftByDrv[did]=(wkShiftByDrv[did]||0)+mins;});});if(!wkShiftTotal)return null;const wkShiftHrs=Math.round((wkShiftTotal+wkBonusMins)/15)*15/60;return(<div style={{background:"#eff6ff",border:"2px solid #2563eb",borderRadius:14,padding:"14px 16px",marginBottom:12}}>
 <div style={_s.flexBtwMb8}><span style={{fontSize:14,fontWeight:700,color:"#2563eb"}}>⏱ Emser Week Total</span><span style={{fontSize:20,fontWeight:800,fontVariantNumeric:"tabular-nums",color:"#1d4ed8"}}>{fmt(102.50*wkShiftHrs)}</span></div>
 <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:4}}>
 {drivers.map((drv,di)=>{const mins=wkShiftByDrv[drv.id]||0;if(!mins)return null;const initials=drv.name.split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase();const hrs=Math.round(mins/15)*15/60;return(<div key={drv.id} style={{display:"flex",alignItems:"center",gap:5,background:"#fff",border:`2px solid ${DCOL[di]}`,borderRadius:8,padding:"4px 10px"}}><div style={{width:20,height:20,borderRadius:5,background:DCOL[di],display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,color:"#fff",fontWeight:700}}>{initials}</div><div><div style={{fontSize:12,fontWeight:700}}>{formatMins(mins)}</div><div style={{fontSize:9,color:"#64748b"}}>{fmt(102.50*hrs)}</div></div></div>);})}
 </div>
 <div style={{fontSize:11,color:"#1d4ed8",fontWeight:600}}>{formatMins(wkShiftTotal+wkBonusMins)} total · $102.50/hr</div>
 </div>);})()}
-{DAYS.map((day,i)=>{const{entries,calc}=wkD[i];const wk2=`${wo}-${i}`;const{byDriver:shiftByDrv,totalMins:shiftMins}=getShiftSummary(getFbKey(wo,i));if(!entries.length&&!shiftMins)return null;return(<div key={day} style={{marginBottom:16}}><div style={{display:"flex",justifyContent:"space-between",padding:"8px 4px",borderBottom:"1px solid #e7e5e4"}}><span style={_s.bold14}>{day} — {wd[i].date}</span><span style={{fontVariantNumeric:"tabular-nums",fontWeight:700,color:"#16a34a",fontSize:14}}>{fmt(calc.total)}</span></div>
+{DAYS.map((day,i)=>{const{entries,calc}=wkD[i];const wk2=getFbKey(wo,i);const{byDriver:shiftByDrv,totalMins:shiftMins}=getShiftSummary(getFbKey(wo,i));if(!entries.length&&!shiftMins)return null;return(<div key={day} style={{marginBottom:16}}><div style={{display:"flex",justifyContent:"space-between",padding:"8px 4px",borderBottom:"1px solid #e7e5e4"}}><span style={_s.bold14}>{day} — {wd[i].date}</span><span style={{fontVariantNumeric:"tabular-nums",fontWeight:700,color:"#16a34a",fontSize:14}}>{fmt(calc.total)}</span></div>
 {shiftMins>0&&<div style={{display:"flex",alignItems:"center",gap:5,padding:"5px 8px 5px 14px",borderLeft:"3px solid #2563eb",marginTop:4,background:"#eff6ff",borderRadius:"0 8px 8px 0",flexWrap:"wrap"}}>
 <span style={{fontSize:11,color:"#2563eb",fontWeight:700,flexShrink:0}}>⏱ Emser</span>
 {drivers.map((drv,di)=>{const mins=shiftByDrv[drv.id]||0;if(!mins)return null;const initials=drv.name.split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase();return(<span key={drv.id} style={{fontSize:11,background:DCOL[di],color:"#fff",padding:"1px 6px",borderRadius:4,fontWeight:600}}>{initials} {formatMins(mins)}</span>);})}
@@ -6039,7 +6068,7 @@ style={{width:80,border:"1px solid #e7e5e4",borderRadius:6,padding:"3px 6px",fon
 </div>}
 </div>);})}</div>);})}
 {wkD.every(d=>!d.entries.length)&&<div style={_s.emptyState}><p>No deliveries this week</p></div>}
-{(()=>{const wkShiftByDrv={};let wkShiftTotal=0;let wkBonusMins=0;DAYS.forEach((_,i)=>{const{byDriver,totalMins}=getShiftSummary(getFbKey(wo,i));wkShiftTotal+=totalMins;const _wkDE=log[`${wo}-${i}`]||[];wkBonusMins+=(_wkDE.filter(e=>e.isHourly&&e.liftgateApplied&&!DISTANCE_BONUS_STOPS.includes(e.stop)).length+_wkDE.filter(e=>e.isHourly&&DISTANCE_BONUS_STOPS.includes(e.stop)).length)*60;Object.entries(byDriver).forEach(([did,mins])=>{wkShiftByDrv[did]=(wkShiftByDrv[did]||0)+mins;});});if(!wkShiftTotal)return null;const wkShiftHrs=Math.round((wkShiftTotal+wkBonusMins)/15)*15/60;return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:14,padding:"14px 16px",marginBottom:12}}>
+{(()=>{const wkShiftByDrv={};let wkShiftTotal=0;let wkBonusMins=0;DAYS.forEach((_,i)=>{const{byDriver,totalMins}=getShiftSummary(getFbKey(wo,i));wkShiftTotal+=totalMins;const _wkDE=log[getFbKey(wo,i)]||[];wkBonusMins+=(_wkDE.filter(e=>e.isHourly&&e.liftgateApplied&&!DISTANCE_BONUS_STOPS.includes(e.stop)).length+_wkDE.filter(e=>e.isHourly&&DISTANCE_BONUS_STOPS.includes(e.stop)).length)*60;Object.entries(byDriver).forEach(([did,mins])=>{wkShiftByDrv[did]=(wkShiftByDrv[did]||0)+mins;});});if(!wkShiftTotal)return null;const wkShiftHrs=Math.round((wkShiftTotal+wkBonusMins)/15)*15/60;return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:14,padding:"14px 16px",marginBottom:12}}>
 <div style={_s.flexBtwMb8}>
 <span style={{fontSize:13,fontWeight:700,color:"#2563eb"}}>⏱ Week Emser Hours</span>
 <span style={{fontSize:16,fontWeight:700,fontVariantNumeric:"tabular-nums",color:"#1d4ed8"}}>{fmt(102.50*wkShiftHrs)}</span>
@@ -6331,7 +6360,7 @@ const nD=now.getDay();const nM=new Date(now);nM.setDate(now.getDate()-(nD===0?6:
 tM.setHours(0,0,0,0);nM.setHours(0,0,0,0);
 const weekOff=Math.round((tM-nM)/(7*24*60*60*1000));
 const dayIdx=tD===0?6:tD-1;
-if(dayIdx>=0&&dayIdx<=4){pushQuoteToDay(q.id,`${weekOff}-${dayIdx}`);}
+if(dayIdx>=0&&dayIdx<=4){pushQuoteToDay(q.id,getFbKey(weekOff,dayIdx));}
 else{showToast("Pick a weekday (Mon-Fri)");}
 }}} style={{flex:1,border:"1px solid #16a34a",borderRadius:8,padding:"8px 10px",fontSize:13,outline:"none",background:"#f0fdf4",fontWeight:600,color:"transparent",WebkitTextFillColor:"transparent"}}/>
 </label>
@@ -6340,7 +6369,7 @@ else{showToast("Pick a weekday (Mon-Fri)");}
 :<><button onClick={()=>setQPushDay({quoteId:q.id})} style={{flex:1,background:"#16a34a",color:"#fff",border:"none",borderRadius:8,padding:"7px",cursor:"pointer",fontSize:11,fontWeight:700}}>Push to Day</button>
 <button onClick={()=>{setSavedQuotes(p=>p.filter(x=>x.id!==q.id));deleteQuoteFromFB(q.id).catch(e=>console.error("Quote del:",e));showToast("Deleted");}} style={{background:"#fef2f2",border:"none",borderRadius:8,padding:"7px 10px",cursor:"pointer",fontSize:11,color:"#dc2626",fontWeight:600}}>Delete</button></>}
 </div>}
-{accepted&&q.pushedTo&&<div style={{fontSize:10,color:"#16a34a",fontWeight:600,marginTop:4}}>✓ Pushed to {DAYS[parseInt(q.pushedTo.split("-")[1])]||""}</div>}
+{accepted&&q.pushedTo&&<div style={{fontSize:10,color:"#16a34a",fontWeight:600,marginTop:4}}>✓ Pushed to {(()=>{try{if(/^\d{4}-\d{2}-\d{2}$/.test(q.pushedTo)){const d=new Date(q.pushedTo+"T12:00:00");return isNaN(d)?q.pushedTo:d.toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"});}const parts=q.pushedTo.split("-");return DAYS[parseInt(parts[parts.length-1])]||q.pushedTo;}catch(e){return q.pushedTo;}})()}</div>}
 </div>);})}
 {savedQuotes.filter(q=>quoteTab==="current"?q.status!=="accepted":q.status==="accepted").length===0&&savedQuotes.length>0&&<div style={{textAlign:"center",padding:"24px 16px",color:"#a8a29e"}}><div style={{fontSize:28,marginBottom:8}}>{quoteTab==="current"?"📋":"✅"}</div><div style={{fontSize:12}}>{quoteTab==="current"?"No open quotes":"No completed quotes"}</div></div>}
 </div>);
@@ -6899,7 +6928,7 @@ const[driverMsgTab,setDriverMsgTab]=useState("private"); /* private | group */
 const driverPosRef=useRef(null); /* {lat,lng} — driver's current GPS position */
 useEffect(()=>{loadGoogleMaps();},[]);
 
-const wd=getWeekDates(wo);const dk=`${wo}-${sd}`;const dl=log[dk]||[];
+const wd=getWeekDates(wo);const dk=getFbKey(wo,sd);const dl=log[dk]||[];
 const showToast=useCallback(m=>{setToast(m);setTimeout(()=>setToast(null),2000);},[]);
 const drvSaveTime=useRef(0);
 const driverId=resolveDriverSlug(driverSlug,allDrivers);
@@ -6928,7 +6957,7 @@ useEffect(()=>{
       let changed=false;
       Object.entries(fbData).forEach(([fbKey,payload])=>{
         const dayIdx=payload.dayIdx;
-        const lk=`${wo}-${dayIdx}`;
+        const lk=fbKey; /* Firestore date key directly */
         const fbEnts=(payload.entries||[]).map(e=>{
           if(e.customer&&!e.isHourly&&e.stopType!=="pickup"){
             const cd=CUSTOMERS[e.customer];
@@ -7008,8 +7037,8 @@ useEffect(()=>{
 const saveDriverLog=useCallback((newLog)=>{
   const entries2=newLog[dk]||[];
   drvSaveTime.current=Date.now();
-  saveManifestDay(wo,sd,entries2).catch(e=>console.error("[DRV-SAVE] FAILED:",e));
-},[dk,wo,sd]);
+  saveManifestByKey(dk,entries2).catch(e=>console.error("[DRV-SAVE] FAILED:",e));
+},[dk]);
 
 const updateStatus=(eid,status)=>{const now=new Date().toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});setLog(p=>{const n={...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,status,arrivedAt:status==="arrived"?now:e.arrivedAt,departedAt:status==="departed"?now:e.departedAt}:e)};saveDriverLog(n);return n;});};
 const addPhoto=(eid,dataUrl)=>{
@@ -7162,7 +7191,7 @@ return(
 </div>
 
 <div style={{display:"flex",gap:4,marginBottom:12}}>
-{["Mon","Tue","Wed","Thu","Fri"].map((day,i)=>{const isToday=wo===0&&i===(new Date().getDay()>=1&&new Date().getDay()<=5?new Date().getDay()-1:0);const isSelected=sd===i;const dayEntries=(log[`${wo}-${i}`]||[]).filter(e=>e.driverId===driverId);return(
+{["Mon","Tue","Wed","Thu","Fri"].map((day,i)=>{const isToday=wo===0&&i===(new Date().getDay()>=1&&new Date().getDay()<=5?new Date().getDay()-1:0);const isSelected=sd===i;const dayEntries=(log[getFbKey(wo,i)]||[]).filter(e=>e.driverId===driverId);return(
 <button key={i} onClick={()=>setSd(i)} style={{flex:1,padding:"8px 2px",borderRadius:8,border:isSelected?"2px solid "+BRAND.main:isToday?"2px solid #d97706":"1px solid #d6d3d1",background:isSelected?BRAND.main:"#fff",cursor:"pointer",textAlign:"center"}}>
 <div style={{fontSize:11,fontWeight:700,color:isSelected?"#fff":isToday?"#d97706":"#57534e"}}>{day}</div>
 <div style={{fontSize:10,fontWeight:600,color:isSelected?"#93c5fd":isToday?"#d97706":"#78716c"}}>{wd[i].date}</div>
