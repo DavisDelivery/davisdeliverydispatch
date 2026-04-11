@@ -60,7 +60,7 @@ cancelBtn2:{background:"#e7e5e4",border:"none",borderRadius:8,padding:"6px 12px"
 greenBtn:{background:"#16a34a",color:"#fff",border:"none",borderRadius:8,padding:"6px 12px",cursor:"pointer",fontSize:12,fontWeight:700},
 inputMb4:{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"7px 10px",fontSize:12,outline:"none",marginBottom:4},
 };
-import { useState, useCallback, useEffect, useRef, Fragment } from "react";
+import { useState, useCallback, useEffect, useRef, Fragment, Component } from "react";
 
 const _SplitUI=({splitEntry,setSplitEntry})=>{const tw=splitEntry.totalWeight||0;const t1w=splitEntry.truck1Weight!==undefined?splitEntry.truck1Weight:Math.round(tw*(splitEntry.ratio/100));const t2w=tw-t1w;return(<><div style={_s.flexG6Mb6}><div style={_s.f1}><label style={_s.labelSm}>Total</label><input type="number" inputMode="numeric" value={tw||""} onChange={e=>{const newTw=parseInt(e.target.value)||0;setSplitEntry(p=>({...p,totalWeight:newTw,truck1Weight:Math.min(p.truck1Weight||Math.round(newTw/2),newTw)}));}} style={_s.splitTotal}/></div><div style={_s.f1}><label style={_s.labelBlue}>Truck 1</label><input type="number" inputMode="numeric" value={splitEntry.truck1Weight!==undefined?splitEntry.truck1Weight:""} onChange={e=>{const v=e.target.value;setSplitEntry(p=>({...p,truck1Weight:v===""?0:parseInt(v)||0}));}} style={_s.splitInput}/></div><div style={_s.f1}><label style={_s.labelGray}>Truck 2</label><div style={_s.splitT2}>{t2w.toLocaleString()}</div></div></div><input type="range" min={0} max={tw} step={100} value={t1w} onChange={e=>{const v=parseInt(e.target.value)||0;setSplitEntry(p=>({...p,truck1Weight:v}));}} style={_s.slider}/></>);};
 
@@ -269,7 +269,16 @@ const markNotificationRead=async(driverId,notifId)=>{
 
 const saveQuoteToFB=async(quote)=>{
   if(!window._fbOps)return;
-  await window._fbOps.write("quotes/"+String(quote.id),{...quote,updatedAt:Date.now()});
+  /* Sanitize before writing to Firestore — prevents corrupt data from spreading */
+  const safeNum=v=>typeof v==="number"&&isFinite(v)?v:(parseFloat(v)||0);
+  const clean={
+    ...quote,
+    rate:safeNum(quote.rate),
+    miles:quote.miles==null?null:safeNum(quote.miles),
+    num:safeNum(quote.num),
+    updatedAt:Date.now(),
+  };
+  await window._fbOps.write("quotes/"+String(quote.id),clean);
 };
 const deleteQuoteFromFB=async(quoteId)=>{
   if(!window._fbOps)return;
@@ -278,8 +287,7 @@ const deleteQuoteFromFB=async(quoteId)=>{
 const subscribeQuotes=(cb)=>{
   let unsub;
   _whenFB(()=>{unsub=window._fbOps.onCol("quotes",(docs)=>{
-    const safe=docs.map(d=>({...d,rate:parseFloat(d.rate)||0,miles:d.miles!=null?parseFloat(d.miles)||null:null,num:parseInt(d.num)||0}));
-    safe.sort((a,b)=>(b.num||0)-(a.num||0));cb(safe);
+    docs.sort((a,b)=>(b.num||0)-(a.num||0));cb(docs);
   });});
   return()=>{if(unsub)unsub();};
 };
@@ -304,7 +312,7 @@ const markMessageRead=async(channelKey,msgId)=>{
 
 const saveDriverLocation=async(driverId,lat,lng)=>{
   if(!window._fbOps)return;
-  await window._fbOps.write("driverLocations/"+String(driverId),{lat,lng,updatedAt:Date.now(),source:"cell"});
+  await window._fbOps.write("driverLocations/"+String(driverId),{lat,lng,updatedAt:Date.now()});
 };
 const subscribeDriverLocations=(cb)=>{
   let unsub;
@@ -381,7 +389,7 @@ const DAYS = ["Monday","Tuesday","Wednesday","Thursday","Friday"];
 const BRAND={main:"#1e5b92",dark:"#134b7f",light:"#357bb7",pale:"#e8f0f8",bg:"#f0f5fa"};
 const DISTANCE_BONUS_STOPS=["DCO Eatonton","DCO Athens"];
 const IMETCO_PICKUP_MAP={"IMETCO to Finishing Dynamics":"Norcross","Perfect Edge to IMETCO":"Doraville","Southern Aluminum to IMETCO":"Lithia Springs","Finishing Dynamics to IMETCO":"Villa Rica","Round Trip IMETCO & Finishing Dynamics":"Norcross"};
-const APP_VERSION="3.12.0";
+const APP_VERSION="3.11.62";
 const LOGO_URI="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAoHBwgHBgoICAgLCgoLDhgQDg0NDh0VFhEYIx8lJCIfIiEmKzcvJik0KSEiMEExNDk7Pj4+JS5ESUM8SDc9Pjv/2wBDAQoLCw4NDhwQEBw7KCIoOzs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozv/wAARCACMARgDASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD2KigUUAFFFFABRRRQAUUUUAFFFFABRRRQAUUUUAFGKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACig0UAAooFFABRRRQAUUUUAFFFFABRRRQAUUUUAFFFFABRRRQAUUUUAFFFFABRRRQAUUUUAFFFFABRRRQAUUUUAFFFFABRRRQAUUUUAAooFFABRRRQAUUUUAFFZV34o0GxmaG61e0ikQ4ZDIMqfQ4qJPGPhxjj+2rMH/AGpMfzquSXYnnj3Nqiqltq+m3hAtdQtZyegjmVj+hq3Saa3GncKKKKQyO4uIbSFp7iVIYk+87tgD8apf8JFov/QWsv8Av8tU/Gwz4Qv/APdX/wBDWvI4YJLidIYYzJLIwVEXqxPau3D4aNWDk3Y4sRiZUpKKVz2lfEGjMcDVbMn/AK7r/jV2KaKdN8MiSJ/eRgw/MV4y/hjXkUs2kXWB1xHn+VVbS9vdKuvMtZpbWZDyBlT9CP6GtfqUZL3JGX1yUX78T3Oiud8I+KF8QWzxTqsd7AAZFXo4/vD+o7V0VefODhLlkd8JqceaJXu9Qs7BVa8uobcOcKZXC5PtmooNa0u6nWC31G1llf7qJKCT9BXm/j7Vf7Q8QG2RsxWQ8sehfqx/kPwrnrO6ksbyG7h4kgcOv1Fd9PBc1NSb1OGeN5ZuKWh7nPPFbQtNPIsUSDLO5wFHuao/8JDopOP7Ws8/9dlqZGttZ0kN963vIf8Ax1hXil9ZSWF9PZTD54XKN747/iOaxw9CNVtN2aNsRXlSs0rpnu1FYvhHU/7V8O20zNuljHlS/wC8vGfxGD+NaGqX6aZplzfSfdgjLY9T2H4nFc7g1Ll6nQppx5uhFLrukQSvFLqdpHIh2sjTAFT6Gpl1Kxeza8S8ga2XO6YONgx714eTLdXJJzJNM+fdmY/4mvUdZ05NJ+HdxYJ/yxtgGPq24En88111cNGm4q+rOSliZVFJ20Rsx69pEsixx6paO7kKqrMCST0Aq/XiWh/8h/T/APr6j/8AQhXqHjDWpNE0N5oCBcTOIoj/AHSckn8ADUVsNyTjCLvcqjieeDlJbF+/1vTNLO2+voYGP8LN835DmqcXjDw9M+1NVhBP9/Kj8yK8mtLS81fUBBbq9xdTEnluT6kk/wA61LvwX4gs4jI1h5qgZPkuHI/Ac10fVKUdJS1MfrdWWsY6HrsU0c8YkikWRG6MjAg/iKdXmHw7ttRk1h5IZ5IbSAfv0/hduy4Pfv6jFen1xVqSpT5b3OyjUdSHNawUUUVibBRQaKAAUUCigAooqC5tIrsbJwXj7x5wrfUd/oeKBGZdeIGldrfRLNtSuAcM6ttgjP8AtSdD9Fya5bxBp+sx6rodxquqmd7i/Rfs0ClIYwPm4HVjx1NegoiRoqIoVVGAqjAA9hXMeMVzqHh8/wB2+ZvyjY/0relK0rJGNSN43bPI7bVL23vJJbeQs0rlnjZBIsmTk7lOQa9Z8I3P2rTY5BbNbwk7JbO4UgQt/eiL8lD/AHecdumK8r0JWurkWxnmiRtgzE+08yIp6ezGu+uPBei2Pi7TLSaKa6tb2GZcTzMx81cEHPHbPFdeI5X7rOShzLVHZTaJo94P32mWU2e5hUn88VQdJPDEiSJJJJo7sFkSRixsyeAyk8mPPBB+71HGaYfAHhn+HTCn+5PIP/ZqZN4C0l7eSGKfUbdZFKkJeyEYPHIJII9q4047Nu39eZ2NS3SV/wCvI6UUVl+G7hrjw/ZmT/WxJ5MmTzvQ7G/Va1Kyas7Gqd1cwvG7BfB+oFjgbV5P++teY+HWH/CTaZyObpO/vXpPxA/5EfU/9xP/AENa8i8Kn/irtJ/6/I/516OFdqMvn+R5+JjetF/1ue/gVxPxL0uI6P8A2vHGouLd1WRv76E45+hI/Wu2rifijq0Nr4c/s7eDcXjrhO4RTkt9MgCuOg5KorHXXSdN3OL8FasLfxZYYyvnSeSw7ENx/PFeua1qS6Ro9zfNgmJMoPVjwo/PFeK+CLR73xlpiIMiObzWPoFGf8K7j4if2prd5aaBpFrLcFP39wUGFUnhAW6DjJ/EV14hKdaN/mctBuFKVvkcTDDPqN+kCEvPcyBc+rMev65rZ8Y6Gmh6siQDFvLErIT6gYb9Rn8ak0rT7DwPqSajr+rRTXcSHy7C1zI6sRjLHoMDPX1q8PEuveM7nGjaXa2Vtbk5vrtQ/k+pDEYB9gCa3lXfOpR+FGEaC5GpfEzZ8B6m1v4eeLUc20Nu/wC6mn+RGVucAnrg5/MVl/EKx02ILrrXEytcgRpFHD/rHA6ljjaMY7duKz7TxFo+n+J7JHmk1qYyhJ9TvGLBM8ful6KAcc13HjTRzrXhe7tkXdPGvnQ/7684/EZH41yOThWU9rnUoqdLk3scb8MNdUapPpb5UXKeZGD03r1/MfyrZ+JWp+VZW2mI3zTt5sg/2V6fmf5V5XpWoy6XqtrqEP37eVXA9R3H4jIrT8V+IW1nxHdXkEh+z5CQgj+Beh/Hk/jXU6V66m9jn9pag4I6HwFpf9oeIkndcxWa+afTd0Ufnz+Fd74xH/FJaj/1y/8AZhWf8OtMex8MRXM4/f3x848YwvRB+XP41c8cOY/BmqMvUQ8f99CuSrU58Qn0TR00qXJQa6tHmGh/8jBp/wD19R/+hCvQ/iHp8t54fWaFS5tZfMcDn5cEE/hnNeU6BcSS+JtLDNx9si4HH8Qr32aSOGKSWZ1SNFLOzHgAdSa3xVTlqxkuhjhafNSlF9TxHSdVuNG1CO+tCvmICMMMhgeoNdzY/Ey1fC39hJCe7wtvH5HBq5feB9B1uIXthK1t5w3rJbENG+e+08fliuP8Q+BdX0SxlvobiC9t4RufCFHVfXGSD+BqnUw9d+9oyI08RRXu7Hp2l6jpupwvcabNFIrNmTYMNu/2h1zx3q9XgXhzXrvSdftbuOUhTIqSoOjoTgg/nn6177XFiKPspabHdQq+0jruFFFFc5uFFFFAAOlFA6UUAFFFRTXCwDLJI2egRCx/SgCWuY8XjN7op9LmU/lA5q1c+KoYCQtnKxH9+eCIf+PPn9K5/UdcOtahZK4sLVYGlKg6lFI8jNEyKoVe5LDvW1ODTuY1Jpqx5fp8zQJM8blHEAKsDgghkIP6Vcu/EmtX7W5u9SnlNsxeJi2GQngkMMGnxeF/ESIR/Yl7ym05iI9P8KVNPttI2ya60lvK7ERW32cSvxwWZSwAXPA6k4PHFeo5Q33PNSntsX9O8WiLAvlu5/8Aaa7lP8nU/wA67PRtb0HVIp5DPf2KW6K0k/8AaMvlrk4AyzZBJ7EVzOlwW+uXE+ly+H7S7eOISx3WmMtvI0ZxhgrHDdRwenQ1SSxfTbDxLp0iyqY4oJAJo9jYEoxkfRuxI9DXPKMJabM2jKUdd0d3b6rpWmK40nxXZyB5GkaG+kDhmJ5O8YYZ/H6V0OjawmrRSfu1jliI3BJBIjBhlWRxwynn0PB4r5+Oa9L8C6nPYrZxfYnktLi2hWW4U8QsZJFTI75JxWdagoxunqaUa7lKx0vxB/5EfU/9xP8A0Na8RtbuexvIbu2bZNA4eNsZww6cGvoi/sLXVLKSyvYRNbygB0JIzg57e4rF/wCFfeFf+gPH/wB/H/8AiqihXjTi4yRpWoynJNM8xf4h+KpEK/2ntz3SFAfzxWG8l/q9/l2nvbuY47u7Gva18AeFVORo0R+ruf61rWGk6dpaFbCxgtgevlRhSfqeprT6zTj8ETP6vOXxSON8K6JaeA9Jm1nXpkhupl27c5KL12Lj7zHvj09s1zPiT4k6lqxkt9N3afZnglT+9kHuw6fQfnXp2q+GNG1udZ9Ss/tLou1N0jgKPYA4FU4/APhaKRZF0eLchDDLuRkexODWUasL881dmkqU7csHZHCeDfh7LrATUtYDxWbfMkWcPP7k9Qv6mvUpdLs5NJk0tYEjtHiMXlooAVSMcCrYwBxRWVSrKo7s1p0owVkfN+oWUunX9xYzgiS3kaNvfBxn+te5+DNZ/tzwxaXTnMyL5U3++vBP4jB/Gnah4O8PareyXt9piSzyY3uXYbsDA6Edqt6ToWmaFHJFplqLdJWDOodiCcYzyTW1avGpBK2plSoypybvoeK+NNH/ALE8U3dsi4hkbzof91ucfgcj8Kp6BpT63rtppyg4mkAcjsg5Y/kDXuWreGtG1yWOXUrFLiSJSqMWYEDOccEVHpfhXQtGujd6dp6QzFSm8OzcHqOSfStFi0oW6mbwr579DWjjSKNY41CooCqo7AdBWD48/wCRJ1X/AK4/+zCugzVe+sbbUrKWzvIhLBMu10JI3D8K4ou0k2dkleLR4F4c/wCRn0v/AK/Iv/QxXp/xPOtNoqw6fbs9kxJu3j5cAdAR129yfata38C+GbW5iuYNKRJYXDo3mP8AKwOQetdBmumrXUpqSWxz06LjBxb3Pn3RfFGsaCT/AGdeskbHLRMN8ZP0PT8MVqav8RNd1jTpLCU28MUq7ZDDGQzj0yScD6V6lqXgzw9qzmS60uHzDyZIsxsfqVxms+H4aeFo3DmyllHo9w5H861+sUW+Zx1M/YVUrKWh5n4N0C41/X4FSMm2gkWS4kxwqg5xn1OMYr3iq9lY2mnWy21lbR28K9EjUKKsVy1qrqyudFGkqasFFFFYmwUUUUAAooFFABXD+NvDep3+sw63avH9nsbViyFzv3LuYEDGD1H5V3FQXVlbXsey5hWRfQ5q4ScXdETipKx4prGlaBBZa/LZPGzW13bpaESbsoy5bHrznn2rK0GC7ju0v4rO5eFBIomihZ1RyhAOQOxINewT/DjwnPn/AIlKxH1ikdMfkaSHwJBY2/kaXrmsWEQJIjiuQVBPXgrXUsQuWxzOg73PGI7KQqPPuktm/u3AlXH/AI6RXc/DzTNL1691D7ZDFcpb2MFvGrjO0FTvI9DnPNdPN4T8SqD9l8b3g9p7dHrCm8D+N4b64v7XxBaSXFxD5Mr7fKLp6YC4z79aJVVNWvb+vQI0nB3tc8/0/UP7NuN8RnEsLsqTw3DRsFz2wD/k1tp4lzdtdXD3t07w+Q4uHjmV4852kFRkZ5qW2+HXizTL1J00mwvgoI2TSJJGc+qkituHw94oH+s8EeGT9VC/yatnUp+vzMlTn6fIwDr2k9f7Gt8/9esVSWWtte61Y29v58ayXMCrAsipFhWGBsVRnHJ6+9WtV+HXiPVbz7TFpOmacCoDRQXPyEjuBjiuj8E+EtV8LCZ59Ms7i4mYZm+2Y2KOgUbOOpyc1MqtPlut/UapVOaz29DZ+Ipx4JvznHzR8g4/5aLWVpI06x8cWln4buzLaS2sjX0MdwZo4yMbGyScEniuze3S+tDDf2sTo/3onxIp/Mc0Wmn2dghSytILZW5KwxhAfyriU7R5TrcLy5jzS0gsrjxZqj3lvp8u3VmHmXOpNBIgyPuoOG/qeK6a4v7Wx+JrveXcVvGdIADTSBFz5vuetbsmgaPNO1xLpNk8zNvMjW6li3XOcdai1uDQo4Wv9ZtLSRUAXzJoBI3XhRwSevQVbqKTJVNpGXqEgf4iaCyPlGsrhgQcg9MH3rm9VW8sdXvvBtuJBFrV1HPbuD/q4nOZh+G3+deix21m7QXKwRFo49sMmwZRCOg7gYxxTbhbBLqG5uFt1nAZIpZNoYcEsFJ56Ak47CpjUt0KlC/U4bxxBbjxFoto0NtJAlpKBFc3Zt48AqBlx3H60/xJHBH8PNOhtoIfLN5Cvk210ZUJLnKrITzk5Ga6yOLRPEltHeNa219ECyxvNAD0ODjcM4yPxq0umaetqlqtlbi3jYOkQiXYrA5BA6A55pqpZLyF7PV+Zx3giCK51HX7cWrWVkNlu+mSzmRo2wdzc9AQeMdfwpvhbTLqTxJPZ312bi28Nkw2iknLF+VZvUquBXbLaWqXT3a28S3EihXlCAOwHQE9TTo7a3hlllihjSSYgyuqgFyOASe9J1L38xqna3kZfi4K3hXUEa/XTw0W37SxICZI645wenHrXO+AprOG/v8ATorK3iuI4EkeayvGnglHIBGT8rV2UFzaajFMsTLPGkjQyArldy8MOeuDx6UywtdMtBNHp1vawgPiVbdVXDY6Njvg9/Wkp2i4jcbyUjzj4fwWjXNhcS22n+dvk2znUm+0E5YD9znHt9Oaq+JzGms+Jp306aZ0niSK9W5Ma2bMgwSAemeelenQ6Fo9vOtxBpVlFKhysiQKGU+oIFJdLo9u0qXa2cZvc+aJQo88KuTuz97Cg9egFae2XNzWM/Ze7Y5zxL52jW2ieJDIbh9N2RXjociaJwAx9/mwR9aoeRMPhjrmr3W4XWrRyXb5J+VT9wD6L/Outa/0FtJ2NLaGwP7nyyBs4Gdu3HpzjHTnpT5L7RZnTSZLiykM0Y22hZW3oRxhe4wPpUqdklYvk1vc5fxJLG0Phmz1K4e30e5XF24coGYRgorMOgJzVy3g0G08Na/F4fvPNiSCTzI0nMiRN5Z4XPTPXg11Etpbz2xtpreKWAgDynQFcDoMHimwafZW1obSC0git2BBiSMKhB65A45pc+lg5NbnB/Dy3s1ntZvs+npcNaZEsWpNLM5IGd0ROF45PpXolUbXRNJsZxPaaZaW8oBAkigVWAPXkCr1TUlzSuVCPLGwUUUVBYUUUUAAooFFABRRRQAUUUUAFFFFABRRRQAUUUUAFFFFABXF+Jp7++8QrbaYsksmm25mWNNpHnOQoO1uG2xsxwSMlhXaVBHY2sN5NeRwRrcThRLIB8zgDAyfamnYTVzixa+M51kgSW9s1ErBJJJY5DhnCqc91RFZz3LOAOKr3Nr4q1C2ktbyyvXhckF2aFnVXmIbHPURAKOnDsfQV6HimvGkiMjqGVgQQe4NPmFynF+EL7VbvUpoDC8dnZCRXTzVMYkZsqgYfe2oF57l2J7CoivjkQpdRee0siEyW0hjAWYI54OeI9xQAdTszxurs7GwtdNthbWcKwxAk7Rk5J7knkn61YxRcLHCz2njIlzHcXix4i2qskZkbcUVs54GxUZjjq0ntTJG8byLJL9muQ8yyl4kljVY2XJjVTnO05GWA52gdyR3uBRijmDlOSlttYsNG0ez0yxn3QukkyCRR5mGywkfPBbLMcA5PH1z4IfGYWG5WCaOTzVMkG6JPNYIzuzkfwlikY7hVz1xXe4oxRzBynFRJ4rlubNP9PjhdUlnklaMHzQRuXAPyJgHA56njgVZ17RJNW1O8uJrSYRw26QWrQojPK5cO55ONo2quGIGC3rXWYoxSuFjz288O6/IymQPLeyXAu/OiIEZd/kkjdsghFhVV4GSTkelb2kWd5F4hknt7e6s9OeJjNFclfml+UIIwM7VVFIznB469a6TFGKfMHKFFFFSUFFFFABRRRQAGiiigAHSigUUAFFFFABRRRQAUUUUAFFFFABRRRQAUUUUAFFFFABRRRQAUUUUAFFFFABRRRQAUUUUAFFFFABRRRQAUUUUAFFFFAAelFBopAAopKXNMAoozRmgAoozRmgAooozQAUUZozQAUUmaXNABRRmjNABRRmjNABRRmjNABRRmjNABRSZpaACikzS5oAKKKM0AFFGaM0AFFGaKACijNGaACiikoAU0UlFAH//2Q==";
 const LOGO_WHITE="data:image/jpeg;base64,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";
 
@@ -615,13 +623,14 @@ const fmtEta=(mins,setAt)=>{const m=parseInt(mins)||0;if(!m)return mins+" min";c
 
 function getWeekDates(off=0){const now=new Date();const d=now.getDay();const mon=new Date(now);mon.setDate(now.getDate()-(d===0?6:d-1)+off*7);return DAYS.map((name,i)=>{const dt=new Date(mon);dt.setDate(mon.getDate()+i);return{name,date:dt.toLocaleDateString("en-US",{month:"short",day:"numeric"}),iso:dt.toISOString().slice(0,10)}});}
 function getFbKey(wo,dayIdx){const now=new Date();const d=now.getDay();const mon=new Date(now);mon.setDate(now.getDate()-(d===0?6:d-1)+wo*7+dayIdx);const y=mon.getFullYear();const m=String(mon.getMonth()+1).padStart(2,'0');const dd=String(mon.getDate()).padStart(2,'0');return y+'-'+m+'-'+dd;}
-function fmt(n){const v=typeof n==="number"?n:parseFloat(n)||0;return "$"+v.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g,",");}
+function fmt(n){const v=typeof n==="number"&&isFinite(n)?n:(parseFloat(n)||0);return "$"+v.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g,",");}
 
 function InlineRate({value,isHourly,onSave,accent}){
 const[editing,setEditing]=useState(false);
 const[val,setVal]=useState("");
 const inputRef=useRef(null);
-const start=(e)=>{if(isHourly)return;e.stopPropagation();setVal(value.toFixed(2));setEditing(true);};
+const safeValue=typeof value==="number"&&isFinite(value)?value:(parseFloat(value)||0);
+const start=(e)=>{if(isHourly)return;e.stopPropagation();setVal(safeValue.toFixed(2));setEditing(true);};
 const commit=()=>{const n=parseFloat(val);if(!isNaN(n)&&n>=0)onSave(n);setEditing(false);};
 if(editing)return(
 <input ref={inputRef} value={val} onChange={e=>setVal(e.target.value)} onBlur={commit}
@@ -634,7 +643,7 @@ style={{width:80,border:"2px solid "+(accent||"#2563eb"),borderRadius:6,padding:
 return(
 <span onClick={start} title={isHourly?"Hourly rate":"Tap to edit price"}
 style={{fontVariantNumeric:"tabular-nums",fontSize:12,fontWeight:700,color:isHourly?"#44403c":"#1e5b92",cursor:isHourly?"default":"pointer",borderBottom:isHourly?"none":"1px dashed #93c5fd",paddingBottom:1,WebkitTapHighlightColor:"rgba(0,0,0,0.1)"}}>
-{isHourly?"HR":"$"+value.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g,",")}
+{isHourly?"HR":"$"+safeValue.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g,",")}
 </span>
 );
 }
@@ -814,7 +823,7 @@ return overlay;
 };
 useEffect(()=>{
 if(!mapReady||!mapInstanceRef.current||!window.google?.maps)return;
-const stopsKey=JSON.stringify((stops||[]).map(s=>({id:s.id,driverId:s.driverId,status:s.status,dueBy:s.dueBy,coords:s.coords})));
+const stopsKey=JSON.stringify((stops||[]).map(s=>({id:s.id,driverId:s.driverId,routeOrder:s.routeOrder,loadNum:s.loadNum,status:s.status,dueBy:s.dueBy,coords:s.coords})));
 const driversKey=JSON.stringify((drivers||[]).map(d=>d.id));
 if(stopsKey===stopsJsonRef.current&&driversKey===driversJsonRef.current)return;
 stopsJsonRef.current=stopsKey;
@@ -899,7 +908,9 @@ ${addr?`<div style="font-size:10px;color:#78716c;margin-bottom:4px">${addr}</div
 ${s.instructions?`<div style="font-size:10px;color:#1d4ed8;background:#eff6ff;padding:5px 8px;border-radius:5px;margin-bottom:4px;line-height:1.4">📋 ${s.instructions}</div>`:""}
 ${s.weight?`<div style="font-size:10px;color:#1e5b92;font-weight:700;margin-bottom:2px">${s.weight.toLocaleString()} lbs</div>`:""}
 ${s.eta?`<div style="font-size:10px;color:#2563eb;margin-bottom:2px">ETA: ${s.eta} min${s.etaDest?" → "+s.etaDest:""}</div>`:""}
-${addr?`<a href="https://maps.google.com/maps/dir/?api=1&destination=${encodeURIComponent(addr)}" target="_blank" style="display:inline-block;margin-top:6px;background:#1e5b92;color:#fff;padding:5px 12px;border-radius:6px;font-size:11px;font-weight:600;text-decoration:none">🧭 Directions</a>`:""}
+${addr?`<a href="https://maps.google.com/maps/dir/?api=1&destination=${encodeURIComponent(addr)}" target="_blank" style="display:inline-block;margin-top:6px;margin-right:4px;background:#1e5b92;color:#fff;padding:5px 12px;border-radius:6px;font-size:11px;font-weight:600;text-decoration:none">🧭 Directions</a>`:""}
+${addr?`<button onclick="window._ddRefreshCoords&&window._ddRefreshCoords(this.getAttribute('data-addr'));this.textContent='⏳ Refreshing...';this.disabled=true;" data-addr="${String(addr).replace(/"/g,'&quot;')}" style="display:inline-block;margin-top:6px;background:#f59e0b;color:#fff;padding:5px 12px;border-radius:6px;font-size:11px;font-weight:600;border:none;cursor:pointer">🎯 Fix Location</button>`:""}
+${(()=>{const c=getCoords(addr);return c&&c.lowConfidence?`<div style="margin-top:6px;background:#fef3c7;border:1px solid #fde68a;color:#92400e;padding:4px 8px;border-radius:5px;font-size:10px;font-weight:600">⚠️ Approximate location — the address may need more detail (street, city, zip)</div>`:"";})()}
 </div>`;
 
 const infoWindow=new window.google.maps.InfoWindow({content:infoContent,maxWidth:260});
@@ -1028,29 +1039,22 @@ driverMarkersRef.current=[];
 drivers.forEach((drv,di)=>{
   const loc=driverLocs[drv.id];
   if(!loc||!loc.lat||!loc.lng)return;
-  const col=DCOL[di%DCOL.length]||BRAND.main;
-  const firstName=drv.name.split(" ")[0];
+  const col=DCOL[di]||BRAND.main;
   const initials=drv.name.split(" ").map(w=>w[0]).join("").toUpperCase();
   const age=loc.updatedAt?(typeof loc.updatedAt==="string"?Math.round((Date.now()-new Date(loc.updatedAt).getTime())/60000):Math.round((Date.now()-loc.updatedAt)/60000)):null;
   const ageLabel=age!==null?(age<1?"just now":age<60?age+"m ago":Math.round(age/60)+"h ago"):"";
   const speedLabel=loc.speed>0?loc.speed+" mph":"";
   const truckLabel=loc.truck||"";
   const cityLabel=[loc.city,loc.locState].filter(Boolean).join(", ");
-  const srcLabel=loc.source==="motive"?"Motive":"Cell GPS";
-  /* Larger marker with truck # shown on the pin + name label below */
-  const displayText=truckLabel?truckLabel:initials;
-  const pinW=truckLabel?Math.max(50,displayText.length*8+24):44;
-  const pinH=52;
-  const textSize=truckLabel?10:12;
-  const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="${pinW}" height="${pinH+18}" viewBox="0 0 ${pinW} ${pinH+18}"><defs><filter id="s${di}" x="-20%" y="-10%" width="140%" height="130%"><feDropShadow dx="0" dy="2" stdDeviation="2" flood-opacity="0.3"/></filter></defs><path d="M${pinW/2} ${pinH-1} C${pinW/2} ${pinH-1} 3 ${pinH*0.58} 3 ${pinH*0.37} A${pinW/2-3} ${pinW/2-3} 0 0 1 ${pinW-3} ${pinH*0.37} C${pinW-3} ${pinH*0.58} ${pinW/2} ${pinH-1} ${pinW/2} ${pinH-1}Z" fill="${col}" filter="url(#s${di})" stroke="#fff" stroke-width="2"/><circle cx="${pinW/2}" cy="${pinH*0.37}" r="13" fill="#fff"/><text x="${pinW/2}" y="${pinH*0.37+4}" text-anchor="middle" font-size="${textSize}" font-weight="800" font-family="system-ui" fill="${col}">${displayText}</text><rect x="${pinW/2-firstName.length*3.2-6}" y="${pinH+2}" width="${firstName.length*6.4+12}" height="14" rx="4" fill="${col}" opacity="0.9"/><text x="${pinW/2}" y="${pinH+12}" text-anchor="middle" font-size="9" font-weight="700" font-family="system-ui" fill="#fff">${firstName}</text></svg>`;
+  const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="40" height="48" viewBox="0 0 40 48"><defs><filter id="s" x="-20%" y="-10%" width="140%" height="130%"><feDropShadow dx="0" dy="2" stdDeviation="2" flood-opacity="0.3"/></filter></defs><path d="M20 47 C20 47 3 28 3 18 A17 17 0 0 1 37 18 C37 28 20 47 20 47Z" fill="${col}" filter="url(#s)" stroke="#fff" stroke-width="2"/><circle cx="20" cy="18" r="11" fill="#fff"/><text x="20" y="22" text-anchor="middle" font-size="11" font-weight="800" font-family="system-ui" fill="${col}">${initials}</text></svg>`;
   const marker=new window.google.maps.Marker({
     position:{lat:loc.lat,lng:loc.lng},
     map,
-    icon:{url:"data:image/svg+xml;charset=UTF-8,"+encodeURIComponent(svg),scaledSize:new window.google.maps.Size(pinW,pinH+18),anchor:new window.google.maps.Point(pinW/2,pinH)},
-    title:drv.name+(truckLabel?" — Truck "+truckLabel:"")+(ageLabel?" ("+ageLabel+")":""),
+    icon:{url:"data:image/svg+xml;charset=UTF-8,"+encodeURIComponent(svg),scaledSize:new window.google.maps.Size(40,48),anchor:new window.google.maps.Point(20,48)},
+    title:drv.name+(ageLabel?" ("+ageLabel+")":""),
     zIndex:1000+di
   });
-  const infoContent=`<div style="font-family:system-ui;padding:6px;min-width:160px"><div style="font-size:14px;font-weight:800;color:${col}">${drv.name}</div>${truckLabel?`<div style="font-size:12px;color:#57534e;margin-top:3px;font-weight:600">🚚 Truck ${truckLabel}</div>`:""}<div style="font-size:11px;color:#78716c;margin-top:3px">📍 ${cityLabel||"Live location"}${ageLabel?" · "+ageLabel:""}</div>${speedLabel?`<div style="font-size:12px;color:#2563eb;margin-top:3px;font-weight:600">🏎 ${speedLabel}</div>`:""}${loc.state==="off"?'<div style="font-size:11px;color:#a8a29e;margin-top:3px">Engine off</div>':""}${age!==null&&age>30?'<div style="font-size:11px;color:#dc2626;margin-top:3px;font-weight:600">⚠ Location may be stale</div>':"'}<div style="font-size:9px;color:#a8a29e;margin-top:4px;border-top:1px solid #e7e5e4;padding-top:3px">Source: ${srcLabel}</div></div>`;
+  const infoContent=`<div style="font-family:system-ui;padding:4px"><div style="font-size:13px;font-weight:700;color:${col}">${drv.name}</div>${truckLabel?`<div style="font-size:11px;color:#57534e;margin-top:2px">🚚 ${truckLabel}</div>`:""}<div style="font-size:11px;color:#78716c;margin-top:2px">📍 ${cityLabel||"Live location"}${ageLabel?" · "+ageLabel:""}</div>${speedLabel?`<div style="font-size:11px;color:#2563eb;margin-top:2px">🏎 ${speedLabel}</div>`:""}${loc.state==="off"?'<div style="font-size:10px;color:#a8a29e;margin-top:2px">Engine off</div>':""}${age!==null&&age>30?'<div style="font-size:10px;color:#dc2626;margin-top:2px">⚠ Location may be stale</div>':""}</div>`;
   const info=new window.google.maps.InfoWindow({content:infoContent});
   marker.addListener("click",()=>{if(openInfoRef.current)openInfoRef.current.close();info.open(map,marker);openInfoRef.current=info;});
   driverMarkersRef.current.push(marker);
@@ -1623,45 +1627,186 @@ const COORDS={
 "11 Perimeter Center East, Atlanta, GA 30346":{lat:33.9259,lng:-84.3343},
 "1275 Oakbrook Drive, Suite D, Norcross, GA 30093":{lat:33.9174,lng:-84.1848},
 };
-const _dynamicCoords=(()=>{
+const _dynamicCoords=(()=>{try{return JSON.parse(localStorage.getItem('dd_geocode_cache')||'{}');}catch(e){return{};}})();
+
+/* MIGRATION: Legacy cache entries had no `type` field and were sometimes wrong (Nominatim
+   fallbacks, old Google results without validation). Purge them so v3.11.62+ re-geocodes
+   everything through the new high-confidence pipeline. Runs once per version bump. */
+(()=>{
   try{
-    /* v2 cache — forces re-geocode of all addresses through Google Maps API for accuracy */
-    const cacheKey='dd_geocode_cache_v2';
-    if(!localStorage.getItem(cacheKey)){
-      localStorage.removeItem('dd_geocode_cache'); /* clear old cache */
-      localStorage.setItem(cacheKey,'1');
-      return {};
+    const migrationKey="dd_geocode_migration_v3_11_62";
+    if(localStorage.getItem(migrationKey))return;
+    let purged=0;
+    Object.keys(_dynamicCoords).forEach(k=>{
+      if(k.startsWith("_pending_"))return;
+      const v=_dynamicCoords[k];
+      if(!v||!v.type){
+        delete _dynamicCoords[k];
+        purged++;
+      }
+    });
+    if(purged>0){
+      console.log("[Geocode] Migration: purged",purged,"legacy cache entries, will re-geocode via Google");
+      try{localStorage.setItem("dd_geocode_cache",JSON.stringify(_dynamicCoords));}catch(e){}
     }
-    return JSON.parse(localStorage.getItem('dd_geocode_cache')||'{}');
-  }catch(e){return{};}
+    localStorage.setItem(migrationKey,"1");
+  }catch(e){console.error("Geocode migration failed:",e);}
 })();
+
 let _geocodeNotify=null; /* set by App to trigger re-render */
 let _geocodeSaveTimer=null;
 function _saveGeoCache(){if(_geocodeSaveTimer)clearTimeout(_geocodeSaveTimer);_geocodeSaveTimer=setTimeout(()=>{try{const toSave={};Object.entries(_dynamicCoords).forEach(([k,v])=>{if(!k.startsWith('_pending_')&&v&&v.lat)toSave[k]=v;});localStorage.setItem('dd_geocode_cache',JSON.stringify(toSave));}catch(e){}},1000);}
-function getCoords(addr){
-  if(!addr)return null;
-  /* Prefer Google-geocoded coords over hardcoded — they're more accurate */
-  if(_dynamicCoords[addr]&&_dynamicCoords[addr].lat)return _dynamicCoords[addr];
-  /* Fall back to hardcoded while geocoder runs */
-  const hardcoded=COORDS[addr]||null;
-  if(!_dynamicCoords["_pending_"+addr]){
-    _dynamicCoords["_pending_"+addr]=true;
-    const nominatimFallback=(a)=>{fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(a)}&limit=1`,{headers:{"Accept":"application/json"}}).then(r=>r.json()).then(data=>{if(data[0]){_dynamicCoords[a]={lat:parseFloat(data[0].lat),lng:parseFloat(data[0].lon)};_saveGeoCache();if(_geocodeNotify)_geocodeNotify();}}).catch(()=>{});};
-    try{
-    if(window.google?.maps?.Geocoder){
-      const geocoder=new window.google.maps.Geocoder();
-      geocoder.geocode({address:addr},(results,status)=>{
-        if(status==="OK"&&results[0]){
-          const loc=results[0].geometry.location;
-          _dynamicCoords[addr]={lat:loc.lat(),lng:loc.lng()};
+
+/* Normalize an address so variants ("5981 Live Oak Pkwy" vs "5981 Live Oak Parkway, Norcross, GA 30093")
+   map to the same cache key. Strips punctuation, expands abbreviations, removes suite/building/zip. */
+function _normalizeAddr(addr){
+  if(!addr||typeof addr!=="string")return "";
+  let s=addr.toLowerCase().trim();
+  /* Expand common abbreviations to canonical forms */
+  /* Expand street-type abbreviations first (longer patterns before shorter) */
+  s=s.replace(/\bparkway\b/g,"parkway")
+     .replace(/\bpkwy\b/g,"parkway")
+     .replace(/\bstreet\b/g,"street")
+     .replace(/\bdrive\b/g,"drive")
+     .replace(/\bdr\b/g,"drive")
+     .replace(/\bboulevard\b/g,"boulevard")
+     .replace(/\bblvd\b/g,"boulevard")
+     .replace(/\bavenue\b/g,"avenue")
+     .replace(/\bave\b/g,"avenue")
+     .replace(/\broad\b/g,"road")
+     .replace(/\brd\b/g,"road")
+     .replace(/\bhighway\b/g,"highway")
+     .replace(/\bhwy\b/g,"highway")
+     .replace(/\bcourt\b/g,"court")
+     .replace(/\bct\b/g,"court")
+     .replace(/\blane\b/g,"lane")
+     .replace(/\bln\b/g,"lane")
+     .replace(/\bcircle\b/g,"circle")
+     .replace(/\bcir\b/g,"circle")
+     .replace(/\bplace\b/g,"place")
+     .replace(/\bpl\b/g,"place")
+     .replace(/\bway\b/g,"way")
+     .replace(/\bstreet\b/g,"street")
+     .replace(/\bst\b/g,"street")
+     .replace(/\bterrace\b/g,"terrace")
+     .replace(/\bter\b/g,"terrace");
+  /* Expand directional abbreviations (after street types so 'st' isn't mistaken) */
+  s=s.replace(/\bnortheast\b/g,"northeast")
+     .replace(/\bne\b/g,"northeast")
+     .replace(/\bnorthwest\b/g,"northwest")
+     .replace(/\bnw\b/g,"northwest")
+     .replace(/\bsoutheast\b/g,"southeast")
+     .replace(/\bse\b/g,"southeast")
+     .replace(/\bsouthwest\b/g,"southwest")
+     .replace(/\bsw\b/g,"southwest")
+     .replace(/\bnorth\b/g,"north")
+     .replace(/\bn\b/g,"north")
+     .replace(/\bsouth\b/g,"south")
+     .replace(/\bs\b/g,"south")
+     .replace(/\beast\b/g,"east")
+     .replace(/\be\b/g,"east")
+     .replace(/\bwest\b/g,"west")
+     .replace(/\bw\b/g,"west");
+  /* Strip suite/building/unit/# (these vary but point to same building) */
+  s=s.replace(/\bsuite\s+[\w-]+/g,"")
+     .replace(/\bste\s+[\w-]+/g,"")
+     .replace(/\bbuilding\s+[\w-]+/g,"")
+     .replace(/\bbldg\s+[\w-]+/g,"")
+     .replace(/\bunit\s+[\w-]+/g,"")
+     .replace(/#\s*[\w-]+/g,"");
+  /* Strip zip (5 or 5+4) */
+  s=s.replace(/\b\d{5}(-\d{4})?\b/g,"");
+  /* Strip punctuation, collapse whitespace */
+  s=s.replace(/[.,]/g," ").replace(/\s+/g," ").trim();
+  return s;
+}
+
+/* Kick off a Google geocode for an address. Caches result under normalized key.
+   Only caches HIGH-CONFIDENCE results (ROOFTOP, RANGE_INTERPOLATED, GEOMETRIC_CENTER).
+   APPROXIMATE results (city centroids) are rejected because they produce wrong pins. */
+function _kickoffGeocode(addr){
+  if(!addr||typeof addr!=="string")return;
+  const nk=_normalizeAddr(addr);
+  if(!nk)return;
+  if(_dynamicCoords["_pending_"+nk])return;
+  _dynamicCoords["_pending_"+nk]=true;
+  /* Append ", USA" if missing so Google doesn't misinterpret US addresses as foreign */
+  const query=/\busa\b|\bunited states\b/i.test(addr)?addr:addr+", USA";
+  const finish=()=>{delete _dynamicCoords["_pending_"+nk];};
+  const nominatimFallback=()=>{
+    fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1&countrycodes=us`,{headers:{"Accept":"application/json"}})
+      .then(r=>r.json())
+      .then(data=>{
+        if(data[0]){
+          _dynamicCoords[nk]={lat:parseFloat(data[0].lat),lng:parseFloat(data[0].lon),type:"NOMINATIM",at:Date.now()};
           _saveGeoCache();
           if(_geocodeNotify)_geocodeNotify();
-        }else{nominatimFallback(addr);}
+        }
+        finish();
+      })
+      .catch(()=>{finish();});
+  };
+  try{
+    if(window.google?.maps?.Geocoder){
+      const geocoder=new window.google.maps.Geocoder();
+      geocoder.geocode({address:query,componentRestrictions:{country:"US"}},(results,status)=>{
+        if(status==="OK"&&results&&results[0]){
+          const r=results[0];
+          const loc=r.geometry.location;
+          const lt=r.geometry.location_type;
+          /* APPROXIMATE = city centroid, often wrong. Still cache it so the pin shows
+             somewhere, but flag low-confidence so UI can warn the user. */
+          if(lt==="APPROXIMATE"){
+            console.warn("[Geocode] Low-confidence (APPROXIMATE) result for:",addr,"— address needs street-level detail to be accurate");
+            _dynamicCoords[nk]={lat:loc.lat(),lng:loc.lng(),type:"APPROXIMATE",lowConfidence:true,at:Date.now(),formatted:r.formatted_address};
+            _saveGeoCache();
+            if(_geocodeNotify)_geocodeNotify();
+            finish();
+            return;
+          }
+          _dynamicCoords[nk]={lat:loc.lat(),lng:loc.lng(),type:lt,at:Date.now(),formatted:r.formatted_address};
+          _saveGeoCache();
+          if(_geocodeNotify)_geocodeNotify();
+          finish();
+        }else{
+          nominatimFallback();
+        }
       });
-    }else{nominatimFallback(addr);}
-    }catch(e){nominatimFallback(addr);}
+    }else{
+      nominatimFallback();
+    }
+  }catch(e){
+    nominatimFallback();
   }
-  return hardcoded; /* show hardcoded position while geocoder resolves, then swap to accurate on next render */
+}
+
+/* Force re-geocode for an address — clears cache entry and re-queries Google.
+   Exposed globally so info window buttons can call it. */
+function _refreshCoords(addr){
+  if(!addr)return;
+  const nk=_normalizeAddr(addr);
+  delete _dynamicCoords[nk];
+  delete _dynamicCoords["_pending_"+nk];
+  /* Also clear any legacy exact-match entries */
+  delete _dynamicCoords[addr];
+  _saveGeoCache();
+  _kickoffGeocode(addr);
+}
+if(typeof window!=="undefined"){window._ddRefreshCoords=_refreshCoords;}
+
+function getCoords(addr){
+  if(!addr||typeof addr!=="string")return null;
+  const nk=_normalizeAddr(addr);
+  /* 1st: Google cache by normalized key (source of truth) */
+  if(nk&&_dynamicCoords[nk]&&_dynamicCoords[nk].lat)return _dynamicCoords[nk];
+  /* 2nd: Legacy cache by original key (backward compat for existing cached entries) */
+  if(_dynamicCoords[addr]&&_dynamicCoords[addr].lat)return _dynamicCoords[addr];
+  /* 3rd: Kick off Google geocoding (async). Will trigger a re-render when complete. */
+  _kickoffGeocode(addr);
+  /* 4th: While waiting for Google, return the hardcoded COORDS as a provisional display
+     so pins show up immediately. Google result will replace this on the next render. */
+  if(COORDS[addr])return COORDS[addr];
+  return null;
 }
 
 function RouteBuilder({entries,drivers,onAssign,onAssignBulk,onReorder,onBack,getDriverCapacity:getDrvCap,driverLocs}){
@@ -1792,7 +1937,7 @@ if(ids.includes(entryId))return ids.indexOf(entryId)+1;
 }
 return null;
 };
-const allCoords=stopsWithCoords.map(s=>s.coords);
+const allCoords=stopsWithCoords.map(s=>s.coords).filter(c=>c&&typeof c.lat==="number"&&typeof c.lng==="number"&&isFinite(c.lat)&&isFinite(c.lng));
 const minLat=allCoords.length?Math.min(...allCoords.map(c=>c.lat))-0.02:33.9;
 const maxLat=allCoords.length?Math.max(...allCoords.map(c=>c.lat))+0.02:34.0;
 const minLng=allCoords.length?Math.min(...allCoords.map(c=>c.lng))-0.02:-84.3;
@@ -2053,6 +2198,45 @@ const DEFAULT_DRIVERS=[{id:1,name:"Trevor Seyers",phone:"404-394-9891"},{id:2,na
 function lsGet(key,fallback){try{const v=localStorage.getItem(key);if(v){const parsed=JSON.parse(v);return parsed;}return fallback;}catch{return fallback;}}
 function lsSet(key,val){try{localStorage.setItem(key,JSON.stringify(val));}catch{}}
 
+/* Defensive sanitizer — coerces every field on a delivery entry to a safe type so
+   bad Firestore data (undefined, wrong types, objects where strings expected)
+   can never crash render code that calls .split/.includes/.toFixed/etc. */
+function sanitizeEntry(e){
+  if(!e||typeof e!=="object")return null;
+  const safeStr=v=>typeof v==="string"?v:(v==null?"":String(v));
+  const safeNum=v=>typeof v==="number"&&isFinite(v)?v:(parseFloat(v)||0);
+  const safeStrOrNull=v=>typeof v==="string"?v:null;
+  return{
+    ...e,
+    id:e.id,
+    stop:safeStr(e.stop),
+    customer:safeStr(e.customer),
+    addr:safeStr(e.addr),
+    note:safeStrOrNull(e.note),
+    instructions:safeStrOrNull(e.instructions),
+    shipPlan:safeStrOrNull(e.shipPlan),
+    dueBy:safeStrOrNull(e.dueBy),
+    pickupDueBy:safeStrOrNull(e.pickupDueBy),
+    pickupFrom:safeStrOrNull(e.pickupFrom),
+    eta:safeStrOrNull(e.eta),
+    etaDest:safeStrOrNull(e.etaDest),
+    stopType:safeStr(e.stopType),
+    status:safeStr(e.status),
+    driverId:safeNum(e.driverId),
+    baseRate:safeNum(e.baseRate),
+    liftgateFee:safeNum(e.liftgateFee),
+    fuelPct:safeNum(e.fuelPct),
+    weight:safeNum(e.weight),
+    loadNum:e.loadNum==null?undefined:safeNum(e.loadNum),
+    etaSetAt:e.etaSetAt==null?undefined:safeNum(e.etaSetAt),
+    isHourly:!!e.isHourly,
+    priority:!!e.priority,
+    liftgateApplied:!!e.liftgateApplied,
+    knownLiftgate:!!e.knownLiftgate,
+    wasSplit:!!e.wasSplit,
+  };
+}
+
 function DispatchApp(){
 const isDesktop=useIsDesktop();
 const[wo,setWo]=useState(0);
@@ -2140,8 +2324,15 @@ const[emH,setEmH]=useState(()=>lsGet(LS_EMH,{}));
 const[toast,setToast]=useState(null);
 const[drivers,setDrivers]=useState(()=>{
 let d=lsGet(LS_DRIVERS,DEFAULT_DRIVERS);
+if(!Array.isArray(d))d=DEFAULT_DRIVERS;
+d=d.filter(drv=>drv&&typeof drv==="object"&&drv.id!=null).map(drv=>({
+  ...drv,
+  id:typeof drv.id==="number"?drv.id:(parseInt(drv.id)||0),
+  name:typeof drv.name==="string"?drv.name:String(drv.name||"Unknown"),
+  phone:typeof drv.phone==="string"?drv.phone:"",
+}));
 const seen=new Set();const deduped=[];
-d.forEach(drv=>{const key=drv.name.toLowerCase().trim();if(!seen.has(key)){seen.add(key);deduped.push(drv);}});
+d.forEach(drv=>{const key=(drv.name||"").toLowerCase().trim();if(!seen.has(key)){seen.add(key);deduped.push(drv);}});
 const merged=deduped.map(drv=>{const def=DEFAULT_DRIVERS.find(dd=>dd.id===drv.id||dd.name===drv.name);if(def&&!drv.phone&&def.phone)return{...drv,phone:def.phone};return drv;});
 return merged;
 });
@@ -2192,21 +2383,8 @@ return stored;
 const[mapActiveDrv,setMapActiveDrv]=useState(null); /* driver selected for click-to-assign on Live Routes map */
 const[mapActiveLoad,setMapActiveLoad]=useState(1); /* which load number for click-to-assign */
 const[driverLocs,setDriverLocs]=useState({}); /* {driverId: {lat,lng,updatedAt}} */
-const[gpsEnabled,setGpsEnabled]=useState(()=>{
-  try{
-    const s=localStorage.getItem("gpsEnabled_v2"); /* v2 — clean slate, ignores old hardcoded {1:true,2:true,3:true,4:true} */
-    return s?JSON.parse(s):{};
-  }catch{return {};}
-}); /* per-driver Motive GPS toggle — empty = all off until user picks */
-const toggleGps=(driverId)=>setGpsEnabled(prev=>{
-  const next={...prev};
-  if(next[driverId]===true){delete next[driverId];} /* OFF = remove key entirely */
-  else{next[driverId]=true;} /* ON = set to true */
-  try{localStorage.setItem("gpsEnabled_v2",JSON.stringify(next));}catch{}
-  return next;
-});
-const[gpsSearchTerm,setGpsSearchTerm]=useState(""); /* search/filter for GPS panel */
-const[gpsShowAll,setGpsShowAll]=useState(false); /* expand to show all drivers */
+const[gpsEnabled,setGpsEnabled]=useState(()=>{try{const s=localStorage.getItem("gpsEnabled");return s?JSON.parse(s):{1:true,2:true,3:true,4:true};}catch{return{1:true,2:true,3:true,4:true};}}); /* per-driver Motive GPS toggle */
+const toggleGps=(driverId)=>setGpsEnabled(prev=>{const next={...prev,[driverId]:!prev[driverId]};try{localStorage.setItem("gpsEnabled",JSON.stringify(next));}catch{}return next;});
 const[invoices,setInvoices]=useState([]);
 const[showInvoice,setShowInvoice]=useState(null); /* customer name to generate invoice for */
 
@@ -2221,6 +2399,7 @@ const[rpInited,setRpInited]=useState(false);
 const[rpOptMenu,setRpOptMenu]=useState(null); /* driverId when open */
 const[rpFillMenu,setRpFillMenu]=useState(false); /* auto fill driver picker */
 const[rpFillDrivers,setRpFillDrivers]=useState(null); /* null = all drivers, or array of ids */
+const[rpReassignFor,setRpReassignFor]=useState(null); /* {entryId, fromDrvId} when reassign menu open */
 const[customDelName,setCustomDelName]=useState("");
 const[customDelAddr,setCustomDelAddr]=useState("");
 const[customDelRate,setCustomDelRate]=useState("");
@@ -2228,6 +2407,8 @@ const[customDelNote,setCustomDelNote]=useState("");
 const[customDelPermanent,setCustomDelPermanent]=useState(true);
 const[customDelMiles,setCustomDelMiles]=useState("");
 const[customDelLiftgate,setCustomDelLiftgate]=useState(false);
+const[customDelGravel,setCustomDelGravel]=useState(false);
+const[customDelExtraPallets,setCustomDelExtraPallets]=useState(false);
 const[customDelCalcLoading,setCustomDelCalcLoading]=useState(false);
 const[oneOffCust,setOneOffCust]=useState("");
 const[notifyDriver,setNotifyDriver]=useState(null); /* driver id for notify modal */
@@ -2252,12 +2433,51 @@ const[histWeekRange,setHistWeekRange]=useState(4);
 const[histMode,setHistMode]=useState("deliveries"); /* deliveries | photos | emser */
 const[lightboxPhoto,setLightboxPhoto]=useState(null);
 const[histDetail,setHistDetail]=useState(null); /* selected history entry for POD detail */
-const[emserShifts,setEmserShifts]=useState(()=>lsGet("dd_emser_shifts",{})); /* {dayKey: [{id,driverId,start,end},...]} */
+const[emserShifts,setEmserShifts]=useState(()=>{
+  const raw=lsGet("dd_emser_shifts",{});
+  const clean={};
+  Object.entries(raw||{}).forEach(([k,v])=>{
+    if(!Array.isArray(v))return;
+    clean[k]=v.filter(s=>s&&typeof s==="object").map(s=>({
+      id:s.id,
+      driverId:typeof s.driverId==="number"?s.driverId:(parseInt(s.driverId)||0),
+      start:typeof s.start==="string"?s.start:"",
+      end:typeof s.end==="string"?s.end:"",
+    }));
+  });
+  return clean;
+}); /* {dayKey: [{id,driverId,start,end},...]} */
 const[dispNotes,setDispNotes]=useState(()=>lsGet(LS_DISP_NOTES,{}));
 const[editingNote,setEditingNote]=useState(false);
 const[noteText,setNoteText]=useState("");
 
-const[savedQuotes,setSavedQuotes]=useState(()=>{const v=lsGet("dd_quotes",[]);return Array.isArray(v)?v:Object.values(v);});
+const[savedQuotes,setSavedQuotes]=useState(()=>{
+  const v=lsGet("dd_quotes",[]);
+  const arr=Array.isArray(v)?v:Object.values(v||{});
+  const safeStr=x=>typeof x==="string"?x:(x==null?"":String(x));
+  const safeStrOrNull=x=>typeof x==="string"?x:null;
+  const safeNum=x=>typeof x==="number"&&isFinite(x)?x:(parseFloat(x)||0);
+  return arr.filter(q=>q&&typeof q==="object").map(q=>({
+    ...q,
+    id:q.id,
+    num:safeNum(q.num),
+    customer:safeStr(q.customer),
+    stop:safeStr(q.stop),
+    addr:safeStr(q.addr),
+    rate:safeNum(q.rate),
+    miles:q.miles==null?null:safeNum(q.miles),
+    note:safeStrOrNull(q.note),
+    pickup:safeStrOrNull(q.pickup),
+    pickupName:safeStrOrNull(q.pickupName),
+    pickupAddr:safeStrOrNull(q.pickupAddr),
+    status:safeStr(q.status)||"pending",
+    createdAt:safeStrOrNull(q.createdAt),
+    liftgate:!!q.liftgate,
+    gravel:!!q.gravel,
+    extraPallets:!!q.extraPallets,
+    aiGenerated:!!q.aiGenerated,
+  }));
+});
 const[quoteFormOpen,setQuoteFormOpen]=useState(false);
 const[quoteTab,setQuoteTab]=useState("current"); /* current | past */
 const[aiQuoteInput,setAiQuoteInput]=useState("");
@@ -2366,7 +2586,13 @@ useEffect(()=>{
     if(fbDrivers&&fbDrivers.length>0){
       console.log("[Drivers] Accepting FB update:",fbDrivers.length,"drivers");
       driverChangeSource.current="firebase";
-      setDrivers(fbDrivers);
+      const clean=fbDrivers.filter(drv=>drv&&typeof drv==="object"&&drv.id!=null).map(drv=>({
+        ...drv,
+        id:typeof drv.id==="number"?drv.id:(parseInt(drv.id)||0),
+        name:typeof drv.name==="string"?drv.name:String(drv.name||"Unknown"),
+        phone:typeof drv.phone==="string"?drv.phone:"",
+      }));
+      setDrivers(clean);
     }
   });
   const unsubEmser=subscribeEmserHours((fbEmH)=>{
@@ -2403,7 +2629,13 @@ useEffect(()=>{
     setEmserShifts(prev=>{
       const merged={...prev};
       let changed=false;
-      Object.entries(fbShifts).forEach(([k,v])=>{
+      Object.entries(fbShifts).forEach(([k,rawV])=>{
+        const v=Array.isArray(rawV)?rawV.filter(s=>s&&typeof s==="object").map(s=>({
+          id:s.id,
+          driverId:typeof s.driverId==="number"?s.driverId:(parseInt(s.driverId)||0),
+          start:typeof s.start==="string"?s.start:"",
+          end:typeof s.end==="string"?s.end:"",
+        })):[];
         const fbJson=JSON.stringify(v);
         const localJson=JSON.stringify(prev[k]||[]);
         if(pendingSaveKeys.current.has(k)){
@@ -2423,25 +2655,34 @@ useEffect(()=>{
       return changed?merged:prev;
     });
   });
-  const unsubQuotes=subscribeQuotes((fbQuotes)=>{setSavedQuotes(fbQuotes);});
-  const unsubLocs=subscribeDriverLocations((fbLocs)=>{
-    /* Merge cell GPS from Firebase WITHOUT overwriting Motive GPS data */
-    setDriverLocs(prev=>{
-      const merged={...prev};
-      Object.entries(fbLocs).forEach(([id,loc])=>{
-        const existing=merged[id];
-        /* Only use cell GPS if we don't already have fresher Motive data for this driver */
-        if(!existing||existing.source!=="motive"){
-          merged[id]={...loc,source:"cell"};
-        }else if(existing.source==="motive"&&existing.updatedAt){
-          /* If Motive data is older than 5 min, allow cell GPS to fill in */
-          const motiveAge=typeof existing.updatedAt==="string"?Date.now()-new Date(existing.updatedAt).getTime():Date.now()-existing.updatedAt;
-          if(motiveAge>300000)merged[id]={...loc,source:"cell"};
-        }
-      });
-      return merged;
-    });
+  const unsubQuotes=subscribeQuotes((fbQuotes)=>{
+    const arr=Array.isArray(fbQuotes)?fbQuotes:Object.values(fbQuotes||{});
+    const safeStr=v=>typeof v==="string"?v:(v==null?"":String(v));
+    const safeStrOrNull=v=>typeof v==="string"?v:null;
+    const safeNum=v=>typeof v==="number"&&isFinite(v)?v:(parseFloat(v)||0);
+    const clean=arr.filter(q=>q&&typeof q==="object").map(q=>({
+      ...q,
+      id:q.id,
+      num:safeNum(q.num),
+      customer:safeStr(q.customer),
+      stop:safeStr(q.stop),
+      addr:safeStr(q.addr),
+      rate:safeNum(q.rate),
+      miles:q.miles==null?null:safeNum(q.miles),
+      note:safeStrOrNull(q.note),
+      pickup:safeStrOrNull(q.pickup),
+      pickupName:safeStrOrNull(q.pickupName),
+      pickupAddr:safeStrOrNull(q.pickupAddr),
+      status:safeStr(q.status)||"pending",
+      createdAt:safeStrOrNull(q.createdAt),
+      liftgate:!!q.liftgate,
+      gravel:!!q.gravel,
+      extraPallets:!!q.extraPallets,
+      aiGenerated:!!q.aiGenerated,
+    }));
+    setSavedQuotes(clean);
   });
+  const unsubLocs=subscribeDriverLocations((locs)=>{setDriverLocs(locs);});
   const unsubInv=subscribeInvoices((inv)=>{setInvoices(inv);});
   const unsubCustomStops=subscribeCustomStops((data)=>{
     setCustomStops(prev=>{
@@ -2497,23 +2738,8 @@ useEffect(()=>{
 useEffect(()=>{
   const matchDriver=(motiveDriver)=>{
     if(!motiveDriver||!motiveDriver.name)return null;
-    const mName=motiveDriver.name.toLowerCase().trim();
-    const mParts=mName.split(/\s+/);
-    /* Priority 1: full name match (both first and last) */
-    const fullMatch=drivers.find(d=>{
-      const dParts=d.name.toLowerCase().split(/\s+/);
-      const dFirst=dParts[0]||"";const dLast=dParts[1]||"";
-      if(!dFirst||!dLast)return false;
-      return(mName.includes(dFirst)&&mName.includes(dLast));
-    });
-    if(fullMatch)return fullMatch;
-    /* Priority 2: last name match (more unique than first) */
-    const lastMatches=drivers.filter(d=>{const ln=d.name.split(/\s+/)[1]?.toLowerCase();return ln&&ln.length>2&&mParts.some(p=>p===ln);});
-    if(lastMatches.length===1)return lastMatches[0];
-    /* Priority 3: first name match (only if unique) */
-    const firstMatches=drivers.filter(d=>{const fn=d.name.split(/\s+/)[0]?.toLowerCase();return fn&&fn.length>2&&mParts.some(p=>p===fn);});
-    if(firstMatches.length===1)return firstMatches[0];
-    return null;
+    const mName=motiveDriver.name.toLowerCase();
+    return drivers.find(d=>mName.includes(d.name.split(" ")[1]?.toLowerCase())||mName.includes(d.name.split(" ")[0]?.toLowerCase()));
   };
   const poll=async()=>{
     try{
@@ -2522,20 +2748,14 @@ useEffect(()=>{
       const data=await r.json();
       if(!data.vehicles)return;
       const locs={};
-      let matched=0,skipped=0,unmatched=0;
       data.vehicles.forEach(v=>{
         if(!v.lat||!v.lng)return;
         const drv=matchDriver(v.driver);
         if(drv){
-          if(gpsEnabled[drv.id]!==true){skipped++;return;} /* only track explicitly enabled drivers */
-          matched++;
+          if(gpsEnabled[drv.id]===false)return;
           locs[drv.id]={lat:v.lat,lng:v.lng,speed:v.speed,bearing:v.bearing,state:v.state,truck:v.number,city:v.city,locState:v.locState,updatedAt:v.locatedAt||data.fetchedAt,source:"motive"};
-        }else{
-          unmatched++;
-          if(v.driver?.name)console.log("[MOTIVE] No app driver match for:",v.driver.name,"| Truck#:",v.number);
         }
       });
-      console.log(`[MOTIVE] Poll: ${data.vehicles.length} vehicles, ${matched} tracked, ${skipped} enabled but skipped, ${unmatched} no match`);
       if(Object.keys(locs).length>0)setDriverLocs(prev=>({...prev,...locs}));
     }catch(e){console.warn("[MOTIVE] Poll failed:",e.message);}
   };
@@ -2550,7 +2770,7 @@ useEffect(()=>{
       let changed=false;
       Object.entries(fbData).forEach(([fbKey,payload])=>{
         const dayIdx=payload.dayIdx;
-        const entries=(payload.entries||[]).map(e=>{
+        const entries=(payload.entries||[]).map(sanitizeEntry).filter(Boolean).map(e=>{
           if(e.customer&&!e.isHourly&&e.stopType!=="pickup"){
             const cd=CUSTOMERS[e.customer];
             if(cd?.deliveries){
@@ -2814,7 +3034,7 @@ const data=await r.json();
 const text=data.content?.[0]?.text||data.text||"";
 const clean=text.replace(/```json|```/g,"").trim();
 const parsed=JSON.parse(clean);
-const q={id:Date.now()+Math.random(),num:savedQuotes.length+1,customer:parsed.customer||"One-Off Delivery",stop:parsed.stop||"",addr:parsed.addr||"",rate:parseFloat(parsed.rate)||0,miles:parseFloat(parsed.miles)||null,liftgate:!!parsed.liftgate,gravel:!!parsed.gravel,extraPallets:!!parsed.extraPallets,note:parsed.note||(parsed.breakdown||""),pickup:null,calc:null,createdAt:new Date().toISOString(),status:"pending",aiGenerated:true};
+const q={id:Date.now()+Math.random(),num:savedQuotes.length+1,customer:parsed.customer||"One-Off Delivery",stop:parsed.stop||"",addr:parsed.addr||"",rate:parseFloat(parsed.rate)||0,miles:parsed.miles||null,liftgate:parsed.liftgate||false,gravel:parsed.gravel||false,extraPallets:parsed.extraPallets||false,note:parsed.note||(parsed.breakdown||"")||(typeof parsed.rate==="string"?parsed.rate:""),pickup:null,calc:null,createdAt:new Date().toISOString(),status:"pending",aiGenerated:true};
 setSavedQuotes(p=>[q,...p]);
 saveQuoteToFB(q).catch(e=>console.error("Quote save:",e));
 showToast("AI Quote #"+q.num+" created: "+fmt(q.rate));
@@ -3110,7 +3330,7 @@ const getMaxLoad=(drvId)=>{const loads=getDriverLoads(drvId);return loads.length
 const weightPct=(w,cap)=>Math.min((w/(cap||TRUCK_LIMITS.default))*100,100);
 const weightColor=(w,cap)=>w>(cap||TRUCK_LIMITS.default)?"#dc2626":w>(cap||TRUCK_LIMITS.default)*0.85?"#d97706":"#16a34a";
 const parseTime=(str)=>{
-  if(!str)return null;
+  if(!str||typeof str!=="string")return null;
   const m24=str.match(/^(\d{1,2}):(\d{2})$/);
   if(m24)return parseInt(m24[1])*60+parseInt(m24[2]);
   const m12=str.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
@@ -3128,9 +3348,10 @@ const getShiftSummary=(dayKey)=>{
   const shifts=emserShifts[dayKey]||[];
   const byDriver={};
   let totalMins=0;
+  const knownDriverIds=new Set(drivers.map(d=>d.id));
   shifts.forEach(s=>{
     const m=calcShiftMins(s);
-    if(m>0){byDriver[s.driverId]=(byDriver[s.driverId]||0)+m;totalMins+=m;}
+    if(m>0&&knownDriverIds.has(s.driverId)){byDriver[s.driverId]=(byDriver[s.driverId]||0)+m;totalMins+=m;}
   });
   return{byDriver,totalMins};
 };
@@ -3973,6 +4194,7 @@ setRpDragSrc(null);setRpDragOver(null);};
 
 const rpAddUA=(eid,did)=>{setRpOrders(p=>({...p,[did]:[...(p[did]||[]),eid]}));};
 const rpRemove=(eid,did)=>{setRpOrders(p=>({...p,[did]:(p[did]||[]).filter(x=>x!==eid)}));};
+const rpReassign=(eid,fromDid,toDid)=>{if(fromDid===toDid){setRpReassignFor(null);return;}setRpOrders(p=>{const next={...p};next[fromDid]=(next[fromDid]||[]).filter(x=>x!==eid);next[toDid]=[...(next[toDid]||[]),eid];return next;});setRpReassignFor(null);showToast("Moved to "+(drivers.find(d=>d.id===toDid)?.name.split(" ")[0]||"driver"));};
 const rpFill=()=>{if(!rpUnassigned.length)return;const nw={...rpOrders};
 const activeDrivers=rpFillDrivers&&rpFillDrivers.length?drivers.filter(d=>rpFillDrivers.includes(d.id)):drivers;
 if(!activeDrivers.length){showToast("No drivers selected");return;}
@@ -4115,8 +4337,8 @@ style={{background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:8,padding:"
 {ids.map((id,oi)=>{const e=rpE(id);if(!e)return null;const c=CC[e.customer]||CC["One-Off Delivery"];const isPU=e.stopType==="pickup";
 const isDSrc=rpDragSrc?.drvId===drv.id&&rpDragSrc?.idx===oi;const isDOvr=rpDragOver?.drvId===drv.id&&rpDragOver?.idx===oi;
 return(<div key={id} draggable onDragStart={()=>setRpDragSrc({drvId:drv.id,idx:oi})} onDragOver={ev=>{ev.preventDefault();setRpDragOver({drvId:drv.id,idx:oi});}} onDrop={()=>rpDr(drv.id,oi)}
-style={{display:"flex",alignItems:"center",gap:6,padding:"6px 8px",marginBottom:2,borderRadius:9,background:isDOvr?"#dcfce7":isDSrc?"#fef9c3":"#fff",border:isDOvr?"2px dashed #16a34a":`1px solid ${isPU?"#bfdbfe":"#f5f5f4"}`,opacity:isDSrc?0.35:1,cursor:"grab",transition:"all 0.1s"}}>
-<div style={{width:22,height:22,borderRadius:7,background:`linear-gradient(135deg, ${DCOL[di]}, ${DCOL[di]}bb)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,color:"#fff",fontWeight:800,flexShrink:0}}>{oi+1}</div>
+style={{display:"flex",alignItems:"center",gap:6,padding:"6px 8px",marginBottom:2,borderRadius:9,background:isDOvr?"#dcfce7":isDSrc?"#fef9c3":"#fff",border:isDOvr?"2px dashed #16a34a":`1px solid ${isPU?"#bfdbfe":"#f5f5f4"}`,opacity:isDSrc?0.35:1,cursor:"grab",transition:"all 0.1s",position:"relative"}}>
+<div onClick={ev=>{ev.stopPropagation();setRpReassignFor(rpReassignFor?.entryId===id?null:{entryId:id,fromDrvId:drv.id});}} style={{width:22,height:22,borderRadius:7,background:`linear-gradient(135deg, ${DCOL[di]}, ${DCOL[di]}bb)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,color:"#fff",fontWeight:800,flexShrink:0,cursor:"pointer"}}>{oi+1}</div>
 <div style={{width:3,height:20,borderRadius:2,background:isPU?"#2563eb":c.accent,flexShrink:0}}/>
 <div style={_s.f1m}>
 <div style={{fontSize:11,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.stop}</div>
@@ -4129,7 +4351,18 @@ style={{display:"flex",alignItems:"center",gap:6,padding:"6px 8px",marginBottom:
 {e.weight>0&&<span style={{fontSize:8,color:BRAND.main,fontWeight:700}}>{e.weight.toLocaleString()}lb</span>}
 </div>
 </div>
+<button onClick={ev=>{ev.stopPropagation();setRpReassignFor(rpReassignFor?.entryId===id?null:{entryId:id,fromDrvId:drv.id});}} title="Reassign to another driver" style={{background:"#f5f5f4",border:"1px solid #e7e5e4",color:"#78716c",fontSize:10,cursor:"pointer",padding:"3px 7px",flexShrink:0,borderRadius:6,fontWeight:700}}>⇄</button>
 <button onClick={ev=>{ev.stopPropagation();rpRemove(id,drv.id);}} style={{background:"none",border:"none",color:"#dc2626",fontSize:10,cursor:"pointer",padding:"2px 4px",flexShrink:0,opacity:0.4}}>✕</button>
+{rpReassignFor?.entryId===id&&<div onClick={ev=>ev.stopPropagation()} style={{position:"absolute",top:"100%",right:8,marginTop:4,background:"#1c1917",border:"1px solid rgba(255,255,255,0.15)",borderRadius:10,padding:8,minWidth:180,zIndex:200,boxShadow:"0 8px 24px rgba(0,0,0,0.4)"}}>
+<div style={{fontSize:9,fontWeight:700,color:"#fbbf24",marginBottom:6,textTransform:"uppercase",letterSpacing:"0.05em"}}>Move to driver</div>
+{drivers.filter(d2=>d2.id!==drv.id).map((d2,di2)=>{const realDi=drivers.findIndex(dr=>dr.id===d2.id);return(
+<button key={d2.id} onClick={()=>rpReassign(id,drv.id,d2.id)} style={{display:"flex",alignItems:"center",gap:8,width:"100%",padding:"7px 8px",marginBottom:3,background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:6,cursor:"pointer",color:"#fff",fontSize:11,fontWeight:600,textAlign:"left"}}>
+<div style={{width:18,height:18,borderRadius:5,background:DCOL[realDi]||"#78716c",display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,color:"#fff",fontWeight:800}}>{d2.name.split(" ").map(n=>n[0]).join("")}</div>
+{d2.name}<span style={{marginLeft:"auto",fontSize:9,color:"#a8a29e"}}>{(rpOrders[d2.id]||[]).length}</span>
+</button>);})}
+<button onClick={()=>{rpRemove(id,drv.id);setRpReassignFor(null);}} style={{display:"flex",alignItems:"center",gap:8,width:"100%",padding:"7px 8px",marginTop:4,background:"rgba(217,119,6,0.15)",border:"1px solid rgba(217,119,6,0.3)",borderRadius:6,cursor:"pointer",color:"#fbbf24",fontSize:11,fontWeight:600,textAlign:"left"}}>⬇ Move to Unassigned Pool</button>
+<button onClick={()=>setRpReassignFor(null)} style={{width:"100%",marginTop:4,background:"transparent",color:"#a8a29e",border:"1px solid rgba(255,255,255,0.15)",borderRadius:6,padding:"5px",cursor:"pointer",fontSize:9,fontWeight:600}}>Cancel</button>
+</div>}
 </div>);})}
 </div>}
 
@@ -4554,6 +4787,14 @@ return(
 </div>
 </div>);})}
 </div>);})}
+{(()=>{const knownIds=new Set(drivers.map(d=>d.id));const orphans=shifts.filter(s=>!knownIds.has(s.driverId));if(!orphans.length)return null;return(<div style={{background:"#fef2f2",border:"2px solid #fca5a5",borderRadius:12,padding:"12px 14px",marginTop:12}}>
+<div style={{fontSize:13,fontWeight:700,color:"#991b1b",marginBottom:6}}>⚠ Orphan Shifts ({orphans.length})</div>
+<div style={{fontSize:11,color:"#991b1b",marginBottom:8}}>These shifts belong to a driver that no longer exists. They inflate the day total. Delete them to fix the hours.</div>
+{orphans.map(s=>{const m=calcShiftMins(s);return(<div key={s.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",background:"#fff",border:"1px solid #fecaca",borderRadius:8,padding:"6px 10px",marginBottom:4}}>
+<div style={{fontSize:12}}><b>Driver ID {String(s.driverId)}</b> — {s.start||"—"} to {s.end||"—"} {m>0?"("+formatMins(m)+")":""}</div>
+<button onClick={()=>removeEmserShift(s.id)} style={{background:"#dc2626",color:"#fff",border:"none",borderRadius:6,padding:"5px 12px",cursor:"pointer",fontSize:11,fontWeight:700}}>Delete</button>
+</div>);})}
+</div>);})()}
 </div>
 {totalMins>0&&<div style={{marginTop:16,background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:12,padding:"14px 16px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
 <span style={{fontSize:14,fontWeight:700,color:"#16a34a"}}>Total shift time</span>
@@ -4723,13 +4964,13 @@ style={{flex:1,border:"1px solid #d6d3d1",borderRadius:10,padding:"10px 14px",fo
 </div>
 <div style={{fontSize:15,fontWeight:700}}>{q.stop}</div>
 {q.addr&&<div style={{fontSize:11,color:"#78716c",marginTop:1}}>📍 {q.addr}</div>}
-{(q.pickupName||q.pickupAddr)&&<div style={{fontSize:11,color:"#2563eb",marginTop:2,fontWeight:600}}>📦 PU: {q.pickupName||""}{q.pickupAddr?" — "+q.pickupAddr.split(",")[0]:""}</div>}
+{(q.pickupName||q.pickupAddr)&&<div style={{fontSize:11,color:"#2563eb",marginTop:2,fontWeight:600}}>📦 PU: {q.pickupName||""}{q.pickupAddr?" — "+String(q.pickupAddr).split(",")[0]:""}</div>}
 {q.note&&<div style={{fontSize:11,color:"#57534e",marginTop:2}}>{q.note}</div>}
-<div style={{fontSize:10,color:"#a8a29e",marginTop:4}}>{q.createdAt?new Date(q.createdAt).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})+" at "+new Date(q.createdAt).toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"}):""}</div>
+<div style={{fontSize:10,color:"#a8a29e",marginTop:4}}>{q.createdAt&&!isNaN(new Date(q.createdAt))?new Date(q.createdAt).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})+" at "+new Date(q.createdAt).toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"}):"—"}</div>
 </div>
 <div style={{textAlign:"right",marginLeft:14,flexShrink:0}}>
-<div style={{fontSize:20,fontWeight:800,color:accepted?"#16a34a":"#1c1917",fontVariantNumeric:"tabular-nums"}}>{fmt(q.rate||0)}</div>
-{q.calc&&<div style={_s.sub}>{fmt(q.calc?.base||0)}+{fmt(q.calc?.fuel||0)} fuel</div>}
+<div style={{fontSize:20,fontWeight:800,color:accepted?"#16a34a":"#1c1917",fontVariantNumeric:"tabular-nums"}}>{fmt(q.rate)}</div>
+{q.calc&&<div style={_s.sub}>{fmt(q.calc.base)}+{fmt(q.calc.fuel)} fuel</div>}
 {!accepted&&<div style={{display:"flex",flexDirection:"column",gap:4,marginTop:8}}>
 {qPushDay&&qPushDay.quoteId===q.id?<div style={{display:"flex",flexDirection:"column",gap:4}}>
 <input type="date" onChange={e=>{if(e.target.value){
@@ -5181,86 +5422,51 @@ onAssignStop={mapActiveDrv?(stopId,drvId)=>{assignInOrder(stopId,mapActiveDrv,ma
 </div>
 </div>
 
-{(()=>{
-  const enabledDrivers=drivers.filter(d=>gpsEnabled[d.id]===true);
-  const enabledCount=enabledDrivers.length;
-  const searchLower=gpsSearchTerm.toLowerCase().trim();
-  const offDrivers=drivers.filter(d=>gpsEnabled[d.id]!==true);
-  const filteredOff=searchLower?offDrivers.filter(d=>d.name.toLowerCase().includes(searchLower)):offDrivers;
-  const showList=gpsShowAll||searchLower;
-  return(
 <div style={{background:"#f8f7f5",borderRadius:14,border:"1px solid #e7e5e4",padding:"12px 14px",marginTop:12}}>
 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
 <div style={_s.flexC6}>
 <span style={{fontSize:13}}>📡</span>
 <span style={{fontSize:12,fontWeight:700,color:"#1c1917"}}>Motive GPS</span>
-<span style={{fontSize:10,color:"#78716c",fontWeight:500,marginLeft:4}}>{enabledCount} active</span>
 </div>
 <span style={{fontSize:9,color:"#a8a29e",fontWeight:500}}>1 min polling</span>
 </div>
-{/* ENABLED / TRACKED DRIVERS */}
-{enabledDrivers.map((drv,di)=>{
+{drivers.filter(d=>d.id<=3).map((drv,di)=>{
   const loc=driverLocs[drv.id];
-  const on=true;
-  const col=DCOL[di%DCOL.length]||BRAND.main;
+  const on=gpsEnabled[drv.id]!==false;
+  const col=DCOL[di]||BRAND.main;
   const age=loc?.updatedAt?(typeof loc.updatedAt==="string"?Math.round((Date.now()-new Date(loc.updatedAt).getTime())/60000):Math.round((Date.now()-loc.updatedAt)/60000)):null;
-  const ageStr=age===null?"\u2014":age<1?"just now":age<60?age+"m ago":Math.round(age/60)+"h ago";
-  const hasLoc=loc&&loc.lat;
+  const ageStr=age===null?"—":age<1?"just now":age<60?age+"m ago":Math.round(age/60)+"h ago";
+  const hasLoc=on&&loc&&loc.lat;
   return(
-  <div key={drv.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",borderRadius:10,marginBottom:4,background:"#fff",border:"1px solid #e7e5e4",transition:"all 0.2s"}}>
-    <div style={{width:28,height:28,borderRadius:8,background:col,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:"#fff",fontWeight:700,flexShrink:0,transition:"background 0.2s"}}>
+  <div key={drv.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",borderRadius:10,marginBottom:4,background:on?"#fff":"#f5f5f4",border:"1px solid "+(on?"#e7e5e4":"#ebebea"),transition:"all 0.2s"}}>
+    <div style={{width:28,height:28,borderRadius:8,background:on?col:"#d6d3d1",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:"#fff",fontWeight:700,flexShrink:0,transition:"background 0.2s"}}>
       {drv.name.charAt(0)}
     </div>
     <div style={{flex:1,minWidth:0}}>
-      <div style={{fontSize:12,fontWeight:600,color:"#1c1917"}}>{drv.name.split(" ")[0]}</div>
-      {hasLoc?(
+      <div style={{fontSize:12,fontWeight:600,color:on?"#1c1917":"#a8a29e"}}>{drv.name.split(" ")[0]}</div>
+      {on&&hasLoc?(
         <div style={{fontSize:10,color:"#78716c",display:"flex",alignItems:"center",gap:4}}>
           {loc.city?<span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:80}}>{loc.city}{loc.locState?", "+loc.locState:""}</span>:<span>Located</span>}
-          {loc.speed>0&&<span style={{color:"#2563eb",fontWeight:600,flexShrink:0}}>{"\u00b7"} {loc.speed} mph</span>}
+          {loc.speed>0&&<span style={{color:"#2563eb",fontWeight:600,flexShrink:0}}>· {loc.speed} mph</span>}
         </div>
       ):(
-        <div style={{fontSize:10,color:"#a8a29e"}}>No data yet</div>
+        <div style={{fontSize:10,color:"#a8a29e"}}>{on?"No data yet":"GPS off"}</div>
       )}
     </div>
-    {hasLoc&&(
+    {on&&hasLoc&&(
       <div style={{fontSize:9,color:age!==null&&age>30?"#dc2626":"#78716c",background:age!==null&&age>30?"#fef2f2":"#f5f5f4",border:"1px solid "+(age!==null&&age>30?"#fca5a5":"#e7e5e4"),borderRadius:6,padding:"2px 6px",flexShrink:0,fontWeight:age!==null&&age>30?700:400}}>
-        {age!==null&&age>30?"\u26a0 ":""}{ageStr}
+        {age!==null&&age>30?"⚠ ":""}{ageStr}
       </div>
     )}
-    <button onClick={()=>{toggleGps(drv.id);setDriverLocs(prev=>{const n={...prev};delete n[drv.id];return n;});}}
-      style={{flexShrink:0,width:36,height:20,borderRadius:10,border:"none",cursor:"pointer",background:col,position:"relative",transition:"background 0.25s",padding:0}}
-      title={"Disable GPS for "+drv.name}>
-      <span style={{position:"absolute",top:2,left:18,width:16,height:16,borderRadius:8,background:"#fff",boxShadow:"0 1px 4px rgba(0,0,0,0.25)",transition:"left 0.2s",display:"block"}}/>
+    <button onClick={()=>{toggleGps(drv.id);if(on){setDriverLocs(prev=>{const n={...prev};delete n[drv.id];return n;});}}}
+      style={{flexShrink:0,width:36,height:20,borderRadius:10,border:"none",cursor:"pointer",background:on?col:"#d6d3d1",position:"relative",transition:"background 0.25s",padding:0}}
+      title={(on?"Disable":"Enable")+" GPS for "+drv.name}>
+      <span style={{position:"absolute",top:2,left:on?18:2,width:16,height:16,borderRadius:8,background:"#fff",boxShadow:"0 1px 4px rgba(0,0,0,0.25)",transition:"left 0.2s",display:"block"}}/>
     </button>
   </div>
   );
 })}
-{/* ADD TRUCKS SECTION */}
-<div style={{marginTop:8,borderTop:"1px solid #e7e5e4",paddingTop:8}}>
-  <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6}}>
-    <input value={gpsSearchTerm} onChange={e=>setGpsSearchTerm(e.target.value)} placeholder={"Search drivers ("+offDrivers.length+" available)..."} style={{flex:1,border:"1px solid #d6d3d1",borderRadius:8,padding:"6px 10px",fontSize:11,outline:"none",background:"#fff"}}/>
-    <button onClick={()=>{setGpsShowAll(p=>!p);setGpsSearchTerm("");}} style={{background:gpsShowAll?"#2563eb":"#e7e5e4",color:gpsShowAll?"#fff":"#57534e",border:"none",borderRadius:8,padding:"6px 10px",fontSize:10,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap"}}>
-      {gpsShowAll?"Hide":"Show All"}
-    </button>
-  </div>
-  {showList&&filteredOff.length>0&&(
-    <div style={{maxHeight:200,overflowY:"auto",borderRadius:8,border:"1px solid #e7e5e4",background:"#fff"}}>
-      {filteredOff.map(drv=>(
-        <div key={drv.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"6px 10px",borderBottom:"1px solid #f5f5f4",cursor:"pointer",transition:"background 0.15s"}}
-          onClick={()=>{toggleGps(drv.id);setGpsSearchTerm("");}}>
-          <span style={{fontSize:11,color:"#57534e"}}>{drv.name}</span>
-          <span style={{fontSize:9,color:"#2563eb",fontWeight:600}}>+ Track</span>
-        </div>
-      ))}
-    </div>
-  )}
-  {showList&&filteredOff.length===0&&searchLower&&(
-    <div style={{fontSize:10,color:"#a8a29e",textAlign:"center",padding:8}}>No matching drivers</div>
-  )}
 </div>
-</div>
-  );
-})()}
 </div>
 </div>
 
@@ -6275,6 +6481,15 @@ return(
 {drvShifts.length===0&&<div style={{fontSize:12,color:"#a8a29e",padding:"4px 0"}}>No shifts logged — tap + Shift to add</div>}
 </div>);})}
 
+{(()=>{const knownIds=new Set(drivers.map(d=>d.id));const orphans=shifts.filter(s=>!knownIds.has(s.driverId));if(!orphans.length)return null;return(<div style={{background:"#fef2f2",border:"2px solid #fca5a5",borderRadius:14,padding:"12px 14px",marginBottom:10}}>
+<div style={{fontSize:13,fontWeight:700,color:"#991b1b",marginBottom:6}}>⚠ Orphan Shifts ({orphans.length})</div>
+<div style={{fontSize:11,color:"#991b1b",marginBottom:8}}>These shifts belong to a driver that no longer exists. They inflate the day total.</div>
+{orphans.map(s=>{const m=calcShiftMins(s);return(<div key={s.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",background:"#fff",border:"1px solid #fecaca",borderRadius:8,padding:"6px 10px",marginBottom:4}}>
+<div style={{fontSize:11}}><b>Driver ID {s.driverId}</b> — {s.start||"—"} to {s.end||"—"} {m>0?"("+formatMins(m)+")":""}</div>
+<button onClick={()=>removeEmserShift(s.id)} style={{background:"#dc2626",color:"#fff",border:"none",borderRadius:6,padding:"4px 10px",cursor:"pointer",fontSize:10,fontWeight:700}}>Delete</button>
+</div>);})}
+</div>);})()}
+
 {totalMins>0&&<div style={{background:BRAND.pale,border:"2px solid "+BRAND.main,borderRadius:14,padding:"14px 16px",marginTop:8}}>
 <div style={_s.flexBtwMb8}>
 <div>
@@ -6440,13 +6655,13 @@ return(<div>
 <div style={_s.f1}>
 <div style={_s.bold14}>{q.stop}</div>
 {q.addr&&<div style={{fontSize:10,color:"#78716c",marginTop:1}}>📍 {q.addr}</div>}
-{(q.pickupName||q.pickupAddr)&&<div style={{fontSize:10,color:"#2563eb",marginTop:1,fontWeight:600}}>📦 PU: {q.pickupName||""}{q.pickupAddr?" — "+q.pickupAddr.split(",")[0]:""}</div>}
+{(q.pickupName||q.pickupAddr)&&<div style={{fontSize:10,color:"#2563eb",marginTop:1,fontWeight:600}}>📦 PU: {q.pickupName||""}{q.pickupAddr?" — "+String(q.pickupAddr).split(",")[0]:""}</div>}
 {q.note&&<div style={{fontSize:10,color:"#57534e",marginTop:2}}>{q.note}</div>}
-<div style={{fontSize:9,color:"#a8a29e",marginTop:3}}>{q.createdAt?new Date(q.createdAt).toLocaleDateString("en-US",{month:"short",day:"numeric"})+" "+new Date(q.createdAt).toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"}):""}</div>
+<div style={{fontSize:9,color:"#a8a29e",marginTop:3}}>{q.createdAt&&!isNaN(new Date(q.createdAt))?new Date(q.createdAt).toLocaleDateString("en-US",{month:"short",day:"numeric"})+" "+new Date(q.createdAt).toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"}):"—"}</div>
 </div>
 <div style={{textAlign:"right",marginLeft:10,flexShrink:0}}>
-<div style={{fontSize:18,fontWeight:800,color:accepted?"#16a34a":"#1c1917",fontVariantNumeric:"tabular-nums"}}>{fmt(q.rate||0)}</div>
-{q.calc&&<div style={{fontSize:9,color:"#78716c"}}>{fmt(q.calc?.base||0)}+{fmt(q.calc?.fuel||0)}</div>}
+<div style={{fontSize:18,fontWeight:800,color:accepted?"#16a34a":"#1c1917",fontVariantNumeric:"tabular-nums"}}>{fmt(q.rate)}</div>
+{q.calc&&<div style={{fontSize:9,color:"#78716c"}}>{fmt(q.calc.base)}+{fmt(q.calc.fuel)}</div>}
 </div>
 </div>
 {!accepted&&<div style={{display:"flex",gap:6,marginTop:8}}>
@@ -6682,7 +6897,7 @@ onSaveInstr={text=>setCustomInstr(p=>({...p,[stop]:text}))}
 </div>}</>);
 })()}
 
-{!showAddCustomDel?<button onClick={()=>{setShowAddCustomDel(true);setCustomDelName("");setCustomDelAddr("");setCustomDelRate("");setCustomDelNote("");setCustomDelMiles("");setCustomDelLiftgate(false);setCustomDelCalcLoading(false);}} style={{display:"block",width:"100%",marginTop:8,background:"#fafaf9",border:"2px dashed #d6d3d1",borderRadius:12,padding:"14px 16px",cursor:"pointer",textAlign:"center",color:"#78716c",fontSize:13,fontWeight:600}}>+ Add New Delivery Location</button>
+{!showAddCustomDel?<button onClick={()=>{setShowAddCustomDel(true);setCustomDelName("");setCustomDelAddr("");setCustomDelRate("");setCustomDelNote("");setCustomDelMiles("");setCustomDelLiftgate(false);setCustomDelGravel(false);setCustomDelExtraPallets(false);setCustomDelCalcLoading(false);}} style={{display:"block",width:"100%",marginTop:8,background:"#fafaf9",border:"2px dashed #d6d3d1",borderRadius:12,padding:"14px 16px",cursor:"pointer",textAlign:"center",color:"#78716c",fontSize:13,fontWeight:600}}>+ Add New Delivery Location</button>
 :<div style={{marginTop:8,background:"#fff",border:`2px solid ${CC[selCust].accent}`,borderRadius:14,padding:16}}>
 <div style={_s.flexBtwMb10}>
 <span style={{fontSize:13,fontWeight:700,color:CC[selCust].accent}}>New {selCust} Delivery</span>
@@ -6722,20 +6937,26 @@ setCustomDelCalcLoading(false);
 if(status==="OK"&&resp.rows[0]?.elements[0]?.status==="OK"){
 const mi=parseFloat(resp.rows[0].elements[0].distance.text.replace(/,/g,"")).toFixed(1);
 setCustomDelMiles(mi);
-const calc=calcQuoteRate(mi,customDelLiftgate,false,false);
+const calc=calcQuoteRate(mi,customDelLiftgate,customDelGravel,customDelExtraPallets);
 if(!customDelRate)setCustomDelRate(String(calc.total));
 showToast(mi+" mi → "+fmt(calc.total));
 }else{showToast("Could not calculate distance");}
 });
 }} disabled={customDelCalcLoading||!customDelAddr} style={{background:customDelAddr&&!customDelCalcLoading?"#1c1917":"#d6d3d1",color:customDelAddr&&!customDelCalcLoading?"#fff":"#a8a29e",border:"none",borderRadius:6,padding:"5px 12px",fontSize:10,fontWeight:600,cursor:customDelAddr?"pointer":"default"}}>{customDelCalcLoading?"Calculating…":"Calculate Miles"}</button>
 </div>
-<div style={{display:"flex",gap:8,alignItems:"center"}}>
+<div style={{display:"flex",gap:8,alignItems:"center",marginBottom:6}}>
 <div style={{flex:1}}><span style={{fontSize:10,fontWeight:600,color:"#57534e"}}>Miles</span>
-<input type="number" value={customDelMiles} onChange={e=>{setCustomDelMiles(e.target.value);if(e.target.value){const calc=calcQuoteRate(e.target.value,customDelLiftgate,false,false);if(!customDelRate)setCustomDelRate(String(calc.total));}}} placeholder="0" style={{width:"100%",border:customDelMiles?"2px solid #16a34a":"1px solid #d6d3d1",borderRadius:8,padding:"7px",fontSize:13,fontWeight:700,outline:"none",textAlign:"center",background:customDelMiles?"#f0fdf4":"#fff",marginTop:2}}/></div>
-<label style={{display:"flex",alignItems:"center",gap:4,cursor:"pointer",fontSize:11,fontWeight:600,color:customDelLiftgate?"#92400e":"#78716c",background:customDelLiftgate?"#fef3c7":"#fff",padding:"6px 10px",borderRadius:8,border:customDelLiftgate?"1px solid #fde68a":"1px solid #d6d3d1",marginTop:14}}>
-<input type="checkbox" checked={customDelLiftgate} onChange={e=>{setCustomDelLiftgate(e.target.checked);if(customDelMiles){const calc=calcQuoteRate(customDelMiles,e.target.checked,false,false);setCustomDelRate(String(calc.total));}}}/>LG +$75</label>
+<input type="number" value={customDelMiles} onChange={e=>{setCustomDelMiles(e.target.value);if(e.target.value){const calc=calcQuoteRate(e.target.value,customDelLiftgate,customDelGravel,customDelExtraPallets);setCustomDelRate(String(calc.total));}}} placeholder="0" style={{width:"100%",border:customDelMiles?"2px solid #16a34a":"1px solid #d6d3d1",borderRadius:8,padding:"7px",fontSize:13,fontWeight:700,outline:"none",textAlign:"center",background:customDelMiles?"#f0fdf4":"#fff",marginTop:2}}/></div>
 </div>
-{customDelMiles>0&&<div style={{fontSize:11,fontWeight:700,color:"#16a34a",textAlign:"center",marginTop:6}}>Auto: {fmt(calcQuoteRate(customDelMiles,customDelLiftgate,false,false).total)} ({fmt(calcQuoteRate(customDelMiles,customDelLiftgate,false,false).base)} base + {fmt(calcQuoteRate(customDelMiles,customDelLiftgate,false,false).fuel)} {customDelLiftgate?"liftgate":"fuel"})</div>}
+<div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:4}}>
+<label style={{display:"flex",alignItems:"center",gap:4,cursor:"pointer",fontSize:11,fontWeight:600,color:customDelLiftgate?"#92400e":"#78716c",background:customDelLiftgate?"#fef3c7":"#fff",padding:"5px 9px",borderRadius:7,border:customDelLiftgate?"1px solid #fde68a":"1px solid #d6d3d1"}}>
+<input type="checkbox" checked={customDelLiftgate} onChange={e=>{setCustomDelLiftgate(e.target.checked);if(customDelMiles){const calc=calcQuoteRate(customDelMiles,e.target.checked,customDelGravel,customDelExtraPallets);setCustomDelRate(String(calc.total));}}}/>LG +$75</label>
+<label style={{display:"flex",alignItems:"center",gap:4,cursor:"pointer",fontSize:11,fontWeight:600,color:customDelGravel?"#92400e":"#78716c",background:customDelGravel?"#fef3c7":"#fff",padding:"5px 9px",borderRadius:7,border:customDelGravel?"1px solid #fde68a":"1px solid #d6d3d1"}}>
+<input type="checkbox" checked={customDelGravel} onChange={e=>{setCustomDelGravel(e.target.checked);if(customDelMiles){const calc=calcQuoteRate(customDelMiles,customDelLiftgate,e.target.checked,customDelExtraPallets);setCustomDelRate(String(calc.total));}}}/>Gravel +$25</label>
+<label style={{display:"flex",alignItems:"center",gap:4,cursor:"pointer",fontSize:11,fontWeight:600,color:customDelExtraPallets?"#92400e":"#78716c",background:customDelExtraPallets?"#fef3c7":"#fff",padding:"5px 9px",borderRadius:7,border:customDelExtraPallets?"1px solid #fde68a":"1px solid #d6d3d1"}}>
+<input type="checkbox" checked={customDelExtraPallets} onChange={e=>{setCustomDelExtraPallets(e.target.checked);if(customDelMiles){const calc=calcQuoteRate(customDelMiles,customDelLiftgate,customDelGravel,e.target.checked);setCustomDelRate(String(calc.total));}}}/>4-5 Pallets +$25</label>
+</div>
+{customDelMiles>0&&(()=>{const calc=calcQuoteRate(customDelMiles,customDelLiftgate,customDelGravel,customDelExtraPallets);return<div style={{fontSize:11,fontWeight:700,color:"#16a34a",textAlign:"center",marginTop:6}}>Auto: {fmt(calc.total)} ({fmt(calc.base)} base + {fmt(calc.fuel)} {customDelLiftgate?"liftgate":"fuel"})</div>;})()}
 </div>}
 
 <div style={{display:"flex",gap:8,marginTop:4}}>
@@ -6779,7 +7000,7 @@ Add {customDelName.trim()||"Delivery"} to {selCust}
 {(()=>{const custData=CUSTOMERS[selCust];const custDels=custData?.deliveries?custData.deliveries.map(d=>typeof d==="string"?d:d.s).sort():[];
 return custDels.length>0?<>
 <div style={{maxHeight:140,overflowY:"auto",border:"1px solid #e7e5e4",borderRadius:10,padding:4,marginBottom:6}}>
-{custDels.filter(s=>!s.startsWith("Transfer")&&s!=="Drop Ship Liftgate").map(s=>{const addr=getAddr(s);const delData=custData.deliveries.find(d=>(typeof d==="string"?d:d.s)===s);const rate=delData&&typeof delData!=="string"?delData.r:0;return(<button key={s} onClick={()=>{setPuCustomName(s);if(addr)setPuCustomAddr(addr);if(rate)setPuRate(String(rate));}} style={{display:"block",width:"100%",textAlign:"left",padding:"7px 10px",marginBottom:1,borderRadius:7,cursor:"pointer",fontSize:12,fontWeight:600,background:puCustomName===s?"#2563eb":"#fff",color:puCustomName===s?"#fff":"#1c1917",border:puCustomName===s?"1px solid #1d4ed8":"1px solid transparent"}}>{s}{rate?<span style={{fontSize:9,color:puCustomName===s?"#bfdbfe":"#16a34a",marginLeft:6}}>{fmt(rate)}</span>:""}{addr?<span style={{fontSize:9,color:puCustomName===s?"#bfdbfe":"#a8a29e",marginLeft:6}}>{addr.split(",")[0]}</span>:""}</button>);})}
+{custDels.filter(s=>!s.startsWith("Transfer")&&s!=="Drop Ship Liftgate").map(s=>{const addr=getAddr(s);const delData=custData.deliveries.find(d=>(typeof d==="string"?d:d.s)===s);const rate=delData&&typeof delData!=="string"?delData.r:0;return(<button key={s} onClick={()=>{setPuCustomName(s);if(addr)setPuCustomAddr(addr);if(rate)setPuRate(String(rate));}} style={{display:"block",width:"100%",textAlign:"left",padding:"7px 10px",marginBottom:1,borderRadius:7,cursor:"pointer",fontSize:12,fontWeight:600,background:puCustomName===s?"#2563eb":"#fff",color:puCustomName===s?"#fff":"#1c1917",border:puCustomName===s?"1px solid #1d4ed8":"1px solid transparent"}}>{s}{rate?<span style={{fontSize:9,color:puCustomName===s?"#bfdbfe":"#16a34a",marginLeft:6}}>{fmt(rate)}</span>:""}{addr?<span style={{fontSize:9,color:puCustomName===s?"#bfdbfe":"#a8a29e",marginLeft:6}}>{String(addr).split(",")[0]}</span>:""}</button>);})}
 </div>
 <div style={{fontSize:10,fontWeight:600,color:"#78716c",marginBottom:4}}>Or enter custom:</div>
 </>:null;})()}
@@ -7091,7 +7312,7 @@ useEffect(()=>{
       Object.entries(fbData).forEach(([fbKey,payload])=>{
         const dayIdx=payload.dayIdx;
         const lk=`${wo}-${dayIdx}`;
-        const fbEnts=(payload.entries||[]).map(e=>{
+        const fbEnts=(payload.entries||[]).map(sanitizeEntry).filter(Boolean).map(e=>{
           if(e.customer&&!e.isHourly&&e.stopType!=="pickup"){
             const cd=CUSTOMERS[e.customer];
             if(cd?.deliveries){
@@ -7599,12 +7820,63 @@ style={{background:driverMsgInput.trim()?BRAND.main:"#e7e5e4",color:driverMsgInp
 );
 }
 
+class ErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null, errorInfo: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error, errorInfo) {
+    console.error("ErrorBoundary caught:", error, errorInfo);
+    this.setState({ errorInfo });
+    try {
+      const log = JSON.parse(localStorage.getItem("dd_error_log") || "[]");
+      log.unshift({
+        time: new Date().toISOString(),
+        message: String(error?.message || error),
+        stack: String(error?.stack || "").substring(0, 2000),
+        component: String(errorInfo?.componentStack || "").substring(0, 1500),
+      });
+      localStorage.setItem("dd_error_log", JSON.stringify(log.slice(0, 20)));
+    } catch (e) { /* ignore */ }
+  }
+  reset = () => { this.setState({ hasError: false, error: null, errorInfo: null }); };
+  render() {
+    if (this.state.hasError) {
+      const msg = String(this.state.error?.message || this.state.error || "Unknown error");
+      return (
+        <div style={{minHeight:"100vh",background:"#fef2f2",padding:"20px",fontFamily:"system-ui,sans-serif"}}>
+          <div style={{maxWidth:600,margin:"40px auto",background:"#fff",borderRadius:14,padding:"24px",boxShadow:"0 4px 12px rgba(0,0,0,0.1)",border:"2px solid #fca5a5"}}>
+            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
+              <div style={{fontSize:32}}>⚠️</div>
+              <div>
+                <div style={{fontSize:18,fontWeight:800,color:"#991b1b"}}>Something went wrong</div>
+                <div style={{fontSize:12,color:"#78716c",marginTop:2}}>The app caught an error before it could crash</div>
+              </div>
+            </div>
+            <div style={{background:"#fef2f2",border:"1px solid #fecaca",borderRadius:8,padding:"10px 12px",marginBottom:14,fontSize:12,color:"#991b1b",fontFamily:"monospace",wordBreak:"break-word"}}>{msg}</div>
+            <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+              <button onClick={this.reset} style={{background:"#16a34a",color:"#fff",border:"none",borderRadius:8,padding:"10px 18px",fontSize:13,fontWeight:700,cursor:"pointer"}}>↻ Try Again</button>
+              <button onClick={()=>window.location.reload()} style={{background:"#2563eb",color:"#fff",border:"none",borderRadius:8,padding:"10px 18px",fontSize:13,fontWeight:700,cursor:"pointer"}}>🔄 Reload App</button>
+              <button onClick={()=>{const log=localStorage.getItem("dd_error_log")||"[]";navigator.clipboard?.writeText(log);alert("Error log copied to clipboard");}} style={{background:"#f5f5f4",color:"#57534e",border:"1px solid #d6d3d1",borderRadius:8,padding:"10px 18px",fontSize:13,fontWeight:600,cursor:"pointer"}}>📋 Copy Error Log</button>
+            </div>
+            <div style={{marginTop:14,fontSize:11,color:"#a8a29e"}}>Error logged to localStorage as <code style={{background:"#f5f5f4",padding:"1px 4px",borderRadius:3}}>dd_error_log</code></div>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export default function App(){
 const hash=useHashRoute();
 const driverMatch=hash.match(/^#\/driver\/([a-z]+)$/i);
 if(driverMatch){
 const slug=driverMatch[1].toLowerCase();
-return <DriverPage driverSlug={slug}/>;
+return <ErrorBoundary><DriverPage driverSlug={slug}/></ErrorBoundary>;
 }
-return <DispatchApp/>;
+return <ErrorBoundary><DispatchApp/></ErrorBoundary>;
 }
