@@ -2422,6 +2422,7 @@ return merged;
 });
 const[showDM,setShowDM]=useState(false);
 const[showLinkModal,setShowLinkModal]=useState(null); /* {name, url, phone} */
+const[showAutoBackups,setShowAutoBackups]=useState(false);
 const[editDrv,setEditDrv]=useState(null);const[editNm,setEditNm]=useState("");const[editPh,setEditPh]=useState("");
 const[newDN,setNewDN]=useState("");const[newDP,setNewDP]=useState("");
 const[quoteMode,setQuoteMode]=useState(null);
@@ -2563,7 +2564,6 @@ const[savedQuotes,setSavedQuotes]=useState(()=>{
   }));
 });
 const[quoteFormOpen,setQuoteFormOpen]=useState(false);
-const[editingQuoteId,setEditingQuoteId]=useState(null);
 const[quoteTab,setQuoteTab]=useState("current"); /* current | past */
 const[aiQuoteInput,setAiQuoteInput]=useState("");
 const[aiQuoteLoading,setAiQuoteLoading]=useState(false);
@@ -3078,104 +3078,27 @@ if(gravel)base+=25;
 if(extraPallets)base+=25;
 return{base,fuel,total:base+fuel};
 };
-const resetQuoteForm=()=>{
-setQCust("");setQStop("");setQAddr("");setQRate("");setQNote("");setQMiles("");setQLiftgate(false);setQGravel(false);setQExtraPallets(false);setQPickup("");setQPickupName("");setQPickupAddr("");setQCustomMode(false);setEditingQuoteId(null);setQCalcError("");
-};
-const startEditQuote=(q)=>{
-setEditingQuoteId(q.id);
-setQCust(q.customer||"");
-setQStop(q.stop||"");
-setQAddr(q.addr||"");
-setQRate(q.rate!=null?String(q.rate):"");
-setQNote(q.note||"");
-setQMiles(q.miles!=null?String(q.miles):"");
-setQLiftgate(!!q.liftgate);
-setQGravel(!!q.gravel);
-setQExtraPallets(!!q.extraPallets);
-setQPickup(q.pickup||"");
-setQPickupName(q.pickupName||"");
-setQPickupAddr(q.pickupAddr||"");
-setQCustomMode(true); /* allow free-text editing of stop name */
-setQCalcError("");
-setQuoteFormOpen(true);
-if(typeof window!=="undefined")window.scrollTo({top:0,behavior:"smooth"});
-};
 const saveQuote=()=>{
 const miles=parseFloat(qMiles)||0;
 const manualRate=parseFloat(qRate)||0;
 const calc=miles>0?calcQuoteRate(miles,qLiftgate,qGravel,qExtraPallets):null;
 const finalRate=manualRate||calc?.total||0;
-if(editingQuoteId!=null){
-  const existing=savedQuotes.find(x=>x.id===editingQuoteId);
-  if(!existing){resetQuoteForm();setQuoteFormOpen(false);return;}
-  const updated={...existing,customer:qCust,stop:qStop,addr:qAddr,rate:finalRate,miles:miles||null,liftgate:qLiftgate,gravel:qGravel,extraPallets:qExtraPallets,note:qNote,pickup:qPickup||null,pickupName:qPickupName||null,pickupAddr:qPickupAddr||null,calc,updatedAt:new Date().toISOString()};
-  setSavedQuotes(p=>p.map(x=>x.id===editingQuoteId?updated:x));
-  saveQuoteToFB(updated).catch(e=>console.error("Quote update:",e));
-  /* If accepted and on a day, sync the manifest entries */
-  if(existing.status==="accepted"&&existing.pushedTo){
-    const targetDk=existing.pushedTo;
-    const cust=updated.customer||"Quote Delivery";
-    const delStop=updated.stop||"Quote Delivery";
-    const pickupLabel=updated.pickupName||updated.pickup||"";
-    const hasPickup=!!(pickupLabel||updated.pickupAddr);
-    const delNote=updated.note||(updated.miles?updated.miles+"mi":"");
-    setLog(p=>{
-      let day=[...(p[targetDk]||[])];
-      const tagged=day.filter(e=>e.quoteId===existing.id);
-      if(tagged.length===0){
-        /* Legacy entry with no quoteId stamp — soft-match and tag it now */
-        const idx=day.findIndex(e=>e.stop===existing.stop&&e.customer===existing.customer&&Math.abs((e.baseRate||0)-(existing.rate||0))<1&&e.stopType==="delivery");
-        if(idx>=0){
-          day[idx]={...day[idx],quoteId:existing.id,customer:cust,stop:delStop,addr:updated.addr||"",baseRate:updated.rate||0,note:delNote,pickupFrom:hasPickup?pickupLabel:null};
-          /* add pickup if needed */
-          if(hasPickup){
-            const puEntry={id:Date.now()+Math.random(),customer:cust,stop:pickupLabel||"Pickup",baseRate:0,fuelPct:0,isHourly:false,note:`Picking up for ${delStop}`,driverId:day[idx].driverId||0,addr:updated.pickupAddr||"",stopType:"pickup",priority:false,instructions:"",status:null,arrivedAt:null,departedAt:null,eta:null,photos:[],signature:null,dueBy:null,weight:0,loadNum:1,pickupFrom:pickupLabel||"Pickup",manualPickup:true,quoteId:existing.id};
-            day.splice(idx,0,puEntry);
-          }
-        }
-      }else{
-        const delIdx=day.findIndex(e=>e.quoteId===existing.id&&e.stopType==="delivery");
-        const puIdx=day.findIndex(e=>e.quoteId===existing.id&&e.stopType==="pickup");
-        if(delIdx>=0){
-          day[delIdx]={...day[delIdx],customer:cust,stop:delStop,addr:updated.addr||"",baseRate:updated.rate||0,note:delNote,pickupFrom:hasPickup?pickupLabel:null};
-        }
-        if(hasPickup&&puIdx>=0){
-          day[puIdx]={...day[puIdx],customer:cust,stop:pickupLabel||"Pickup",addr:updated.pickupAddr||"",note:`Picking up for ${delStop}`,pickupFrom:pickupLabel||"Pickup"};
-        }else if(hasPickup&&puIdx<0&&delIdx>=0){
-          const puEntry={id:Date.now()+Math.random(),customer:cust,stop:pickupLabel||"Pickup",baseRate:0,fuelPct:0,isHourly:false,note:`Picking up for ${delStop}`,driverId:day[delIdx].driverId||0,addr:updated.pickupAddr||"",stopType:"pickup",priority:false,instructions:"",status:null,arrivedAt:null,departedAt:null,eta:null,photos:[],signature:null,dueBy:null,weight:0,loadNum:1,pickupFrom:pickupLabel||"Pickup",manualPickup:true,quoteId:existing.id};
-          day.splice(delIdx,0,puEntry);
-        }else if(!hasPickup&&puIdx>=0){
-          day.splice(puIdx,1);
-        }
-      }
-      return{...p,[targetDk]:day};
-    });
-  }
-  showToast("Quote #"+(existing.num||"")+" updated"+(existing.status==="accepted"&&existing.pushedTo?" — manifest synced":""));
-  resetQuoteForm();setQuoteFormOpen(false);
-  return;
-}
 const q={id:Date.now()+Math.random(),num:savedQuotes.length+1,customer:qCust,stop:qStop,addr:qAddr,rate:finalRate,miles:miles||null,liftgate:qLiftgate,gravel:qGravel,extraPallets:qExtraPallets,note:qNote,pickup:qPickup||null,pickupName:qPickupName||null,pickupAddr:qPickupAddr||null,calc,createdAt:new Date().toISOString(),status:"pending"};
 setSavedQuotes(p=>[q,...p]);
 saveQuoteToFB(q).catch(e=>console.error("Quote save:",e));
-resetQuoteForm();setQuoteFormOpen(false);
+setQCust("");setQStop("");setQAddr("");setQRate("");setQNote("");setQMiles("");setQLiftgate(false);setQGravel(false);setQExtraPallets(false);setQPickup("");setQPickupName("");setQPickupAddr("");setQCustomMode(false);setQuoteFormOpen(false);
 showToast("Quote #"+q.num+" saved");
 };
 const pushQuoteToDay=(quoteId,targetDk)=>{
 const q=savedQuotes.find(x=>x.id===quoteId);
 if(!q)return;
 const cust=q.customer||"Quote Delivery";
-const delStop=q.stop||"Quote Delivery";
-const pickupLabel=q.pickupName||q.pickup||"";
-const hasPickup=!!(pickupLabel||q.pickupAddr);
-const delNote=q.note||(q.miles?q.miles+"mi":"");
-const puEntry=hasPickup?{id:Date.now()+Math.random(),customer:cust,stop:pickupLabel||"Pickup",baseRate:0,fuelPct:0,isHourly:false,note:`Picking up for ${delStop}`,driverId:0,addr:q.pickupAddr||"",stopType:"pickup",priority:false,instructions:"",status:null,arrivedAt:null,departedAt:null,eta:null,photos:[],signature:null,dueBy:null,weight:0,loadNum:1,pickupFrom:pickupLabel||"Pickup",manualPickup:true,quoteId:q.id}:null;
-const delEntry={id:Date.now()+Math.random()+0.001,customer:cust,stop:delStop,baseRate:q.rate||0,fuelPct:0,isHourly:false,note:delNote,driverId:0,addr:q.addr||"",stopType:"delivery",priority:false,instructions:"BOL & Pictures must be sent back via Email",status:null,arrivedAt:null,departedAt:null,eta:null,photos:[],signature:null,dueBy:null,weight:0,loadNum:1,pickupFrom:hasPickup?pickupLabel:null,quoteId:q.id};
-setLog(p=>({...p,[targetDk]:[...(p[targetDk]||[]),...(puEntry?[puEntry]:[]),delEntry]}));
+const entry={id:Date.now()+Math.random(),customer:cust,stop:q.stop||"Quote Delivery",baseRate:q.rate||0,fuelPct:0,isHourly:false,note:q.note||(q.miles?q.miles+"mi":""),driverId:0,addr:q.addr||"",stopType:"delivery",priority:false,instructions:"BOL & Pictures must be sent back via Email",status:null,arrivedAt:null,departedAt:null,eta:null,photos:[],signature:null,dueBy:null,weight:0,loadNum:1};
+setLog(p=>({...p,[targetDk]:[...(p[targetDk]||[]),entry]}));
 setSavedQuotes(p=>p.map(x=>x.id===quoteId?{...x,status:"accepted",pushedTo:targetDk}:x));
 const updated={...q,status:"accepted",pushedTo:targetDk};
 saveQuoteToFB(updated).catch(e=>console.error("Quote update:",e));
-showToast(hasPickup?"Quote pushed — PU + DEL added":"Quote pushed to manifest");
+showToast("Quote pushed to manifest");
 setQPushDay(null);
 };
 
@@ -3185,10 +3108,7 @@ if(!q||!q.pushedTo)return;
 const targetDk=q.pushedTo;
 setLog(p=>{
   const dayEntries=p[targetDk]||[];
-  const hasTagged=dayEntries.some(e=>e.quoteId===q.id);
-  const filtered=hasTagged
-    ?dayEntries.filter(e=>e.quoteId!==q.id)
-    :dayEntries.filter(e=>!(e.stop===q.stop&&e.customer===q.customer&&Math.abs((e.baseRate||0)-(q.rate||0))<1));
+  const filtered=dayEntries.filter(e=>!(e.stop===q.stop&&e.customer===q.customer&&Math.abs(e.baseRate-(q.rate||0))<1));
   return{...p,[targetDk]:filtered};
 });
 setSavedQuotes(p=>p.map(x=>x.id===quoteId?{...x,status:"pending",pushedTo:null}:x));
@@ -3971,6 +3891,71 @@ const importBackup=(file)=>{
   reader.readAsText(file);
 };
 
+/* Restore from an in-memory auto-backup snapshot (from localStorage).
+   Same additive merge logic as importBackup — only fills empty days, never overwrites. */
+const restoreAutoBackup=(snap)=>{
+  try{
+    if(!snap||!snap.data){showToast("Invalid snapshot");return;}
+    /* auto-full label → data is the entire log {dayKey: entries[]}
+       save-{fbKey} label → data is {key, entries} for a single day */
+    let manifests={};
+    if(snap.label==="auto-full"&&typeof snap.data==="object"&&!Array.isArray(snap.data)){
+      manifests=snap.data;
+    }else if(snap.data.key&&Array.isArray(snap.data.entries)){
+      /* Single-day snapshot — need to convert fbKey (YYYY-MM-DD) to dayKey (wo-dayIdx).
+         We can't easily compute that here without the current date context,
+         so we ask user to restore via Firebase instead. */
+      showToast("Single-day snapshot — use 'Download' then 'Restore Backup'");
+      return;
+    }else{
+      showToast("Unrecognized snapshot format");
+      return;
+    }
+    setLog(prev=>{
+      const merged={...prev};
+      let count=0;
+      Object.entries(manifests).forEach(([key,entries])=>{
+        if(entries&&entries.length>0&&(!merged[key]||merged[key].length===0)){
+          merged[key]=entries;
+          count++;
+        }
+      });
+      showToast(count>0?`Restored ${count} days from auto-backup`:"No empty days to fill — no changes made");
+      return merged;
+    });
+    setShowAutoBackups(false);
+  }catch(err){showToast("Restore failed: "+err.message);}
+};
+
+/* Download a single auto-backup as a JSON file in the same format as exportBackup,
+   so it can be re-imported via Restore Backup. Works for both snapshot shapes. */
+const downloadAutoBackup=(snap)=>{
+  try{
+    let wrapped;
+    if(snap.label==="auto-full"){
+      wrapped={version:"auto-backup",exportedAt:snap.date,snapshotLabel:snap.label,manifests:snap.data};
+    }else if(snap.data?.key&&Array.isArray(snap.data.entries)){
+      /* Wrap the single-day snapshot so importBackup can consume it.
+         Note: the key is fbKey (YYYY-MM-DD), not dayKey (wo-dayIdx) — importBackup's merge loop
+         iterates by key anyway, so the key just won't match any current dayKey and will be skipped.
+         User should use Restore Backup after deploying, but the raw JSON is downloadable for records. */
+      wrapped={version:"auto-backup",exportedAt:snap.date,snapshotLabel:snap.label,fbKey:snap.data.key,entries:snap.data.entries};
+    }else{
+      wrapped={version:"auto-backup",exportedAt:snap.date,raw:snap};
+    }
+    const json=JSON.stringify(wrapped,null,2);
+    const blob=new Blob([json],{type:"application/json"});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement("a");
+    const safeLabel=String(snap.label||"snapshot").replace(/[^a-z0-9-]/gi,"_");
+    const dateStr=snap.date?snap.date.slice(0,19).replace(/:/g,"-"):new Date().toISOString().slice(0,19).replace(/:/g,"-");
+    a.href=url;a.download=`auto-backup-${safeLabel}-${dateStr}.json`;
+    document.body.appendChild(a);a.click();document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast("Backup downloaded");
+  }catch(err){showToast("Download failed: "+err.message);}
+};
+
 const sendNotification=(drvId,msg,type,viaSms=true)=>{
 const now=new Date().toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});
 const notif={msg,type,time:now,id:Date.now()};
@@ -4284,6 +4269,12 @@ onMouseEnter={e=>{e.currentTarget.style.background="#f5f5f4";}} onMouseLeave={e=
 <div><div style={{fontSize:12,fontWeight:700,color:"#1c1917"}}>Restore Backup</div><div style={{fontSize:9,color:"#78716c"}}>Import from JSON file</div></div>
 <input type="file" accept=".json" style={{display:"none"}} onChange={e=>{if(e.target.files[0]){importBackup(e.target.files[0]);setShowMoreMenu(false);}e.target.value="";}}/>
 </label>
+<button onClick={()=>{setShowAutoBackups(true);setShowMoreMenu(false);}}
+style={{display:"flex",alignItems:"center",gap:10,width:"100%",textAlign:"left",padding:"10px 12px",marginTop:2,borderRadius:10,border:"1px solid transparent",background:"#fff",cursor:"pointer"}}
+onMouseEnter={e=>{e.currentTarget.style.background="#f5f5f4";}} onMouseLeave={e=>{e.currentTarget.style.background="#fff";}}>
+<span style={{fontSize:18,width:28,textAlign:"center",flexShrink:0}}>🕐</span>
+<div><div style={{fontSize:12,fontWeight:700,color:"#1c1917"}}>Auto-Backups</div><div style={{fontSize:9,color:"#78716c"}}>Browse recent local snapshots</div></div>
+</button>
 </div>
 </div></>}
 </div>
@@ -5100,10 +5091,10 @@ style={{flex:1,border:"1px solid #d6d3d1",borderRadius:10,padding:"10px 14px",fo
 <button onClick={()=>setQuoteTab("current")} style={{background:quoteTab==="current"?"#fff":"transparent",border:"none",borderRadius:8,padding:"6px 14px",cursor:"pointer",fontSize:12,fontWeight:600,color:quoteTab==="current"?"#1c1917":"#a8a29e",boxShadow:quoteTab==="current"?"0 1px 3px rgba(0,0,0,0.1)":"none"}}>Current ({savedQuotes.filter(q=>q.status!=="accepted").length})</button>
 <button onClick={()=>setQuoteTab("past")} style={{background:quoteTab==="past"?"#fff":"transparent",border:"none",borderRadius:8,padding:"6px 14px",cursor:"pointer",fontSize:12,fontWeight:600,color:quoteTab==="past"?"#1c1917":"#a8a29e",boxShadow:quoteTab==="past"?"0 1px 3px rgba(0,0,0,0.1)":"none"}}>Past ({savedQuotes.filter(q=>q.status==="accepted").length})</button>
 </div>
-<button onClick={()=>{if(quoteFormOpen){resetQuoteForm();setQuoteFormOpen(false);}else{setQuoteFormOpen(true);}}} style={{background:"#16a34a",color:"#fff",border:"none",borderRadius:10,padding:"8px 18px",cursor:"pointer",fontSize:13,fontWeight:700}}>{quoteFormOpen?"Cancel":"+ New Quote"}</button>
+<button onClick={()=>setQuoteFormOpen(!quoteFormOpen)} style={{background:"#16a34a",color:"#fff",border:"none",borderRadius:10,padding:"8px 18px",cursor:"pointer",fontSize:13,fontWeight:700}}>{quoteFormOpen?"Cancel":"+ New Quote"}</button>
 </div>
 {quoteFormOpen&&<div style={{background:"#fff",border:"2px solid #16a34a",borderRadius:16,padding:"18px 20px",marginBottom:20}}>
-<div style={{fontSize:14,fontWeight:700,color:"#16a34a",marginBottom:14}}>{editingQuoteId!=null?"Edit Quote"+(()=>{const ex=savedQuotes.find(x=>x.id===editingQuoteId);return ex?.num?" #"+ex.num:"";})():"New Quote"}</div>
+<div style={{fontSize:14,fontWeight:700,color:"#16a34a",marginBottom:14}}>New Quote</div>
 
 <div style={{marginBottom:12}}>
 <label style={_s.label}>Customer (who is this quote for?)</label>
@@ -5184,8 +5175,8 @@ style={{flex:1,border:"1px solid #d6d3d1",borderRadius:10,padding:"10px 14px",fo
 <textarea value={qNote} onChange={e=>setQNote(e.target.value)} placeholder="Additional details..." rows={2} style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px",fontSize:13,outline:"none",resize:"vertical",fontFamily:"inherit"}}/>
 </div>
 <div style={{display:"flex",justifyContent:"flex-end",gap:8}}>
-<button onClick={()=>{resetQuoteForm();setQuoteFormOpen(false);}} style={{background:"#e7e5e4",border:"none",borderRadius:8,padding:"8px 18px",cursor:"pointer",fontSize:12,fontWeight:600}}>Cancel</button>
-<button onClick={saveQuote} disabled={!qStop.trim()} style={{background:qStop.trim()?"#16a34a":"#a8a29e",color:"#fff",border:"none",borderRadius:8,padding:"8px 18px",cursor:"pointer",fontSize:12,fontWeight:700}}>{editingQuoteId!=null?"Update Quote":"Save Quote"}</button>
+<button onClick={()=>setQuoteFormOpen(false)} style={{background:"#e7e5e4",border:"none",borderRadius:8,padding:"8px 18px",cursor:"pointer",fontSize:12,fontWeight:600}}>Cancel</button>
+<button onClick={saveQuote} disabled={!qStop.trim()} style={{background:qStop.trim()?"#16a34a":"#a8a29e",color:"#fff",border:"none",borderRadius:8,padding:"8px 18px",cursor:"pointer",fontSize:12,fontWeight:700}}>Save Quote</button>
 </div>
 </div>}
 {savedQuotes.length===0&&!quoteFormOpen&&<div style={_s.emptyState2}><div style={{fontSize:40,marginBottom:12}}>💰</div><p style={{fontSize:14,fontWeight:600,margin:"0 0 4px"}}>No quotes yet</p><p style={{fontSize:12,margin:0}}>Create your first quote above</p></div>}
@@ -5227,12 +5218,10 @@ else{showToast("Pick a weekday (Mon-Fri)");}
 <button onClick={()=>setQPushDay(null)} style={{background:"none",border:"none",fontSize:9,color:"#78716c",cursor:"pointer"}}>Cancel</button>
 </div>
 :<button onClick={()=>setQPushDay({quoteId:q.id})} style={{background:"#16a34a",color:"#fff",border:"none",borderRadius:6,padding:"5px 10px",cursor:"pointer",fontSize:10,fontWeight:700}}>Push to Day</button>}
-<button onClick={()=>startEditQuote(q)} style={{background:"#fff",border:"1px solid #d6d3d1",color:"#57534e",borderRadius:6,padding:"4px 10px",cursor:"pointer",fontSize:10,fontWeight:600}}>Edit</button>
 <button onClick={()=>{setSavedQuotes(p=>p.filter(x=>x.id!==q.id));deleteQuoteFromFB(q.id).catch(e=>console.error("Quote del:",e));showToast("Quote deleted");}} style={{background:"none",border:"none",color:"#dc2626",fontSize:9,cursor:"pointer",padding:"2px 0"}}>Delete</button>
 </div>}
-{accepted&&q.pushedTo&&<div style={{display:"flex",alignItems:"center",gap:8,marginTop:6,flexWrap:"wrap",justifyContent:"flex-end"}}>
+{accepted&&q.pushedTo&&<div style={{display:"flex",alignItems:"center",gap:8,marginTop:6}}>
 <span style={{fontSize:10,color:"#16a34a",fontWeight:600}}>✓ Pushed to {DAYS[parseInt(q.pushedTo.split("-")[1])]||""}</span>
-<button onClick={()=>startEditQuote(q)} style={{background:"#fff",border:"1px solid #d6d3d1",color:"#57534e",borderRadius:6,padding:"3px 10px",cursor:"pointer",fontSize:10,fontWeight:600}}>Edit</button>
 <button onClick={()=>unplanQuote(q.id)} style={{background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:6,padding:"3px 10px",cursor:"pointer",fontSize:10,color:"#dc2626",fontWeight:600}}>Unplan</button>
 </div>}
 </div>
@@ -5921,6 +5910,70 @@ style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,width:"
 </div>
 </div>}
 
+{showAutoBackups&&(()=>{
+  const backups=getAutoBackups();
+  /* Show newest first */
+  const sorted=[...backups].sort((a,b)=>(b.timestamp||0)-(a.timestamp||0));
+  const fmtDate=(iso)=>{try{const d=new Date(iso);return d.toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})+" "+d.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});}catch{return iso||"—";}};
+  const fmtSize=(obj)=>{try{const kb=Math.round(JSON.stringify(obj).length/1024);return kb<1?"<1 KB":kb+" KB";}catch{return "—";}};
+  const countDays=(snap)=>{if(snap.label==="auto-full"&&snap.data&&typeof snap.data==="object"){return Object.values(snap.data).filter(a=>Array.isArray(a)&&a.length>0).length;}if(snap.data?.entries)return 1;return 0;};
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={()=>setShowAutoBackups(false)}>
+      <div style={{background:"#fff",borderRadius:20,width:"100%",maxWidth:560,maxHeight:"85vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 64px rgba(0,0,0,0.25)"}} onClick={e=>e.stopPropagation()}>
+        <div style={{padding:"18px 20px 14px",borderBottom:"1px solid #e7e5e4",flexShrink:0}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+            <h3 style={{margin:0,fontSize:17,fontWeight:700}}>🕐 Auto-Backups</h3>
+            <button onClick={()=>setShowAutoBackups(false)} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:"#78716c",lineHeight:1}}>✕</button>
+          </div>
+          <p style={{fontSize:11,color:"#78716c",margin:0,lineHeight:1.4}}>
+            Local snapshots saved to this browser every 5 minutes and on each save. Kept on this device only — not synced across phones/laptops. Up to 14 snapshots.
+          </p>
+        </div>
+
+        <div style={{flex:1,overflowY:"auto",padding:"10px 16px 14px"}}>
+          {sorted.length===0?(
+            <div style={{textAlign:"center",padding:"40px 20px",color:"#a8a29e"}}>
+              <div style={{fontSize:40,marginBottom:12}}>📭</div>
+              <p style={{fontSize:14,fontWeight:600,margin:"0 0 4px",color:"#57534e"}}>No auto-backups yet</p>
+              <p style={{fontSize:11,margin:0}}>Auto-backups populate as you use the app. Check back in a few minutes, or use the manual Backup button above.</p>
+            </div>
+          ):sorted.map((snap,i)=>{
+            const isFull=snap.label==="auto-full";
+            const days=countDays(snap);
+            return(
+              <div key={i} style={{border:"1px solid #e7e5e4",borderRadius:12,padding:"12px 14px",marginBottom:8,background:"#fff"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8,marginBottom:8}}>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:3,flexWrap:"wrap"}}>
+                      <span style={{fontSize:9,fontWeight:700,padding:"2px 7px",borderRadius:4,background:isFull?"#dbeafe":"#fef3c7",color:isFull?"#1e40af":"#92400e"}}>{isFull?"FULL":"SINGLE DAY"}</span>
+                      <span style={{fontSize:10,color:"#78716c",fontWeight:600}}>{fmtSize(snap.data)}</span>
+                      {days>0&&<span style={{fontSize:10,color:"#78716c"}}>• {days} {days===1?"day":"days"} of data</span>}
+                    </div>
+                    <div style={{fontSize:13,fontWeight:700,color:"#1c1917"}}>{fmtDate(snap.date)}</div>
+                    <div style={{fontSize:10,color:"#a8a29e",marginTop:2,fontFamily:"monospace",wordBreak:"break-all"}}>{snap.label}</div>
+                  </div>
+                </div>
+                <div style={{display:"flex",gap:6}}>
+                  {isFull&&<button onClick={()=>{
+                    if(confirm("Restore this snapshot?\n\nThis will fill in any empty days with data from this backup. Existing days with data will NOT be overwritten."))restoreAutoBackup(snap);
+                  }} style={{flex:1,background:"#16a34a",color:"#fff",border:"none",borderRadius:8,padding:"8px 12px",cursor:"pointer",fontSize:12,fontWeight:700}}>↻ Restore</button>}
+                  <button onClick={()=>downloadAutoBackup(snap)} style={{flex:1,background:"#fff",color:"#1c1917",border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 12px",cursor:"pointer",fontSize:12,fontWeight:600}}>⬇ Download</button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div style={{padding:"10px 20px 14px",borderTop:"1px solid #e7e5e4",background:"#fafaf9",borderRadius:"0 0 20px 20px"}}>
+          <p style={{fontSize:10,color:"#78716c",margin:0,lineHeight:1.45}}>
+            <strong>Tip:</strong> Restore only fills empty days — it never overwrites existing data. For a full replacement, Download a snapshot, then use Restore Backup to import it.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+})()}
+
 {showChat&&<div style={{position:"fixed",inset:0,zIndex:200,display:"flex",alignItems:"center",justifyContent:"center"}} onClick={()=>setShowChat(false)}>
 <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:20,width:"100%",maxWidth:520,maxHeight:"80vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 64px rgba(0,0,0,0.2)"}}>
 <div style={{padding:"16px 20px 12px",borderBottom:"1px solid #e7e5e4",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
@@ -6202,6 +6255,11 @@ style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:8,
 <input type="file" accept=".json" style={{display:"none"}} onChange={e=>{if(e.target.files[0]){importBackup(e.target.files[0]);setShowMoreMenu(false);}e.target.value="";}}/>
 </label>
 </div>
+<button onClick={()=>{setShowAutoBackups(true);setShowMoreMenu(false);}}
+style={{marginTop:8,width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"14px 12px",borderRadius:12,border:"1px solid #e7e5e4",background:"#fff",cursor:"pointer"}}>
+<span style={{fontSize:20}}>🕐</span>
+<div style={{textAlign:"left"}}><div style={{fontSize:13,fontWeight:700,color:"#1c1917"}}>Auto-Backups</div><div style={_s.sub}>Browse recent local snapshots</div></div>
+</button>
 </div>
 </div>}
 
@@ -6894,10 +6952,10 @@ const getDeliveries2=(custName)=>{const cd=CUSTOMERS[custName];if(!cd)return[];r
 return(<div>
 <div style={_s.flexBtwMb12}>
 <div><span style={_s.bold14}>Quotes</span><span style={{fontSize:11,color:"#a8a29e",marginLeft:6}}>{savedQuotes.length}</span></div>
-<button onClick={()=>{if(quoteFormOpen){resetQuoteForm();setQuoteFormOpen(false);}else{setQuoteFormOpen(true);}}} style={{background:"#16a34a",color:"#fff",border:"none",borderRadius:8,padding:"7px 14px",cursor:"pointer",fontSize:12,fontWeight:700}}>{quoteFormOpen?"Cancel":"+ New Quote"}</button>
+<button onClick={()=>setQuoteFormOpen(!quoteFormOpen)} style={{background:"#16a34a",color:"#fff",border:"none",borderRadius:8,padding:"7px 14px",cursor:"pointer",fontSize:12,fontWeight:700}}>{quoteFormOpen?"Cancel":"+ New Quote"}</button>
 </div>
 {quoteFormOpen&&<div style={{background:"#fff",border:"2px solid #16a34a",borderRadius:14,padding:"14px 16px",marginBottom:16}}>
-<div style={{fontSize:13,fontWeight:700,color:"#16a34a",marginBottom:12}}>{editingQuoteId!=null?"Edit Quote"+(()=>{const ex=savedQuotes.find(x=>x.id===editingQuoteId);return ex?.num?" #"+ex.num:"";})():"New Quote"}</div>
+<div style={{fontSize:13,fontWeight:700,color:"#16a34a",marginBottom:12}}>New Quote</div>
 
 <label style={_s.label}>Customer (who is this for?)</label>
 <select value={qCust} onChange={e=>{const v=e.target.value;setQCust(v);setQStop("");setQCustomMode(false);const qc=QUOTE_CUSTOMERS.find(q=>q.name===v);const pSrcs=PICKUP_SOURCES.filter(s=>s.customer===v);const pickups=qc?.pickups?.length?qc.pickups:pSrcs.length?pSrcs.map(s=>({label:s.label,addr:s.addr})):[];if(pickups.length===1){setQPickup(pickups[0].label);setQPickupName(pickups[0].label);setQPickupAddr(pickups[0].addr);}else{setQPickup("");setQPickupName("");setQPickupAddr("");}}} style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px",fontSize:13,outline:"none",background:"#fff",marginBottom:10}}>
@@ -6960,8 +7018,8 @@ return(<div>
 <label style={_s.label}>Notes</label>
 <textarea value={qNote} onChange={e=>setQNote(e.target.value)} placeholder="Details..." rows={2} style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px",fontSize:12,outline:"none",resize:"vertical",fontFamily:"inherit",marginBottom:10}}/>
 <div style={{display:"flex",justifyContent:"flex-end",gap:6}}>
-<button onClick={()=>{resetQuoteForm();setQuoteFormOpen(false);}} style={{background:"#e7e5e4",border:"none",borderRadius:8,padding:"7px 14px",cursor:"pointer",fontSize:11,fontWeight:600}}>Cancel</button>
-<button onClick={saveQuote} disabled={!qStop.trim()} style={{background:qStop.trim()?"#16a34a":"#a8a29e",color:"#fff",border:"none",borderRadius:8,padding:"7px 14px",cursor:"pointer",fontSize:11,fontWeight:700}}>{editingQuoteId!=null?"Update":"Save"}</button>
+<button onClick={()=>setQuoteFormOpen(false)} style={{background:"#e7e5e4",border:"none",borderRadius:8,padding:"7px 14px",cursor:"pointer",fontSize:11,fontWeight:600}}>Cancel</button>
+<button onClick={saveQuote} disabled={!qStop.trim()} style={{background:qStop.trim()?"#16a34a":"#a8a29e",color:"#fff",border:"none",borderRadius:8,padding:"7px 14px",cursor:"pointer",fontSize:11,fontWeight:700}}>Save</button>
 </div>
 </div>}
 {savedQuotes.length===0&&!quoteFormOpen&&<div style={_s.emptyState}><div style={{fontSize:36,marginBottom:12}}>💰</div><p style={{fontSize:13,fontWeight:600,margin:"0 0 4px"}}>No quotes yet</p></div>}
@@ -7009,14 +7067,9 @@ else{showToast("Pick a weekday (Mon-Fri)");}
 <button onClick={()=>setQPushDay(null)} style={{background:"#e7e5e4",border:"none",borderRadius:6,padding:"4px 8px",cursor:"pointer",fontSize:10}}>✕</button>
 </div>
 :<><button onClick={()=>setQPushDay({quoteId:q.id})} style={{flex:1,background:"#16a34a",color:"#fff",border:"none",borderRadius:8,padding:"7px",cursor:"pointer",fontSize:11,fontWeight:700}}>Push to Day</button>
-<button onClick={()=>startEditQuote(q)} style={{background:"#f5f5f4",border:"1px solid #d6d3d1",borderRadius:8,padding:"7px 10px",cursor:"pointer",fontSize:11,color:"#57534e",fontWeight:600}}>Edit</button>
 <button onClick={()=>{setSavedQuotes(p=>p.filter(x=>x.id!==q.id));deleteQuoteFromFB(q.id).catch(e=>console.error("Quote del:",e));showToast("Deleted");}} style={{background:"#fef2f2",border:"none",borderRadius:8,padding:"7px 10px",cursor:"pointer",fontSize:11,color:"#dc2626",fontWeight:600}}>Delete</button></>}
 </div>}
-{accepted&&q.pushedTo&&<div style={{display:"flex",alignItems:"center",gap:6,marginTop:6,flexWrap:"wrap"}}>
-<span style={{fontSize:10,color:"#16a34a",fontWeight:600,flex:1}}>✓ Pushed to {DAYS[parseInt(q.pushedTo.split("-")[1])]||""}</span>
-<button onClick={()=>startEditQuote(q)} style={{background:"#f5f5f4",border:"1px solid #d6d3d1",borderRadius:6,padding:"4px 10px",cursor:"pointer",fontSize:10,color:"#57534e",fontWeight:600}}>Edit</button>
-<button onClick={()=>unplanQuote(q.id)} style={{background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:6,padding:"4px 10px",cursor:"pointer",fontSize:10,color:"#dc2626",fontWeight:600}}>Unplan</button>
-</div>}
+{accepted&&q.pushedTo&&<div style={{fontSize:10,color:"#16a34a",fontWeight:600,marginTop:4}}>✓ Pushed to {DAYS[parseInt(q.pushedTo.split("-")[1])]||""}</div>}
 </div>);})}
 {savedQuotes.filter(q=>quoteTab==="current"?q.status!=="accepted":q.status==="accepted").length===0&&savedQuotes.length>0&&<div style={{textAlign:"center",padding:"24px 16px",color:"#a8a29e"}}><div style={{fontSize:28,marginBottom:8}}>{quoteTab==="current"?"📋":"✅"}</div><div style={{fontSize:12}}>{quoteTab==="current"?"No open quotes":"No completed quotes"}</div></div>}
 </div>);
