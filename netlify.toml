@@ -1,13 +1,14 @@
 [build]
   command = "npm run build"
-    publish = "dist"
+  publish = "dist"
 
-    [[redirects]]
-      from = "/*"
-        to = "/index.html"
-          status = 200
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
 
-          [[headers]]
-            for = "/firebase-messaging-sw.js"
-              [headers.values]
-                  Service-Worker-Allowed = "/"
+# Nightly Firebase → Google Drive backup.
+# Runs at 07:00 UTC = 3:00 AM ET (EST) / 2:00 AM ET (EDT).
+# Can also be triggered manually: GET /api/backup-nightly
+[functions."backup-nightly"]
+  schedule = "0 7 * * *"
