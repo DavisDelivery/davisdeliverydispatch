@@ -1,7 +1,7 @@
 {
   "name": "davis-delivery-dispatch",
   "private": true,
-  "version": "3.12.27",
+  "version": "3.12.28",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
