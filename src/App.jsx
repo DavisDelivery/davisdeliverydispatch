@@ -72,7 +72,7 @@ const _fbCfg={apiKey:"AIzaSyDY2OceDzBWMHPR3C3O1oxktrCIy3mKMqU",authDomain:"glory
   s.type="module";
   s.textContent=`
     import{initializeApp}from"https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-    import{getFirestore,doc,setDoc,getDoc,onSnapshot,collection,addDoc,updateDoc,deleteDoc,query,orderBy,enableIndexedDbPersistence}from"https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+    import{getFirestore,doc,setDoc,getDoc,onSnapshot,collection,addDoc,updateDoc,deleteDoc,query,orderBy,enableIndexedDbPersistence,runTransaction}from"https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
     import{getStorage,ref as storageRef,uploadBytes,getDownloadURL}from"https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
     const app=initializeApp(${JSON.stringify(_fbCfg)});
     const db=getFirestore(app);
@@ -118,6 +118,22 @@ const _fbCfg={apiKey:"AIzaSyDY2OceDzBWMHPR3C3O1oxktrCIy3mKMqU",authDomain:"glory
         const ref=storageRef(storage,path);
         await uploadBytes(ref,blob);
         return await getDownloadURL(ref);
+      },
+      /* Atomic read-modify-write. mergeFn receives current FB data (or null
+         if doc doesn't exist) and returns the data to write. Firestore retries
+         the transaction if the doc changes between read and write — solves
+         the classic 'two drivers stamp simultaneously, one overwrites the
+         other' race. Throws if mergeFn returns null/undefined. */
+      transaction:async(path,mergeFn)=>{
+        const ref=doc(db,...path.split("/"));
+        return await runTransaction(db,async(tx)=>{
+          const snap=await tx.get(ref);
+          const current=snap.exists()?snap.data():null;
+          const next=await mergeFn(current);
+          if(next===null||next===undefined)return null;
+          tx.set(ref,next);
+          return next;
+        });
       }
     };
     window._fbLoaded=true;
@@ -151,98 +167,161 @@ const getAutoBackups=()=>{
   catch(e){return[];}
 };
 
-const saveManifestDay=async(wo,sd,entries)=>{
+/* Atomic, merge-aware save for a single day's manifest.
+
+   The historical bug: this is a shared document. Multiple writers — Chad on
+   the dispatch board, every driver via their own DriverPage — all save the
+   entire entries[] array. When two saves race (driver stamps a stop
+   milliseconds before another driver's save reads FB), the later writer's
+   read returns FB state from BEFORE the first write, and the later writer's
+   `setDoc` overwrites it. The first stamp survives in the first driver's
+   local React state until the next refresh, at which point it's gone from
+   FB and they're asked to depart again.
+
+   Two layers of defense:
+
+   1) `_fbOps.transaction` — Firestore runs this transaction in a managed
+      retry loop. If the doc changes between our read and our write, the
+      whole callback re-runs with the new data. With this, a multi-writer
+      race can't drop a write — the loser of the race retries against the
+      winner's data.
+
+   2) Field-level merge inside the transaction. The caller passes its
+      `callerDriverId` (or 0 = dispatcher). The driver only has authority
+      over status / arrivedAt / departedAt / photos / signature / shipPlan /
+      eta on entries assigned to them. For entries not assigned to the
+      caller, the FB version wins entirely — preventing one driver's save
+      from clobbering another driver's recent stamps. The dispatcher
+      (callerDriverId === 0) keeps merge-fill semantics: local wins on
+      dispatcher fields (rate, instructions, addr, order, etc.), FB wins
+      on driver-stamped fields (forward-only).
+
+   Status uses STATUS_RANK so we never advance backward (departed -> arrived
+   is impossible). Same idea for *At timestamps (never clobber populated
+   local timestamp with FB's missing). */
+const STATUS_RANK={null:0,undefined:0,"":0,"arrived":1,"departed":2};
+const DRIVER_OWNED_FIELDS=["status","arrivedAt","departedAt","photos","signature","shipPlan","eta","etaDest","etaSetAt"];
+
+const _mergeEntryDriver=(localE,fbE)=>{
+  /* Caller is the driver assigned to this entry. Take local's driver-owned
+     fields (with forward-only status) and FB's everything-else. */
+  const out={...fbE};
+  const localRank=STATUS_RANK[localE.status]??0;
+  const fbRank=STATUS_RANK[fbE.status]??0;
+  out.status=localRank>=fbRank?localE.status:fbE.status;
+  if(localE.arrivedAt)out.arrivedAt=localE.arrivedAt; else if(fbE.arrivedAt)out.arrivedAt=fbE.arrivedAt;
+  if(localE.departedAt)out.departedAt=localE.departedAt; else if(fbE.departedAt)out.departedAt=fbE.departedAt;
+  const lp=localE.photos||[],fp=fbE.photos||[];
+  const lpHasReal=lp.some(p=>typeof p==="string"&&p.startsWith("https://"));
+  const fpHasReal=fp.some(p=>typeof p==="string"&&p.startsWith("https://"));
+  if(lp.length>fp.length||(lpHasReal&&!fpHasReal))out.photos=lp; else out.photos=fp;
+  if(localE.signature&&localE.signature!=="signed")out.signature=localE.signature;
+  else if(fbE.signature)out.signature=fbE.signature;
+  if(localE.shipPlan)out.shipPlan=localE.shipPlan; else if(fbE.shipPlan)out.shipPlan=fbE.shipPlan;
+  if(localE.eta){out.eta=localE.eta;out.etaDest=localE.etaDest||null;out.etaSetAt=localE.etaSetAt||null;}
+  else if(fbE.eta){out.eta=fbE.eta;out.etaDest=fbE.etaDest||null;out.etaSetAt=fbE.etaSetAt||null;}
+  return out;
+};
+
+const _mergeEntryDispatcher=(localE,fbE)=>{
+  /* Caller is dispatcher. Local wins on dispatcher fields (rate, instructions,
+     addr, order, etc.), FB wins on driver-stamped fields. Forward-only for
+     status and never-clobber for timestamps. */
+  const out={...localE};
+  const localRank=STATUS_RANK[localE.status]??0;
+  const fbRank=STATUS_RANK[fbE.status]??0;
+  if(fbRank>localRank)out.status=fbE.status;
+  if(!localE.arrivedAt&&fbE.arrivedAt)out.arrivedAt=fbE.arrivedAt;
+  if(!localE.departedAt&&fbE.departedAt)out.departedAt=fbE.departedAt;
+  const lp=localE.photos||[],fp=fbE.photos||[];
+  const lpHasReal=lp.some(p=>typeof p==="string"&&p.startsWith("https://"));
+  const fpHasReal=fp.some(p=>typeof p==="string"&&p.startsWith("https://"));
+  if(fp.length>lp.length||(fpHasReal&&!lpHasReal))out.photos=fp;
+  if(fbE.signature&&(!localE.signature||localE.signature==="signed"))out.signature=fbE.signature;
+  if(fbE.shipPlan&&!localE.shipPlan)out.shipPlan=fbE.shipPlan;
+  if(fbE.eta&&!localE.eta){out.eta=fbE.eta;out.etaDest=fbE.etaDest;out.etaSetAt=fbE.etaSetAt;}
+  return out;
+};
+
+const saveManifestDay=async(wo,sd,entries,callerDriverId)=>{
   const fbKey=getFbKey(wo,sd);
   if(!window._fbOps){
     console.error("[SAVE] ABORT: window._fbOps not available");
     throw new Error("Firebase not loaded — _fbOps missing");
   }
-
-  let existingDoc=null;
+  const isDriver=typeof callerDriverId==="number"&&callerDriverId>0;
+  /* Quick safety read — if local is empty but FB has data, bail without
+     touching the doc. This is the classic feedback-loop signature: a stale
+     subscription wiped local, and a save is about to write that wipe back. */
   try{
-    existingDoc=await window._fbOps.read("manifests/"+fbKey);
-    const existingCount=existingDoc?.entries?.length||0;
+    const peek=await window._fbOps.read("manifests/"+fbKey);
+    const existingCount=peek?.entries?.length||0;
     const newCount=entries?.length||0;
-
-    /* Block ONLY the classic feedback-loop signature: local state went to
-       empty but Firebase has data. This happens when the subscription
-       overwrites local with stale data, we dirty the flag, then try to
-       save the wiped state back. Blocking this preserves user data.
-
-       Previously there was also a delta-block (existingCount-newCount>=3)
-       that caught "large" reductions. It was too aggressive — if a user
-       deliberately deleted 3+ stops at once (e.g. moving an entire day's
-       work off one driver), the save got blocked and the stops reappeared
-       on refresh. The empty-array block is the RIGHT check: it catches
-       the feedback loop without punishing legitimate mass-deletes. */
     if(newCount===0&&existingCount>0){
-      console.warn("[SAVE] BLOCKED: Refusing to overwrite "+fbKey+" (has "+existingCount+" entries) with empty array");
+      console.warn("[SAVE] BLOCKED: refusing to overwrite "+fbKey+" (has "+existingCount+" entries) with empty array");
       return "blocked";
     }
   }catch(readErr){
-    if((!entries||entries.length===0)){
-      console.warn("[SAVE] BLOCKED: Can't verify "+fbKey+", refusing empty write");
+    if(!entries||entries.length===0){
+      console.warn("[SAVE] BLOCKED: can't verify "+fbKey+", refusing empty write");
       return "blocked";
     }
   }
-  try{
-    /* Driver-stamped fields are authoritative from Firebase. The dispatcher's
-       local copy is often stale for these — the driver stamps deliveries on
-       their phone, Firebase updates, but if the dispatcher's day was already
-       dirty (rate edit, re-order, etc.) the stale local copy would otherwise
-       overwrite the stamps on next save. Pull these fields from Firebase
-       per-entry before writing. Skip pickups — those are dispatcher-driven.
 
-       Status is special — it has a forward-only progression
-       (null → arrived → departed) and the caller's local copy may be MORE
-       progressed than Firebase (e.g. the driver just tapped Depart but
-       Firebase still has Arrived). A naive "FB wins on any difference"
-       would let saveManifestDay erase the driver's own depart stamp
-       seconds after they tapped it, because the round-trip read sees
-       Firebase's older state. Take whichever side is further along.
-       Same idea applies to the *At timestamps: never drop a local
-       timestamp because Firebase doesn't have it yet. */
-    const STATUS_RANK={null:0,undefined:0,"":0,"arrived":1,"departed":2};
-    const fbById={};
-    (existingDoc?.entries||[]).forEach(e=>{if(e&&e.id)fbById[e.id]=e;});
-    const merged=entries.map(e=>{
-      if(!e||!e.id)return e;
-      if(e.stopType==="pickup")return e;
-      const fbE=fbById[e.id];
-      if(!fbE)return e;
-      const out={...e};
-      const localRank=STATUS_RANK[e.status]??0;
-      const fbRank=STATUS_RANK[fbE.status]??0;
-      if(fbRank>localRank){out.status=fbE.status;}
-      /* Timestamps: keep local if present, else pull from Firebase. Never
-         clobber a populated local timestamp with Firebase. */
-      if(!e.arrivedAt&&fbE.arrivedAt)out.arrivedAt=fbE.arrivedAt;
-      if(!e.departedAt&&fbE.departedAt)out.departedAt=fbE.departedAt;
-      const fbPhotos=fbE.photos||[];
-      const localPhotos=e.photos||[];
-      const fbHasReal=fbPhotos.some(p=>typeof p==="string"&&p.startsWith("https://"));
-      const localHasReal=localPhotos.some(p=>typeof p==="string"&&p.startsWith("https://"));
-      if(fbPhotos.length>localPhotos.length||(fbHasReal&&!localHasReal))out.photos=fbPhotos;
-      if(fbE.signature&&(!e.signature||e.signature==="signed"))out.signature=fbE.signature;
-      if(fbE.shipPlan&&!e.shipPlan)out.shipPlan=fbE.shipPlan;
-      if(fbE.eta&&!e.eta){out.eta=fbE.eta;out.etaDest=fbE.etaDest;}
-      return out;
-    });
-    const safe=merged.map(e=>{
-      const copy={...e};
-      copy.photos=(e.photos||[]).map((p,i)=>{
-        if(typeof p==="string"&&(p.startsWith("https://")||p.startsWith("photo_")))return p;
-        if(typeof p==="string"&&p.startsWith("data:")&&p.length<800000)return p;
-        return`photo_${e.id}_${i}`;
+  /* Atomic merge inside a Firestore transaction. If another writer slips in
+     between our read and our write, the transaction re-runs with their data
+     and our merge sees the updated state. */
+  try{
+    const result=await window._fbOps.transaction("manifests/"+fbKey,(current)=>{
+      const fbEntries=current?.entries||[];
+      const fbById={};
+      fbEntries.forEach(e=>{if(e&&e.id)fbById[e.id]=e;});
+      const localById={};
+      entries.forEach(e=>{if(e&&e.id)localById[e.id]=e;});
+
+      /* Build the final entries set:
+         - Start from local (preserves dispatcher-driven order + new entries
+           the dispatcher added that FB doesn't have yet).
+         - For each local entry: if it exists in FB, merge per ownership.
+         - For FB entries the local doesn't have: include them (driver may
+           have added a stop on another tab; dispatcher's subscription may
+           not have caught up; etc.). */
+      const merged=entries.map(localE=>{
+        if(!localE||!localE.id)return localE;
+        const fbE=fbById[localE.id];
+        if(!fbE)return localE;
+        if(isDriver){
+          /* Driver only has authority over entries assigned to them. For
+             everything else, FB wins entirely — the driver's local copy of
+             other drivers' stops may be seconds behind. */
+          if(localE.driverId!==callerDriverId)return fbE;
+          return _mergeEntryDriver(localE,fbE);
+        }else{
+          return _mergeEntryDispatcher(localE,fbE);
+        }
       });
-      if(e.signature&&e.signature.startsWith("data:image")&&e.signature.length>800000){copy.signature="signed";}
-      Object.keys(copy).forEach(k=>{if(copy[k]===undefined)delete copy[k];});
-      return copy;
+      /* Append FB-only entries (FB has them, local doesn't). */
+      fbEntries.forEach(fbE=>{
+        if(fbE&&fbE.id&&!localById[fbE.id])merged.push(fbE);
+      });
+
+      /* Normalize photos / signature for write — bound size, drop undefined. */
+      const safe=merged.map(e=>{
+        const copy={...e};
+        copy.photos=(e.photos||[]).map((p,i)=>{
+          if(typeof p==="string"&&(p.startsWith("https://")||p.startsWith("photo_")))return p;
+          if(typeof p==="string"&&p.startsWith("data:")&&p.length<800000)return p;
+          return`photo_${e.id}_${i}`;
+        });
+        if(e.signature&&e.signature.startsWith&&e.signature.startsWith("data:image")&&e.signature.length>800000){copy.signature="signed";}
+        Object.keys(copy).forEach(k=>{if(copy[k]===undefined)delete copy[k];});
+        return copy;
+      });
+      autoBackup("save-"+fbKey,{key:fbKey,entries:safe});
+      return{entries:safe,updatedAt:Date.now()};
     });
-    autoBackup("save-"+fbKey,{key:fbKey,entries:safe});
-    console.log("[SAVE] Writing manifests/"+fbKey,"entries:",safe.length);
-    await window._fbOps.write("manifests/"+fbKey,{entries:safe,updatedAt:Date.now()});
-    console.log("[SAVE] ✓ OK manifests/"+fbKey);
+    console.log("[SAVE] ✓ OK manifests/"+fbKey,"entries:",result?.entries?.length);
+    return result;
   }catch(e){
     console.error("[SAVE] ✗ FAILED manifests/"+fbKey,e.code||"",e.message||e);
     throw e;
@@ -631,7 +710,7 @@ const DAYS = ["Monday","Tuesday","Wednesday","Thursday","Friday"];
 const BRAND={main:"#1e5b92",dark:"#134b7f",light:"#357bb7",pale:"#e8f0f8",bg:"#f0f5fa"};
 const DISTANCE_BONUS_STOPS=["DCO Eatonton","DCO Athens"];
 const IMETCO_PICKUP_MAP={"IMETCO to Finishing Dynamics":"Norcross","Perfect Edge to IMETCO":"Doraville","Southern Aluminum to IMETCO":"Lithia Springs","Finishing Dynamics to IMETCO":"Villa Rica","Round Trip IMETCO & Finishing Dynamics":"Norcross"};
-const APP_VERSION="3.12.51";
+const APP_VERSION="3.13.0";
 const LOGO_URI="data:image/jpeg;base64,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";
 const LOGO_WHITE="data:image/jpeg;base64,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";
 
@@ -2672,7 +2751,7 @@ useEffect(()=>{
         if(done===toSave.length)setSaveStatus("");
         return;
       }
-      saveManifestDay(wOff,dIdx,entries).then((result)=>{
+      saveManifestDay(wOff,dIdx,entries,0).then((result)=>{
         if(result==="blocked"){
           console.warn("[SAVE] Keeping dirty flag for",dayKey,"— save was blocked, local state preserved");
           done++;
@@ -3241,27 +3320,28 @@ useEffect(()=>{
         const dirtyOrCooldown=dirtyDaysRef.current.has(lk)||saveCooldownRef.current.has(lk);
         let finalEntries=entries;
         if(dirtyOrCooldown){
+          /* Walk FB entries (not local). For each FB entry, if local has it,
+             apply the dispatcher-side merge (local wins on dispatcher fields,
+             FB wins forward-only on driver fields). FB entries not present
+             in local are KEPT (so a new entry added by another writer makes
+             it into local). Local entries not in FB are appended at the end
+             (so Chad's just-added stops survive the round-trip). */
           const localEnts=prev[lk]||[];
+          const localById={};
+          localEnts.forEach(e=>{if(e&&e.id)localById[e.id]=e;});
           const fbById={};
-          entries.forEach(e=>{fbById[e.id]=e;});
-          /* Forward-only status, mirrors saveManifestDay. Never roll back
-             local progress (departed) with stale FB (arrived). */
-          const STATUS_RANK={null:0,undefined:0,"":0,"arrived":1,"departed":2};
-          finalEntries=localEnts.map(localE=>{
-            const fbE=fbById[localE.id];
-            if(!fbE)return localE;
-            const out={...localE};
-            const localRank=STATUS_RANK[localE.status]??0;
-            const fbRank=STATUS_RANK[fbE.status]??0;
-            if(fbRank>localRank)out.status=fbE.status;
-            if(fbE.arrivedAt&&!localE.arrivedAt)out.arrivedAt=fbE.arrivedAt;
-            if(fbE.departedAt&&!localE.departedAt)out.departedAt=fbE.departedAt;
-            if((fbE.photos||[]).length>(localE.photos||[]).length)out.photos=fbE.photos;
-            if(fbE.signature&&!localE.signature)out.signature=fbE.signature;
-            if(fbE.shipPlan&&!localE.shipPlan)out.shipPlan=fbE.shipPlan;
-            if(fbE.eta&&!localE.eta){out.eta=fbE.eta;out.etaDest=fbE.etaDest;}
-            return out;
+          entries.forEach(e=>{if(e&&e.id)fbById[e.id]=e;});
+          const out=entries.map(fbE=>{
+            const localE=localById[fbE.id];
+            if(!localE)return fbE;
+            return _mergeEntryDispatcher(localE,fbE);
           });
+          /* Append local-only entries (preserves dispatcher's in-flight
+             additions). Order: FB order first, local-only at end. */
+          localEnts.forEach(localE=>{
+            if(localE&&localE.id&&!fbById[localE.id])out.push(localE);
+          });
+          finalEntries=out;
         }
         const fbJson=JSON.stringify(finalEntries);
         if(fbJson!==JSON.stringify(prev[lk]||[])){
@@ -4001,7 +4081,7 @@ _rawSetLog(p=>{const entries=(p[lk]||[]).map(e=>e.id===entryId?{...e,...updates}
 dirtyDaysRef.current.add(lk);
 const fbKey=getFbKey(weekOff,dayIdx);
 const updatedEntries=(log[lk]||[]).map(e=>e.id===entryId?{...e,...updates}:e);
-saveManifestDay(weekOff,dayIdx,updatedEntries).then(()=>{dirtyDaysRef.current.delete(lk);showToast("POD saved");}).catch(()=>showToast("Save failed"));
+saveManifestDay(weekOff,dayIdx,updatedEntries,0).then(()=>{dirtyDaysRef.current.delete(lk);showToast("POD saved");}).catch(()=>showToast("Save failed"));
 };
 const setShipPlan=(eid,num)=>setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,shipPlan:num}:e)}));
 const setRefNum=(eid,num)=>setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,refNum:num}:e)}));
@@ -8737,25 +8817,18 @@ useEffect(()=>{
         if(Date.now()-drvSaveTime.current<3000)return;
         const localById={};
         localEnts.forEach(e=>{localById[e.id]=e;});
-        /* Forward-only status: never roll local progress back. If the driver
-           just tapped Depart and FB still has Arrived (round-trip not landed),
-           the subscription must NOT overwrite local with FB. Mirrors the
-           saveManifestDay merge — see comment there. */
-        const STATUS_RANK={null:0,undefined:0,"":0,"arrived":1,"departed":2};
+        /* Forward-only / per-ownership merge for the driver. The driver only
+           has authority over entries assigned to them. For entries that
+           belong to other drivers, FB wins entirely — this driver's local
+           copy of those is likely stale and irrelevant.
+
+           Mirrors saveManifestDay's transaction merge so what we save matches
+           what we render. */
         const merged=fbEnts.map(fbE=>{
           const localE=localById[fbE.id];
           if(!localE)return fbE;
-          const out={...fbE};
-          const localRank=STATUS_RANK[localE.status]??0;
-          const fbRank=STATUS_RANK[fbE.status]??0;
-          if(localRank>fbRank){out.status=localE.status;}
-          if(localE.arrivedAt&&!fbE.arrivedAt)out.arrivedAt=localE.arrivedAt;
-          if(localE.departedAt&&!fbE.departedAt)out.departedAt=localE.departedAt;
-          if((localE.photos||[]).length>0&&((fbE.photos||[]).length===0||(fbE.photos||[]).some(p=>typeof p==="string"&&p.startsWith("photo_"))))out.photos=localE.photos;
-          if(localE.signature&&(!fbE.signature||fbE.signature==="signed"))out.signature=localE.signature;
-          if(localE.eta&&!fbE.eta){out.eta=localE.eta;out.etaDest=localE.etaDest;}
-          if(localE.shipPlan&&!fbE.shipPlan)out.shipPlan=localE.shipPlan;
-          return out;
+          if(fbE.driverId!==driverId&&localE.driverId!==driverId)return fbE;
+          return _mergeEntryDriver(localE,fbE);
         });
         const mergedJson=JSON.stringify(merged);
         if(mergedJson!==JSON.stringify(localEnts)){
@@ -8804,11 +8877,33 @@ useEffect(()=>{
   },60000);
   return()=>{if(watchId!==null)navigator.geolocation.clearWatch(watchId);clearInterval(interval);};
 },[authenticated,driverId]);
+const[drvSaveStatus,setDrvSaveStatus]=useState("");
+const drvPendingRef=useRef(null);
 const saveDriverLog=useCallback((newLog)=>{
   const entries2=newLog[dk]||[];
   drvSaveTime.current=Date.now();
-  saveManifestDay(wo,sd,entries2).catch(e=>console.error("[DRV-SAVE] FAILED:",e));
-},[dk,wo,sd]);
+  /* Retry with backoff so a transient network blip doesn't silently drop
+     the driver's stamp. Local React state keeps the stamp visible during
+     retries; Firestore offline persistence (enableIndexedDbPersistence)
+     also queues the write under the hood, so this retry mostly catches
+     transaction conflicts and explicit failures. */
+  const attempt=(tryNum)=>{
+    setDrvSaveStatus(tryNum>0?"retrying ("+tryNum+")…":"saving…");
+    saveManifestDay(wo,sd,entries2,driverId||0).then(()=>{
+      setDrvSaveStatus("✓ saved");
+      setTimeout(()=>setDrvSaveStatus(""),1500);
+    }).catch(e=>{
+      console.error("[DRV-SAVE] attempt "+(tryNum+1)+" failed:",e?.code||e?.message||e);
+      if(tryNum<5){
+        const delay=Math.min(30000,1500*Math.pow(2,tryNum));
+        setTimeout(()=>attempt(tryNum+1),delay);
+      }else{
+        setDrvSaveStatus("⚠ not saved — check connection");
+      }
+    });
+  };
+  attempt(0);
+},[dk,wo,sd,driverId]);
 
 const updateStatus=(eid,status)=>{const now=new Date().toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});setLog(p=>{const n={...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,status,arrivedAt:status==="arrived"?now:e.arrivedAt,departedAt:status==="departed"?now:e.departedAt}:e)};saveDriverLog(n);return n;});};
 const addPhoto=(eid,dataUrl)=>{
@@ -8945,7 +9040,7 @@ return(
 <div>
 <h1 style={{margin:0}}><img src={LOGO_WHITE} alt="Davis Delivery" style={{height:26,objectFit:"contain"}}/></h1>
 <p style={{margin:"2px 0 0",fontSize:11,color:"#93c5fd",letterSpacing:"0.08em"}}>DRIVER MANIFEST</p>
-<div style={{display:"flex",alignItems:"center",gap:3,marginTop:2}}><span style={{display:"inline-block",width:5,height:5,borderRadius:3,background:fbLoaded?"#16a34a":"#dc2626"}}/><span style={{fontSize:7,color:fbLoaded?"#6ee7b7":"#fca5a5"}}>{fbLoaded?"synced":"connecting..."}</span></div>
+<div style={{display:"flex",alignItems:"center",gap:3,marginTop:2}}><span style={{display:"inline-block",width:5,height:5,borderRadius:3,background:fbLoaded?"#16a34a":"#dc2626"}}/><span style={{fontSize:7,color:fbLoaded?"#6ee7b7":"#fca5a5"}}>{fbLoaded?"synced":"connecting..."}</span>{drvSaveStatus&&<span style={{fontSize:8,marginLeft:6,color:drvSaveStatus.startsWith("⚠")?"#fca5a5":(drvSaveStatus==="✓ saved"?"#6ee7b7":"#fde68a"),fontWeight:600}}>{drvSaveStatus}</span>}</div>
 </div>
 <button onClick={()=>{setAuthenticated(false);setPinEntry("");}} style={{background:"#292524",border:"1px solid #44403c",color:"#a8a29e",borderRadius:8,padding:"6px 10px",cursor:"pointer",fontSize:11}}>Lock</button>
 <button onClick={()=>setShowDriverMsg(true)} style={{background:BRAND.main,border:"none",color:"#fff",borderRadius:8,padding:"6px 10px",cursor:"pointer",fontSize:11,fontWeight:600}}>{"💬"}</button>
