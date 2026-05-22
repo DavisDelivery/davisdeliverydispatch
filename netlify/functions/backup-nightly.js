@@ -77,21 +77,35 @@ async function dumpFirestore() {
     collections: {},
     singleDocs: {},
   };
+  const errors = [];
 
-  // Read all collections
+  // Read all collections — each in its own try/catch so one failure doesn't
+  // sink the whole backup. We'd rather have a partial backup with a noted
+  // error than no backup at all.
   for (const collName of COLLECTIONS) {
-    const snap = await db.collection(collName).get();
-    const docs = {};
-    snap.forEach(doc => { docs[doc.id] = doc.data(); });
-    dump.collections[collName] = docs;
+    try {
+      const snap = await db.collection(collName).get();
+      const docs = {};
+      snap.forEach(doc => { docs[doc.id] = doc.data(); });
+      dump.collections[collName] = docs;
+    } catch (e) {
+      console.error(`[BACKUP] Failed to read collection ${collName}:`, e.message);
+      errors.push({ collection: collName, error: String(e.message || e) });
+      dump.collections[collName] = {};
+    }
   }
 
   // Read single docs
   for (const path of SINGLE_DOCS) {
-    const parts = path.split('/');
-    const ref = db.doc(parts.join('/'));
-    const snap = await ref.get();
-    dump.singleDocs[path] = snap.exists ? snap.data() : null;
+    try {
+      const ref = db.doc(path);
+      const snap = await ref.get();
+      dump.singleDocs[path] = snap.exists ? snap.data() : null;
+    } catch (e) {
+      console.error(`[BACKUP] Failed to read doc ${path}:`, e.message);
+      errors.push({ doc: path, error: String(e.message || e) });
+      dump.singleDocs[path] = null;
+    }
   }
 
   // Count stats for the summary
@@ -106,6 +120,7 @@ async function dumpFirestore() {
     byCollection: Object.fromEntries(
       Object.entries(dump.collections).map(([k, v]) => [k, Object.keys(v).length])
     ),
+    errors: errors.length ? errors : undefined,
   };
 
   return dump;
@@ -224,6 +239,9 @@ exports.handler = async (event) => {
     const jsonString = JSON.stringify(dump, null, 2);
     const sizeKB = Math.round(jsonString.length / 1024);
     logLine(`Serialized ${sizeKB} KB`);
+    if (sizeKB > 50000) {
+      logLine(`⚠ Backup is ${(sizeKB/1024).toFixed(1)} MB — approaching Netlify function memory limit. Consider splitting per-collection if it grows further.`);
+    }
 
     // 3. Check folder ID
     const folderId = process.env.GDRIVE_FOLDER_ID;
@@ -241,8 +259,10 @@ exports.handler = async (event) => {
 
     // 6. Write status
     const durationMs = Date.now() - startedAt;
+    const hadErrors = !!(dump.summary.errors && dump.summary.errors.length);
     const status = {
       success: true,
+      partial: hadErrors,
       lastRun: new Date().toISOString(),
       filename,
       fileId: uploaded.id,
@@ -250,11 +270,12 @@ exports.handler = async (event) => {
       durationMs,
       totalDocs: dump.summary.totalDocs,
       byCollection: dump.summary.byCollection,
+      errors: dump.summary.errors,
       rotation,
       log,
     };
     await writeStatus(status);
-    logLine(`Done in ${durationMs}ms`);
+    logLine(`Done in ${durationMs}ms${hadErrors ? ' (partial — see errors)' : ''}`);
 
     return {
       statusCode: 200,
