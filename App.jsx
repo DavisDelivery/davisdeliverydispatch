@@ -2451,8 +2451,7 @@ const[histSearch,setHistSearch]=useState("");
 const[histCustFilter,setHistCustFilter]=useState("");
 const[histDrvFilter,setHistDrvFilter]=useState("");
 const[histWeekRange,setHistWeekRange]=useState(4);
-const[histRevRange,setHistRevRange]=useState(13); /* weeks shown in Revenue dashboard */
-const[histMode,setHistMode]=useState("deliveries"); /* deliveries | photos | emser | quotes | revenue */
+const[histMode,setHistMode]=useState("deliveries"); /* deliveries | photos | emser */
 const[lightboxPhoto,setLightboxPhoto]=useState(null);
 const[histDetail,setHistDetail]=useState(null); /* selected history entry for POD detail */
 const[emserShifts,setEmserShifts]=useState(()=>{
@@ -3535,8 +3534,6 @@ const SORT_OPTIONS=[
 const insertPickup=(drvId,afterIdx)=>{if(!pickupStop)return;const forLabel=pickupForDel?` → ${pickupForDel}`:"";const noteItems=[pickupNote,pickupForDel?`Picking up for ${pickupForDel}`:null,pickupDelAddr?`Deliver to: ${pickupDelAddr}`:null].filter(Boolean).join(" | ");const entry={id:Date.now()+Math.random(),customer:pickupCustomer||"Pickup",stop:`${pickupCustomer||"Pickup"}${forLabel}`,baseRate:0,fuelPct:0,isHourly:false,note:noteItems||null,driverId:drvId,addr:pickupAddr||"",stopType:"pickup",priority:false,pickupFrom:pickupStop,pickupFor:pickupForDel,deliveryAddr:pickupDelAddr||null,instructions:"",status:null,arrivedAt:null,departedAt:null,eta:null,photos:[],signature:null};setLog(p=>{const all=[...(p[dk]||[])];const de=all.filter(e=>e.driverId===drvId);const rest=all.filter(e=>e.driverId!==drvId);de.splice(afterIdx+1,0,entry);return{...p,[dk]:[...rest,...de]};});setInsertPickupFor(null);setPickupCustomer("");setPickupStop("");setPickupAddr("");setPickupForDel("");setPickupNote("");setPickupDelAddr("");showToast(`Pickup added`);};
 
 const computeDay=(key,emKey)=>{const entries=log[key]||[];let base=0;let lgFees=0;if(entries.some(e=>e.isHourly)){const{totalMins}=getShiftSummary(emKey||key);const lgCount=entries.filter(e=>e.isHourly&&e.liftgateApplied&&!DISTANCE_BONUS_STOPS.includes(e.stop)).length;const distBonus=entries.filter(e=>e.isHourly&&DISTANCE_BONUS_STOPS.includes(e.stop)).length;if(totalMins>0){const billedMins=totalMins+(lgCount+distBonus)*60;base+=102.50*(Math.round(billedMins/15)*15/60);}else{base+=102.50*(emH[`${emKey||key}-emser`]||4);}}const fBC={};entries.forEach(e=>{if(e.isHourly)return;base+=e.baseRate;lgFees+=(e.liftgateFee||0);if(e.fuelPct>0){if(!fBC[e.customer])fBC[e.customer]={pct:e.fuelPct,base:0};fBC[e.customer].base+=e.baseRate;}});let fuel=0;Object.values(fBC).forEach(c=>{fuel+=c.base*c.pct;});return{base:base+lgFees,fuel,total:base+lgFees+fuel,fBC,lgFees};};
-/* Full revenue breakdown for one week offset — flat vs Emser-hourly, fuel, liftgate, by customer & driver. Mirrors computeDay so totals reconcile. */
-const computeWeekRevenue=(w)=>{const wdates=getWeekDates(w);let total=0,fuel=0,lgFees=0,hourlyRev=0,flatRev=0,deliveries=0,stops=0,hourlyMins=0;const byCust={},byDrv={},byDay=[];for(let i=0;i<5;i++){const key=`${w}-${i}`;const emKey=getFbKey(w,i);const entries=log[key]||[];const calc=computeDay(key,emKey);total+=calc.total;fuel+=calc.fuel;lgFees+=calc.lgFees;byDay.push({name:DAYS[i],date:wdates[i].date,total:calc.total});if(entries.some(e=>e.isHourly)){const{totalMins}=getShiftSummary(emKey);const lgCount=entries.filter(e=>e.isHourly&&e.liftgateApplied&&!DISTANCE_BONUS_STOPS.includes(e.stop)).length;const distBonus=entries.filter(e=>e.isHourly&&DISTANCE_BONUS_STOPS.includes(e.stop)).length;const hrs=totalMins>0?Math.round((totalMins+(lgCount+distBonus)*60)/15)*15/60:(emH[`${emKey}-emser`]||4);const amt=102.50*hrs;hourlyRev+=amt;hourlyMins+=totalMins;byCust["Emser Tile"]=(byCust["Emser Tile"]||0)+amt;entries.forEach(e=>{if(e.isHourly&&e.stopType!=="pickup")stops++;});}entries.forEach(e=>{if(e.isHourly||e.stopType==="pickup")return;const fuelAmt=e.fuelPct>0?e.baseRate*e.fuelPct:0;const r=e.baseRate+(e.liftgateFee||0)+fuelAmt;flatRev+=e.baseRate;deliveries++;stops++;byCust[e.customer]=(byCust[e.customer]||0)+r;if(e.driverId)byDrv[e.driverId]=(byDrv[e.driverId]||0)+r;});}return{week:w,label:wdates[0].date+" – "+wdates[4].date,monday:wdates[0],total,fuel,lgFees,hourlyRev,flatRev,deliveries,stops,hourlyMins,byCust,byDrv,byDay};};
 
 const getDriverMiles=(drvId,dayKey)=>{const entries=(log[dayKey||dk]||[]).filter(e=>e.driverId===drvId);return calcRouteMiles(entries);};
 const getWeekDriverMiles=(drvId)=>{let total=0;for(let i=0;i<5;i++){total+=getDriverMiles(drvId,`${wo}-${i}`);}return total;};
@@ -3583,139 +3580,6 @@ const wowPct=prevWkT>0?((wowDelta/prevWkT)*100):0;
 const getHistoryEntries=()=>{const all=[];for(let w=wo;w>=wo-histWeekRange;w--){const wdates=getWeekDates(w);for(let d=0;d<5;d++){const k=`${w}-${d}`;(log[k]||[]).forEach(e=>all.push({...e,weekOff:w,dayIdx:d,dayName:DAYS[d],dayDate:wdates[d].date}));}}return all;};
 const histAll=getHistoryEntries();
 const histFiltered=histAll.filter(e=>{const q=histSearch.toLowerCase();return(!q||e.stop.toLowerCase().includes(q)||e.customer.toLowerCase().includes(q)||(e.addr||"").toLowerCase().includes(q))&&(!histCustFilter||e.customer===histCustFilter)&&(!histDrvFilter||e.driverId===Number(histDrvFilter));});
-
-/* ── CFO Revenue Dashboard ─────────────────────────────────────────────
-   Single closure rendered in both desktop and mobile history views.
-   `compact` tightens spacing/typography for the narrow mobile column. */
-const renderRevenueDashboard=(compact)=>{
-const range=histRevRange;
-const series=[];for(let w=wo;w>wo-range;w--)series.push(computeWeekRevenue(w));
-const chrono=[...series].reverse(); /* oldest → newest for the trend chart */
-const thisWk=series[0]||{total:0,flatRev:0,hourlyRev:0,fuel:0,deliveries:0};
-const lastWk=series[1]||{total:0};
-const periodTotal=series.reduce((s,x)=>s+x.total,0);
-const activeWeeks=series.filter(x=>x.total>0);
-const avgWeek=activeWeeks.length?periodTotal/activeWeeks.length:0;
-const wowD=thisWk.total-lastWk.total;
-const wowP=lastWk.total>0?(wowD/lastWk.total)*100:0;
-const pFlat=series.reduce((s,x)=>s+x.flatRev,0);
-const pHourly=series.reduce((s,x)=>s+x.hourlyRev,0);
-const pFuel=series.reduce((s,x)=>s+x.fuel,0);
-const pLg=series.reduce((s,x)=>s+x.lgFees,0);
-const pDel=series.reduce((s,x)=>s+x.deliveries,0);
-const avgPerDel=pDel?periodTotal/pDel:0;
-const mixTotal=(pFlat+pHourly+pFuel)||1;
-const custAgg={};series.forEach(x=>Object.entries(x.byCust).forEach(([c,v])=>{custAgg[c]=(custAgg[c]||0)+v;}));
-const custRanked=Object.entries(custAgg).filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1]);
-const custMax=custRanked.length?custRanked[0][1]:1;
-const drvAgg={};series.forEach(x=>Object.entries(x.byDrv).forEach(([d,v])=>{drvAgg[d]=(drvAgg[d]||0)+v;}));
-const drvRanked=Object.entries(drvAgg).map(([id,v])=>({id:Number(id),v})).filter(d=>d.v>0).sort((a,b)=>b.v-a.v);
-const drvMax=drvRanked.length?drvRanked[0].v:1;
-const chartMax=Math.max(...chrono.map(x=>x.total),1);
-const bestWk=activeWeeks.reduce((m,x)=>x.total>((m&&m.total)||0)?x:m,null);
-const NAVY="#1e5b92",GREEN="#16a34a",AMBER="#d97706";
-const RANGES=[{v:4,l:"4 wk"},{v:8,l:"8 wk"},{v:13,l:"Quarter"},{v:26,l:"Half-yr"},{v:52,l:"Year"}];
-const chartH=compact?96:120;
-const barW=compact?16:Math.max(14,Math.min(34,Math.floor(720/Math.max(range,1))));
-const KPI=(label,val,sub,subColor)=>(<div style={{flex:compact?"1 1 45%":"1 1 0",minWidth:compact?0:120,background:"#fff",border:"1px solid #e7e5e4",borderRadius:14,padding:compact?"12px 14px":"14px 18px"}}>
-<div style={{fontSize:10,fontWeight:700,color:"#a8a29e",textTransform:"uppercase",letterSpacing:0.4,marginBottom:6}}>{label}</div>
-<div style={{fontSize:compact?20:24,fontWeight:800,color:"#1c1917",fontVariantNumeric:"tabular-nums",lineHeight:1}}>{val}</div>
-{sub&&<div style={{fontSize:11,fontWeight:600,color:subColor||"#78716c",marginTop:5}}>{sub}</div>}
-</div>);
-
-if(periodTotal===0)return(<div style={{maxWidth:compact?"100%":1000,margin:"0 auto"}}>
-<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8,marginBottom:14}}>
-<h2 style={{margin:0,fontSize:compact?16:18,fontWeight:700}}>📈 Revenue</h2>
-<div style={{display:"flex",gap:3,background:"#f5f5f4",borderRadius:10,padding:3}}>{RANGES.map(r=><button key={r.v} onClick={()=>setHistRevRange(r.v)} style={{padding:"6px 10px",borderRadius:8,border:"none",cursor:"pointer",fontSize:11,fontWeight:600,background:range===r.v?"#fff":"transparent",color:range===r.v?NAVY:"#78716c",boxShadow:range===r.v?"0 1px 3px rgba(0,0,0,0.08)":"none"}}>{r.l}</button>)}</div>
-</div>
-<div style={_s.emptyState2}><div style={{fontSize:40,marginBottom:12}}>📈</div><p style={{fontSize:14,fontWeight:600,margin:"0 0 4px"}}>No revenue in this period</p><p style={{fontSize:12,margin:0,color:"#a8a29e"}}>Logged deliveries will roll up here automatically.</p></div>
-</div>);
-
-return(<div style={{maxWidth:compact?"100%":1000,margin:"0 auto"}}>
-{/* Header + range selector */}
-<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8,marginBottom:14}}>
-<h2 style={{margin:0,fontSize:compact?16:18,fontWeight:700}}>📈 Revenue</h2>
-<div style={{display:"flex",gap:3,background:"#f5f5f4",borderRadius:10,padding:3,flexWrap:"wrap"}}>{RANGES.map(r=><button key={r.v} onClick={()=>setHistRevRange(r.v)} style={{padding:"6px 10px",borderRadius:8,border:"none",cursor:"pointer",fontSize:11,fontWeight:600,background:range===r.v?"#fff":"transparent",color:range===r.v?NAVY:"#78716c",boxShadow:range===r.v?"0 1px 3px rgba(0,0,0,0.08)":"none"}}>{r.l}</button>)}</div>
-</div>
-
-{/* KPI cards */}
-<div style={{display:"flex",flexWrap:"wrap",gap:compact?8:12,marginBottom:16}}>
-{KPI("This Week",fmt(thisWk.total),lastWk.total>0?`${wowD>=0?"▲":"▼"} ${fmt(Math.abs(wowD))} (${wowP>=0?"+":""}${wowP.toFixed(1)}%) WoW`:"first tracked week",lastWk.total>0?(wowD>=0?GREEN:"#dc2626"):"#a8a29e")}
-{KPI("Avg / Week",fmt(avgWeek),`${activeWeeks.length} active wk${activeWeeks.length!==1?"s":""}`,"#78716c")}
-{KPI(`Period Total (${range}w)`,fmt(periodTotal),bestWk?`Best wk ${fmt(bestWk.total)} · ${bestWk.monday.date}`:null,"#78716c")}
-{KPI("Avg / Delivery",fmt(avgPerDel),`${pDel} deliveries`,"#78716c")}
-</div>
-
-{/* Weekly revenue trend */}
-<div style={{background:"#fff",border:"1px solid #e7e5e4",borderRadius:14,padding:compact?"14px 12px":"16px 18px",marginBottom:16}}>
-<div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:10}}>
-<div style={{fontSize:12,fontWeight:700,color:"#57534e",textTransform:"uppercase",letterSpacing:0.4}}>Weekly Revenue Trend</div>
-<div style={{display:"flex",gap:12}}>
-<span style={{display:"flex",alignItems:"center",gap:4,fontSize:10,color:"#78716c"}}><span style={{width:9,height:9,borderRadius:2,background:NAVY}}/>Flat-rate</span>
-<span style={{display:"flex",alignItems:"center",gap:4,fontSize:10,color:"#78716c"}}><span style={{width:9,height:9,borderRadius:2,background:GREEN}}/>Emser hrs</span>
-</div>
-</div>
-<div style={{position:"relative",overflowX:"auto",paddingTop:16}}>
-{avgWeek>0&&<div style={{position:"absolute",left:0,right:0,top:16+(chartH-(avgWeek/chartMax)*chartH),borderTop:"1px dashed #f59e0b",pointerEvents:"none",zIndex:1}}><span style={{position:"absolute",right:0,top:-7,fontSize:8,fontWeight:700,color:"#d97706",background:"#fff",padding:"0 3px"}}>avg {fmt(avgWeek)}</span></div>}
-<div style={{display:"flex",gap:compact?3:5,alignItems:"flex-end",height:chartH,minWidth:"min-content"}}>
-{chrono.map((x,i)=>{const isNow=x.week===wo;const h=Math.max((x.total/chartMax)*chartH,x.total>0?3:0);const flatH=x.total>0?(x.flatRev/x.total)*h:0;const hrH=x.total>0?(x.hourlyRev/x.total)*h:0;const restH=Math.max(h-flatH-hrH,0);return(
-<div key={i} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2,width:barW,flexShrink:0}}>
-<div style={{fontSize:8,fontWeight:700,color:isNow?GREEN:"#a8a29e",fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap"}}>{x.total>0?(x.total>=1000?"$"+(x.total/1000).toFixed(1)+"k":Math.round(x.total)):""}</div>
-<div title={`${x.label}: ${fmt(x.total)}`} style={{width:"100%",height:h,display:"flex",flexDirection:"column",justifyContent:"flex-end",borderRadius:"4px 4px 0 0",overflow:"hidden",outline:isNow?`2px solid ${GREEN}`:"none",outlineOffset:1}}>
-{restH>0&&<div style={{height:restH,background:AMBER}}/>}
-{hrH>0&&<div style={{height:hrH,background:GREEN}}/>}
-{flatH>0&&<div style={{height:flatH,background:NAVY}}/>}
-</div>
-<div style={{fontSize:8,color:isNow?"#1c1917":"#a8a29e",fontWeight:isNow?700:500,whiteSpace:"nowrap"}}>{isNow?"now":x.monday.date}</div>
-</div>);})}
-</div>
-</div>
-</div>
-
-{/* Revenue mix */}
-<div style={{background:"#fff",border:"1px solid #e7e5e4",borderRadius:14,padding:compact?"14px 12px":"16px 18px",marginBottom:16}}>
-<div style={{fontSize:12,fontWeight:700,color:"#57534e",textTransform:"uppercase",letterSpacing:0.4,marginBottom:12}}>Revenue Mix · {range} wks</div>
-<div style={{display:"flex",height:14,borderRadius:7,overflow:"hidden",marginBottom:12}}>
-{pFlat>0&&<div style={{width:`${(pFlat/mixTotal)*100}%`,background:NAVY}}/>}
-{pHourly>0&&<div style={{width:`${(pHourly/mixTotal)*100}%`,background:GREEN}}/>}
-{pFuel>0&&<div style={{width:`${(pFuel/mixTotal)*100}%`,background:AMBER}}/>}
-</div>
-<div style={{display:"grid",gridTemplateColumns:compact?"1fr 1fr":"repeat(4,1fr)",gap:10}}>
-{[{l:"Flat-rate",v:pFlat,c:NAVY},{l:"Emser hrs",v:pHourly,c:GREEN},{l:"Fuel surcharge",v:pFuel,c:AMBER},{l:"Liftgate fees",v:pLg,c:"#9333ea"}].map(m=>(
-<div key={m.l}><div style={{display:"flex",alignItems:"center",gap:5,fontSize:11,color:"#78716c",marginBottom:2}}><span style={{width:9,height:9,borderRadius:2,background:m.c}}/>{m.l}</div>
-<div style={{fontSize:15,fontWeight:800,color:"#1c1917",fontVariantNumeric:"tabular-nums"}}>{fmt(m.v)}</div>
-<div style={{fontSize:9,color:"#a8a29e"}}>{((m.v/mixTotal)*100).toFixed(0)}% of mix</div></div>))}
-</div>
-</div>
-
-{/* Top customers */}
-<div style={{background:"#fff",border:"1px solid #e7e5e4",borderRadius:14,padding:compact?"14px 12px":"16px 18px",marginBottom:16}}>
-<div style={{fontSize:12,fontWeight:700,color:"#57534e",textTransform:"uppercase",letterSpacing:0.4,marginBottom:12}}>Top Customers · {range} wks</div>
-{custRanked.slice(0,compact?6:10).map(([cu,v],i)=>{const col=getCustColor(cu).accent;const share=(v/periodTotal)*100;return(
-<div key={cu} style={{marginBottom:i===Math.min(custRanked.length,compact?6:10)-1?0:10}}>
-<div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:3}}>
-<span style={{fontSize:12,fontWeight:600,color:"#1c1917",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}><span style={{color:"#a8a29e",marginRight:6,fontVariantNumeric:"tabular-nums"}}>{i+1}.</span>{cu}</span>
-<span style={{fontSize:12,fontWeight:800,color:"#1c1917",fontVariantNumeric:"tabular-nums",flexShrink:0,marginLeft:8}}>{fmt(v)} <span style={{fontSize:10,fontWeight:600,color:"#a8a29e"}}>{share.toFixed(0)}%</span></span>
-</div>
-<div style={{height:7,background:"#f5f5f4",borderRadius:4,overflow:"hidden"}}><div style={{height:"100%",width:`${Math.max((v/custMax)*100,2)}%`,background:col,borderRadius:4}}/></div>
-</div>);})}
-</div>
-
-{/* Revenue by driver */}
-{drvRanked.length>0&&<div style={{background:"#fff",border:"1px solid #e7e5e4",borderRadius:14,padding:compact?"14px 12px":"16px 18px",marginBottom:16}}>
-<div style={{fontSize:12,fontWeight:700,color:"#57534e",textTransform:"uppercase",letterSpacing:0.4,marginBottom:4}}>Revenue by Driver · {range} wks</div>
-<div style={{fontSize:10,color:"#a8a29e",marginBottom:12}}>Flat-rate deliveries only — Emser hourly is billed to the company, not per driver.</div>
-{drvRanked.map((d,i)=>{const drv=drivers.find(x=>x.id===d.id);const di=drivers.findIndex(x=>x.id===d.id);const col=DCOL[di>=0?di:0]||"#78716c";return(
-<div key={d.id} style={{marginBottom:i===drvRanked.length-1?0:10}}>
-<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:3}}>
-<span style={{display:"flex",alignItems:"center",gap:7,fontSize:12,fontWeight:600,color:"#1c1917"}}><span style={{width:18,height:18,borderRadius:5,background:col,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,color:"#fff",fontWeight:700}}>{drv?drv.name.charAt(0):"?"}</span>{drv?drv.name:"Unknown driver"}</span>
-<span style={{fontSize:12,fontWeight:800,color:"#1c1917",fontVariantNumeric:"tabular-nums"}}>{fmt(d.v)} <span style={{fontSize:10,fontWeight:600,color:"#a8a29e"}}>{((d.v/(drvRanked.reduce((s,z)=>s+z.v,0)||1))*100).toFixed(0)}%</span></span>
-</div>
-<div style={{height:7,background:"#f5f5f4",borderRadius:4,overflow:"hidden"}}><div style={{height:"100%",width:`${Math.max((d.v/drvMax)*100,2)}%`,background:col,borderRadius:4}}/></div>
-</div>);})}
-</div>}
-</div>);
-};
 
 const addDrvr=()=>{if(!newDN.trim())return;driverChangeSource.current="local";driverSaveInFlight.current=true;setDrivers(p=>[...p,{id:Date.now(),name:newDN.trim(),phone:newDP.trim()}]);setNewDN("");setNewDP("");};
 const saveDrv=id=>{if(!editNm.trim())return;driverChangeSource.current="local";driverSaveInFlight.current=true;setDrivers(p=>p.map(d=>d.id===id?{...d,name:editNm.trim(),phone:editPh.trim()}:d));setEditDrv(null);};
@@ -4213,7 +4077,7 @@ return(
 {view!=="manifest"&&<button onClick={()=>{setView("manifest");setSelCust(null);setQuoteMode(null);window.history.replaceState(null,"",window.location.pathname);window.scrollTo(0,0);}} style={{background:BRAND.main,border:"none",color:"#fff",borderRadius:8,padding:"7px 16px",cursor:"pointer",fontSize:12,fontWeight:700}}>{"← Dashboard"}</button>}
 {[{k:"daily",l:"Daily"},{k:"weekly",l:"Weekly"},{k:"routes",l:"Routes"},{k:"add",l:"+ Add"}].map(v=><button key={v.k} onClick={()=>{setView(v.k);setSelCust(null);setQuoteMode(null);if(v.k==="routes"){setRpInited(false);}}} style={{background:view===v.k?(v.k==="add"?"#16a34a":v.k==="routes"?"#d97706":BRAND.main):v.k==="add"?"#f0fdf4":v.k==="routes"?"#fffbeb":"#fff",border:view===v.k?"none":v.k==="add"?"1px solid #bbf7d0":v.k==="routes"?"1px solid #fde68a":"1px solid #e7e5e4",color:view===v.k?"#fff":v.k==="add"?"#16a34a":v.k==="routes"?"#d97706":"#57534e",borderRadius:8,padding:"7px 14px",cursor:"pointer",fontSize:12,fontWeight:600}}>{v.l}</button>)}
 <div style={{position:"relative"}}>
-<button onClick={()=>setShowMoreMenu(!showMoreMenu)} style={{background:view==="history"?BRAND.main:"#fff",border:view==="history"?"none":"1px solid #e7e5e4",color:view==="history"?"#fff":"#57534e",borderRadius:8,padding:"7px 14px",cursor:"pointer",fontSize:12,fontWeight:600}}>{view==="history"?(histMode==="quotes"?"Quotes":histMode==="emser"?"Emser Hrs":histMode==="revenue"?"Revenue":"History"):"More ⋯"}</button>
+<button onClick={()=>setShowMoreMenu(!showMoreMenu)} style={{background:view==="history"?BRAND.main:"#fff",border:view==="history"?"none":"1px solid #e7e5e4",color:view==="history"?"#fff":"#57534e",borderRadius:8,padding:"7px 14px",cursor:"pointer",fontSize:12,fontWeight:600}}>{view==="history"?(histMode==="quotes"?"Quotes":histMode==="emser"?"Emser Hrs":"History"):"More ⋯"}</button>
 {showMoreMenu&&<><div style={{position:"fixed",inset:0,zIndex:199}} onClick={()=>setShowMoreMenu(false)}/>
 <div style={{position:"absolute",top:"100%",right:0,zIndex:200,background:"#fff",border:"1px solid #e7e5e4",borderRadius:14,padding:6,marginTop:4,boxShadow:"0 12px 40px rgba(0,0,0,0.18)",width:240}}>
 {[
@@ -4221,7 +4085,6 @@ return(
 {icon:"📷",label:"Photos",desc:"Delivery photos & POD",mode:"photos"},
 {icon:"💰",label:"Quotes",desc:"Create & manage quotes",mode:"quotes"},
 {icon:"⏱",label:"Emser Hours",desc:"Track driver shift hours",mode:"emser"},
-{icon:"📈",label:"Revenue",desc:"Financial performance & trends",mode:"revenue"},
 ].map(item=>(
 <button key={item.mode} onClick={()=>{setView("history");setHistMode(item.mode);setShowMoreMenu(false);}}
 style={{display:"flex",alignItems:"center",gap:10,width:"100%",textAlign:"left",padding:"10px 12px",marginBottom:2,borderRadius:10,border:view==="history"&&histMode===item.mode?"2px solid "+BRAND.main:"1px solid transparent",background:view==="history"&&histMode===item.mode?"#f0f5fa":"#fff",cursor:"pointer"}}
@@ -4906,12 +4769,10 @@ return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius
 </div>
 
 <div style={{display:"flex",gap:3,marginBottom:16,background:"#f5f5f4",borderRadius:10,padding:3,width:"fit-content"}}>
-{[{k:"deliveries",l:"Deliveries"},{k:"revenue",l:"📈 Revenue"},{k:"photos",l:"📷 Photos"},{k:"emser",l:"⏱ Emser Hours"},{k:"quotes",l:"💰 Quotes"}].map(m=>(
+{[{k:"deliveries",l:"Deliveries"},{k:"photos",l:"📷 Photos"},{k:"emser",l:"⏱ Emser Hours"},{k:"quotes",l:"💰 Quotes"}].map(m=>(
 <button key={m.k} onClick={()=>setHistMode(m.k)} style={{padding:"8px 16px",borderRadius:8,border:"none",cursor:"pointer",fontSize:12,fontWeight:600,background:histMode===m.k?"#fff":"transparent",color:histMode===m.k?BRAND.main:"#78716c",boxShadow:histMode===m.k?"0 1px 3px rgba(0,0,0,0.08)":"none"}}>{m.l}</button>
 ))}
 </div>
-
-{histMode==="revenue"&&renderRevenueDashboard(false)}
 
 {histMode==="emser"&&(()=>{
 const shifts=getEmserDayShifts();
@@ -6131,7 +5992,7 @@ style={{flex:1,border:view===v.k?"2px solid "+BRAND.main:"1px solid #d6d3d1",bor
 )}
 <button onClick={()=>setShowMoreMenu(true)}
 style={{flex:1,border:view==="history"?"2px solid "+BRAND.main:"1px solid #d6d3d1",borderRadius:10,padding:"9px 2px",cursor:"pointer",fontSize:11,fontWeight:600,background:view==="history"?BRAND.main:"#fff",color:view==="history"?"#fff":BRAND.main}}>
-{view==="history"?(histMode==="quotes"?"Quotes":histMode==="emser"?"Emser":histMode==="revenue"?"Revenue":"History"):"More ⋯"}
+{view==="history"?(histMode==="quotes"?"Quotes":histMode==="emser"?"Emser":"History"):"More ⋯"}
 </button>
 <button onClick={()=>{setView("add");setSelCust(null);setSelStop(null);setQuoteMode(null);setInsertPickupFor(null);setMultiSelect(false);setMultiChecked([]);setShowMoreMenu(false);}}
 style={{flex:1,border:"2px solid #16a34a",borderRadius:10,padding:"9px 2px",cursor:"pointer",fontSize:11,fontWeight:600,background:view==="add"?"#16a34a":"#fff",color:view==="add"?"#fff":"#16a34a"}}>+ Add</button>
@@ -6147,7 +6008,6 @@ style={{flex:1,border:"2px solid #16a34a",borderRadius:10,padding:"9px 2px",curs
 {icon:"📷",label:"Photos",desc:"Delivery photos & POD signatures",mode:"photos"},
 {icon:"💰",label:"Quotes",desc:"Create and manage delivery quotes",mode:"quotes"},
 {icon:"⏱",label:"Emser Hours",desc:"Track driver shift hours for Emser",mode:"emser"},
-{icon:"📈",label:"Revenue",desc:"Financial performance, trends & top customers",mode:"revenue"},
 ].map(item=>(
 <button key={item.mode} onClick={()=>{setView("history");setHistMode(item.mode);setShowMoreMenu(false);}}
 style={{display:"flex",alignItems:"center",gap:12,width:"100%",textAlign:"left",padding:"14px 12px",marginBottom:6,borderRadius:12,border:view==="history"&&histMode===item.mode?"2px solid #7c3aed":"1px solid #e7e5e4",background:view==="history"&&histMode===item.mode?"#f3e8ff":"#fff",cursor:"pointer"}}>
@@ -6673,7 +6533,7 @@ style={{width:80,border:"1px solid #e7e5e4",borderRadius:6,padding:"3px 6px",fon
 
 {}
 {view==="history"&&<div>
-<div style={{padding:"16px 4px 8px"}}><h2 style={{margin:0,fontSize:16,fontWeight:600}}>{histMode==="quotes"?"Quotes":histMode==="emser"?"Emser Hours":histMode==="photos"?"Photos":histMode==="revenue"?"Revenue":"Delivery History"}</h2><p style={{margin:"4px 0 0",fontSize:12,color:"#78716c"}}>{histMode==="emser"?"Track Emser driver hours":histMode==="quotes"?"Create and manage delivery quotes":histMode==="photos"?"Delivery photos & proof of delivery":histMode==="revenue"?"Financial performance & trends":"Search deliveries and proof of delivery"}</p></div>
+<div style={{padding:"16px 4px 8px"}}><h2 style={{margin:0,fontSize:16,fontWeight:600}}>{histMode==="quotes"?"Quotes":histMode==="emser"?"Emser Hours":histMode==="photos"?"Photos":"Delivery History"}</h2><p style={{margin:"4px 0 0",fontSize:12,color:"#78716c"}}>{histMode==="emser"?"Track Emser driver hours":histMode==="quotes"?"Create and manage delivery quotes":histMode==="photos"?"Delivery photos & proof of delivery":"Search deliveries and proof of delivery"}</p></div>
 
 {histMode==="emser"&&(()=>{
 const shifts=getEmserDayShifts();
@@ -6793,9 +6653,7 @@ return(
 </div>);
 })()}
 
-{histMode==="revenue"&&renderRevenueDashboard(true)}
-
-{histMode!=="emser"&&histMode!=="revenue"&&<div>
+{histMode!=="emser"&&<div>
 <input value={histSearch} onChange={e=>setHistSearch(e.target.value)} placeholder={histMode==="photos"?"Search photos by stop, customer…":"Search stops, customers, addresses…"} style={{width:"100%",border:"1px solid #d6d3d1",borderRadius:10,padding:"10px 14px",fontSize:14,outline:"none",background:"#fff",marginBottom:10}}/>
 <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap"}}>
 <select value={histCustFilter} onChange={e=>setHistCustFilter(e.target.value)} style={{flex:1,minWidth:120,border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px",fontSize:12,outline:"none",background:"#fff",color:histCustFilter?"#1c1917":"#a8a29e"}}>
