@@ -3046,8 +3046,8 @@ const[revHistData,setRevHistData]=useState(null); /* null=not loaded, []=loaded 
 const[revHistLoading,setRevHistLoading]=useState(false);
 const[revRange,setRevRange]=useState(13); /* weeks shown in the dashboard; 0 = all loaded */
 
-/* Revenue History loader — reads up to 52 weeks of manifests + Emser hours from
-   Firebase, aggregates into weekly rows. Days within a week are read in parallel;
+/* Revenue History loader — reads ALL available weeks of manifests + Emser hours
+   from Firebase (safety-capped at 10 years), aggregates into weekly rows. Days within a week are read in parallel;
    weeks walk backwards and stop after 4 consecutive empty weeks. Defined inside
    the component so it can touch state/showToast/drivers. */
 const loadRevenueHistory=async()=>{
@@ -3061,7 +3061,7 @@ const loadRevenueHistory=async()=>{
     const dow0=now.getDay();
     const MON=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
     const fmt2=(d)=>MON[d.getMonth()]+" "+d.getDate();
-    for(let wOff=0;wOff>=-51;wOff--){
+    for(let wOff=0;wOff>=-520;wOff--){
       /* the 5 weekday Firebase keys for this week */
       const dayKeys=[];
       for(let di=0;di<5;di++){
@@ -3083,7 +3083,7 @@ const loadRevenueHistory=async()=>{
       const friDate=new Date(monDate);friDate.setDate(monDate.getDate()+4);
       const weekLabel=fmt2(monDate)+" – "+fmt2(friDate)+", "+friDate.getFullYear();
       const weekStart=monDate.toISOString().slice(0,10);
-      if(!weekEntries.length&&emserRev===0){emptyStreak++;if(emptyStreak>=4)break;continue;}
+      if(!weekEntries.length&&emserRev===0){emptyStreak++;if(emptyStreak>=8)break;continue;}
       emptyStreak=0;
       /* Aggregate flat-rate deliveries by customer; hourly entries are billed via Emser hours */
       let flatTotal=0;const byCustomer={};let hourlyStops=0;
@@ -7587,7 +7587,7 @@ style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,width:"
 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:10}}>
 <div>
 <div style={{fontSize:19,fontWeight:800,color:"#fff",letterSpacing:0.2}}>📊 Revenue Command Center</div>
-<div style={{fontSize:11,color:"#bcd6ec",marginTop:2}}>Weekly performance, customer mix & trends — up to 52 weeks from Firebase</div>
+<div style={{fontSize:11,color:"#bcd6ec",marginTop:2}}>Weekly performance, customer mix & trends — all history from Firebase</div>
 </div>
 <div style={{display:"flex",gap:8,alignItems:"center"}}>
 <button onClick={loadRevenueHistory} disabled={revHistLoading} style={{background:"rgba(255,255,255,0.15)",color:"#fff",border:"1px solid rgba(255,255,255,0.25)",borderRadius:8,padding:"8px 13px",cursor:revHistLoading?"default":"pointer",fontSize:12,fontWeight:700,opacity:revHistLoading?0.6:1}}>{revHistLoading?"⏳ Loading…":"↻ Reload"}</button>
@@ -7607,7 +7607,7 @@ style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,width:"
 
 {!revHistLoading&&revHistData===null&&<div style={{textAlign:"center",padding:48,color:"#78716c"}}>
 <div style={{fontSize:32,marginBottom:8}}>📈</div>
-<div style={{fontSize:13,marginBottom:12}}>Pull up to a year of weekly revenue.</div>
+<div style={{fontSize:13,marginBottom:12}}>Pull your full weekly revenue history.</div>
 <button onClick={loadRevenueHistory} style={{background:"#1e5b92",color:"#fff",border:"none",borderRadius:8,padding:"10px 22px",cursor:"pointer",fontSize:13,fontWeight:700}}>Load History</button>
 </div>}
 
