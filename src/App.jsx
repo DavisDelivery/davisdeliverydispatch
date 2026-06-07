@@ -3654,26 +3654,27 @@ useEffect(()=>{
            updates, then a follow-up dispatcher save will overwrite the driver's
            stamps with the dispatcher's stale (un-stamped) copy. */
         const dirtyOrCooldown=dirtyDaysRef.current.has(lk)||saveCooldownRef.current.has(lk);
+        const localEnts=prev[lk]||[];
         let finalEntries=fbFiltered;
-        if(dirtyOrCooldown){
-          /* The dispatcher is mid-edit (dirty) or just saved (cooldown).
-             Preserve LOCAL ordering for any entry that exists in both — if
-             we walked FB order, Chad's just-completed reorder would snap
-             back the moment a subscription echo arrived, and the next save
-             would write that FB order to Firebase, losing the reorder
-             permanently. That's the 'phantom movements when I change
-             something' bug.
+        /* Preserve LOCAL ordering whenever we already have local state for this
+           day — not only while dirty/in-cooldown. The dispatcher's screen is
+           the source of truth for STOP ORDER; Firebase is authoritative only
+           for driver-stamped FIELDS (status/arrivedAt/photos/etc.), never for
+           ordering.
 
-             Build the merged list in this order:
-               1) Local entries, in LOCAL order. For each, merge with FB if
-                  both have it (forward-only on driver fields, local wins
-                  on dispatcher fields). If FB doesn't have it, keep local
-                  (dispatcher-side addition still in flight to FB).
-               2) Then FB-only entries that local doesn't have, appended at
-                  the end. These are typically additions made by another
-                  writer (rare) — they show up in the dispatcher view but
-                  don't disturb the user's current ordering. */
-          const localEnts=prev[lk]||[];
+           The old code only preserved local order during dirty/cooldown and
+           otherwise walked FB order. That left a gap: after the 5s cooldown
+           expired, the next subscription echo would re-impose FB's array order.
+           So when Chad manually moved a pickup (e.g. dragging Emser-Roswell up
+           to sit beside Emser-Norcross) and then did something elsewhere that
+           triggered a later echo, Brent's manual order snapped back — the
+           'I moved them back to back and it reverted' bug.
+
+           Build order: local entries in LOCAL order (field-merged with FB when
+           both have the id), then any FB-only entries appended at the end
+           (genuine additions from another writer / the driver app). Only when
+           there's NO local state yet (first load) do we take FB order as-is. */
+        if(localEnts.length){
           const localById={};
           localEnts.forEach(e=>{if(e&&e.id)localById[e.id]=e;});
           const fbById={};
@@ -4245,6 +4246,25 @@ const makeNote=(dels)=>{
 const puSrcs=PICKUP_SOURCES.filter(s=>s.customer===cust);
 if(!puSrcs.length)return all;
 const removedPUs=all.filter(e=>e.customer===cust&&e.stopType==="pickup"&&!e.manualPickup);
+/* Before removing the auto-pickups, remember WHERE each one sat so a rebuild
+   triggered by an unrelated change (e.g. adding a stop to another driver)
+   doesn't relocate a pickup the dispatcher manually positioned. For each
+   removed pickup, record the id of the very next entry after it in the array
+   (its "anchor"). On re-insert we place the reused pickup right before that
+   same anchor, preserving the manual order. Falls back to delivery-based
+   placement only for genuinely new pickups or when the anchor is gone. */
+const _puAnchorById={};
+const _removedIdSet=new Set(removedPUs.map(p=>p.id));
+removedPUs.forEach(p=>{
+  const idx=all.findIndex(e=>e.id===p.id);
+  if(idx>=0){
+    /* Anchor = next entry that is NOT itself an auto-pickup being removed in
+       this pass, so the anchor is a stable delivery (or other kept entry)
+       that will still be present after regeneration. */
+    const next=all.slice(idx+1).find(e=>e.id&&!_removedIdSet.has(e.id));
+    _puAnchorById[p.id]=next?next.id:null; /* null => was at end */
+  }
+});
 all=all.filter(e=>!(e.customer===cust&&e.stopType==="pickup"&&!e.manualPickup));
 /* Track which removed-pickup ids get reused by a regenerated pickup. Any
    removed pickup whose id is NOT reused is genuinely gone — it must be
@@ -4306,12 +4326,38 @@ const puEntry={id:puId,customer:cust,stop:puSrc.label,baseRate:0,fuelPct:0,isHou
 note:makeNote(locDels),driverId:dId,addr:puSrc.addr,stopType:"pickup",priority:cd?.priority||false,
 instructions:existingPU?.instructions||"",status:existingPU?.status||null,arrivedAt:existingPU?.arrivedAt||null,departedAt:existingPU?.departedAt||null,eta:existingPU?.eta||null,photos:existingPU?.photos||[],signature:existingPU?.signature||null,
 dueBy:effectivePuDue,weight:0,loadNum:hasMultiLoads?ln:1,pickupFrom:loc};
-const firstDelIdx=all.findIndex(e=>e.customer===cust&&e.stopType==="delivery"&&e.driverId===dId&&(e.pickupFrom||(puSrcs.length>1?selPickup:null))===loc&&(e.loadNum||1)===ln);
-if(firstDelIdx>=0){all.splice(firstDelIdx,0,puEntry);}
-else{
-  const anyDelIdx=all.findIndex(e=>e.customer===cust&&e.stopType==="delivery"&&e.driverId===dId&&(e.loadNum||1)===ln);
-  if(anyDelIdx>=0)all.splice(anyDelIdx,0,puEntry);
-  else all.push(puEntry);
+/* Placement priority:
+   1. If this pickup existed before (reused id) and we recorded an anchor,
+      re-insert it right before that same anchor entry — this preserves a
+      position the dispatcher set manually, so a rebuild caused by an
+      unrelated change elsewhere doesn't shuffle it.
+   2. Otherwise (new pickup, or anchor no longer present) fall back to
+      placing it before the first delivery from this location/load. */
+let placed=false;
+/* Anchor lookup is INDEPENDENT of the existingPU match. existingPU also gates
+   on loadNum (hasMultiLoads?ln:1); if that gate fails (e.g. load bookkeeping
+   shifted) we'd otherwise skip the anchor entirely and fall through to
+   firstDelIdx, snapping a manually-placed pickup back in front of its first
+   delivery — exactly the 'I moved them back to back and it reverted' bug.
+   Match the prior pickup by (driver, stop) so the recorded position is honored
+   regardless of the loadNum gate. */
+const priorPU=removedPUs.find(p=>p.driverId===dId&&p.stop===puSrc.label);
+if(priorPU&&Object.prototype.hasOwnProperty.call(_puAnchorById,priorPU.id)){
+  const anchorId=_puAnchorById[priorPU.id];
+  if(anchorId===null){all.push(puEntry);placed=true;} /* was at end */
+  else{
+    const ai=all.findIndex(e=>e.id===anchorId);
+    if(ai>=0){all.splice(ai,0,puEntry);placed=true;}
+  }
+}
+if(!placed){
+  const firstDelIdx=all.findIndex(e=>e.customer===cust&&e.stopType==="delivery"&&e.driverId===dId&&_normLoc(e.pickupFrom||loc)===_normLoc(loc)&&(e.loadNum||1)===ln);
+  if(firstDelIdx>=0){all.splice(firstDelIdx,0,puEntry);}
+  else{
+    const anyDelIdx=all.findIndex(e=>e.customer===cust&&e.stopType==="delivery"&&e.driverId===dId&&(e.loadNum||1)===ln);
+    if(anyDelIdx>=0)all.splice(anyDelIdx,0,puEntry);
+    else all.push(puEntry);
+  }
 }
 });
 });
