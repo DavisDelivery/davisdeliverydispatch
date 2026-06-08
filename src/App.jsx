@@ -3045,16 +3045,27 @@ const[showRevenueHistory,setShowRevenueHistory]=useState(false);
 const[revHistData,setRevHistData]=useState(null); /* null=not loaded, []=loaded empty, [{weekLabel,weekStart,total,flatTotal,emserRev,emserHours,byCustomer,entries,wOff,deliveries},...]=loaded */
 const[revHistLoading,setRevHistLoading]=useState(false);
 const[revRange,setRevRange]=useState(13); /* weeks shown in the dashboard; 0 = all loaded */
+const[revHistError,setRevHistError]=useState(null);
 
 /* Revenue History loader — reads ALL available weeks of manifests + Emser hours
    from Firebase (safety-capped at 10 years), aggregates into weekly rows. Days within a week are read in parallel;
    weeks walk backwards and stop after 4 consecutive empty weeks. Defined inside
    the component so it can touch state/showToast/drivers. */
 const loadRevenueHistory=async()=>{
-  if(!window._fbOps){showToast("Firebase not ready");return;}
+  setRevHistError(null);
   setRevHistLoading(true);
   setRevHistData(null);
   try{
+    /* Wait for Firebase to finish loading instead of bailing — opening the
+       panel right after launch used to hit "Firebase not ready" and dead-end. */
+    await new Promise((resolve,reject)=>{
+      if(window._fbLoaded&&window._fbOps)return resolve();
+      let waited=0;
+      const id=setInterval(()=>{
+        if(window._fbLoaded&&window._fbOps){clearInterval(id);resolve();}
+        else if((waited+=200)>=15000){clearInterval(id);reject(new Error("Firebase didn't load — check your connection and retry."));}
+      },200);
+    });
     const weeks=[];
     let emptyStreak=0;
     const now=new Date();
@@ -3108,8 +3119,8 @@ const loadRevenueHistory=async()=>{
     }
     setRevHistData(weeks);
   }catch(err){
-    showToast("Error loading revenue history");
     console.error("[REVENUE] load failed:",err);
+    setRevHistError(err&&err.message?err.message:String(err));
     setRevHistData([]);
   }finally{setRevHistLoading(false);}
 };
@@ -3144,6 +3155,10 @@ const exportRevenueCSV=(weeks)=>{
   a.click();URL.revokeObjectURL(url);
   showToast("CSV exported — "+(rows.length-1)+" rows");
 };
+
+/* Auto-load whenever the Revenue panel opens and nothing is loaded yet, so it
+   never dead-ends on a "Load History" button (and survives a Firebase race). */
+useEffect(()=>{if(showRevenueHistory&&revHistData===null&&!revHistLoading)loadRevenueHistory();},[showRevenueHistory]);
 const[auditEntries,setAuditEntries]=useState([]);
 const[auditFilters,setAuditFilters]=useState(new Set(["create","delete"]));/* default: creates+deletes only */
 const[editDrv,setEditDrv]=useState(null);const[editNm,setEditNm]=useState("");const[editPh,setEditPh]=useState("");
@@ -5709,7 +5724,7 @@ onMouseEnter={e=>{e.currentTarget.style.background="#f5f5f4";}} onMouseLeave={e=
 <span style={{fontSize:18,width:28,textAlign:"center",flexShrink:0}}>📋</span>
 <div><div style={{fontSize:12,fontWeight:700,color:"#1c1917"}}>Activity Log</div><div style={{fontSize:9,color:"#78716c"}}>Creates, deletes, reassigns — last 90 days</div></div>
 </button>
-<button onClick={()=>{setShowRevenueHistory(true);loadRevenueHistory();setShowMoreMenu(false);}}
+<button onClick={()=>{setShowRevenueHistory(true);setShowMoreMenu(false);}}
 style={{display:"flex",alignItems:"center",gap:10,width:"100%",textAlign:"left",padding:"10px 12px",marginTop:2,borderRadius:10,border:"1px solid transparent",background:"#fff",cursor:"pointer"}}
 onMouseEnter={e=>{e.currentTarget.style.background="#f5f5f4";}} onMouseLeave={e=>{e.currentTarget.style.background="#fff";}}>
 <span style={{fontSize:18,width:28,textAlign:"center",flexShrink:0}}>📊</span>
@@ -7657,7 +7672,14 @@ style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,width:"
 <button onClick={loadRevenueHistory} style={{background:"#1e5b92",color:"#fff",border:"none",borderRadius:8,padding:"10px 22px",cursor:"pointer",fontSize:13,fontWeight:700}}>Load History</button>
 </div>}
 
-{!revHistLoading&&revHistData&&revHistData.length===0&&<div style={{textAlign:"center",padding:48,color:"#78716c"}}>
+{!revHistLoading&&revHistError&&<div style={{textAlign:"center",padding:40,color:"#991b1b"}}>
+<div style={{fontSize:32,marginBottom:8}}>⚠️</div>
+<div style={{fontWeight:700,fontSize:14}}>Couldn’t load revenue history</div>
+<div style={{fontSize:12,marginTop:6,color:"#78716c",maxWidth:420,marginLeft:"auto",marginRight:"auto"}}>{revHistError}</div>
+<button onClick={loadRevenueHistory} style={{marginTop:14,background:"#1e5b92",color:"#fff",border:"none",borderRadius:8,padding:"10px 22px",cursor:"pointer",fontSize:13,fontWeight:700}}>Retry</button>
+</div>}
+
+{!revHistLoading&&!revHistError&&revHistData&&revHistData.length===0&&<div style={{textAlign:"center",padding:48,color:"#78716c"}}>
 <div style={{fontSize:32,marginBottom:8}}>📭</div>
 <div style={{fontWeight:600}}>No historical data found</div>
 <div style={{fontSize:11,marginTop:4}}>Once deliveries are logged, weekly revenue rolls up here.</div>
@@ -8103,7 +8125,7 @@ style={{marginTop:8,width:"100%",display:"flex",alignItems:"center",justifyConte
 <span style={{fontSize:20}}>📋</span>
 <div style={{textAlign:"left"}}><div style={{fontSize:13,fontWeight:700,color:"#1c1917"}}>Activity Log</div><div style={_s.sub}>Creates, deletes, reassigns — last 90 days</div></div>
 </button>
-<button onClick={()=>{setShowRevenueHistory(true);loadRevenueHistory();setShowMoreMenu(false);}}
+<button onClick={()=>{setShowRevenueHistory(true);setShowMoreMenu(false);}}
 style={{marginTop:8,width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"14px 12px",borderRadius:12,border:"1px solid #e7e5e4",background:"#fff",cursor:"pointer"}}>
 <span style={{fontSize:20}}>📊</span>
 <div style={{textAlign:"left"}}><div style={{fontSize:13,fontWeight:700,color:"#1c1917"}}>Revenue History</div><div style={_s.sub}>Weekly totals + CSV export for MarginIQ</div></div>
