@@ -404,16 +404,24 @@ const saveManifestDay=async(wo,sd,entries,callerDriverId,deletedIds)=>{
     throw new Error("Firebase not loaded — _fbOps missing");
   }
   const isDriver=typeof callerDriverId==="number"&&callerDriverId>0;
+  const tomb=deletedIds instanceof Set?deletedIds:new Set(deletedIds||[]);
   /* Quick safety read — if local is empty but FB has data, bail without
      touching the doc. This is the classic feedback-loop signature: a stale
-     subscription wiped local, and a save is about to write that wipe back. */
+     subscription wiped local, and a save is about to write that wipe back.
+     Tombstone-aware: if every FB entry's id is tombstoned, this is a
+     legitimate delete-the-last-stop save, not a feedback wipe — without
+     this exception the empty save never lands, the dirty flag never clears,
+     and the stop resurrects once the 90s tombstone expires. */
   try{
     const peek=await window._fbOps.read("manifests/"+fbKey);
     const existingCount=peek?.entries?.length||0;
     const newCount=entries?.length||0;
     if(newCount===0&&existingCount>0){
-      console.warn("[SAVE] BLOCKED: refusing to overwrite "+fbKey+" (has "+existingCount+" entries) with empty array");
-      return "blocked";
+      const untombed=(peek.entries||[]).filter(e=>!(e&&e.id&&tomb.has(e.id)));
+      if(untombed.length>0){
+        console.warn("[SAVE] BLOCKED: refusing to overwrite "+fbKey+" ("+untombed.length+" of "+existingCount+" entries not tombstoned) with empty array");
+        return "blocked";
+      }
     }
   }catch(readErr){
     if(!entries||entries.length===0){
@@ -470,8 +478,7 @@ const saveManifestDay=async(wo,sd,entries,callerDriverId,deletedIds)=>{
          FB still carries it because our delete hasn't been written yet.
          Without this guard the entry resurrects on every save. Entries that
          are FB-only AND not tombstoned are genuine additions from another
-         writer and must be kept. */
-      const tomb=deletedIds instanceof Set?deletedIds:new Set(deletedIds||[]);
+         writer and must be kept. (tomb is built once above the peek guard.) */
       fbEntries.forEach(fbE=>{
         if(fbE&&fbE.id&&!localById[fbE.id]&&!tomb.has(fbE.id))merged.push(fbE);
       });
@@ -2930,7 +2937,11 @@ const activeTombstones=()=>{
 };
 window._ddTombstones=tombstonesRef;
 const startupReadyRef=useRef(false);
-setTimeout(()=>{startupReadyRef.current=true;},5000);
+/* When the grace period ends, nudge the autosave effect (identity-only log
+   change) so any dirty marks deferred during the window get processed even
+   if no further edit/subscription event arrives. Guarded so only the first
+   timeout to fire does the flip+nudge. */
+setTimeout(()=>{if(!startupReadyRef.current){startupReadyRef.current=true;if(dirtyDaysRef.current.size>0)_rawSetLog(p=>({...p}));}},5000);
 const prevLogRef=useRef({});
 const logRef=useRef({}); /* always points to CURRENT log for .then() closures */
 const saveTimerRef=useRef(null);
@@ -2951,7 +2962,11 @@ const setLog=useCallback((updater)=>{
 },[]);
 useEffect(()=>{
   if(dirtyDaysRef.current.size===0)return;
-  if(!startupReadyRef.current){console.log("[SAVE] Skipping — startup grace period");dirtyDaysRef.current.clear();return;}
+  /* Defer (don't clear) during the startup grace period. Only genuine user
+     edits mark days dirty — subscription/hydration paths use _rawSetLog — so
+     clearing here threw away real edits made in the first 5s. The marks are
+     kept and processed once the window ends (see the flip+nudge timeout). */
+  if(!startupReadyRef.current){console.log("[SAVE] Deferring — startup grace period");return;}
   if(saveTimerRef.current)clearTimeout(saveTimerRef.current);
   saveTimerRef.current=setTimeout(()=>{
     saveTimerRef.current=null;
@@ -4097,11 +4112,11 @@ const qualifiedPU=(()=>{
   return rawPU;
 })();
 const targetDkEntries=()=>{
-  const delEntry={id:genId(),customer:cust,stop:q.stop||"Quote Delivery",baseRate:q.rate||0,fuelPct:0,isHourly:false,note:q.note||(q.miles?q.miles+"mi":""),driverId:0,addr:q.addr||"",stopType:"delivery",priority:false,instructions:"BOL & Pictures must be sent back via Email",status:null,arrivedAt:null,departedAt:null,eta:null,photos:[],signature:null,dueBy:null,weight:wt,loadNum:1,pickupFrom:qualifiedPU||null,liftgateApplied:!!q.liftgate,knownLiftgate:false,liftgateFee:q.liftgate?75:0};
+  const delEntry={id:genId(),customer:cust,stop:q.stop||"Quote Delivery",baseRate:q.rate||0,fuelPct:0,isHourly:false,note:q.note||(q.miles?q.miles+"mi":""),driverId:0,addr:q.addr||"",stopType:"delivery",priority:false,instructions:"BOL & Pictures must be sent back via Email",status:null,arrivedAt:null,departedAt:null,eta:null,photos:[],signature:null,dueBy:null,weight:wt,loadNum:1,pickupFrom:qualifiedPU||null,liftgateApplied:!!q.liftgate,knownLiftgate:false,liftgateFee:q.liftgate?75:0,fromQuoteId:q.id};
   if(rawPU&&q.pickupAddr){
     /* Quote has a real pickup location -> create the pickup leg too, so the
        driver gets a PU card at the correct address. */
-    const puEntry={id:genId(),customer:cust,stop:qualifiedPU||rawPU,baseRate:0,fuelPct:0,isHourly:false,note:"Picking up for "+(q.stop||"delivery"),driverId:0,addr:q.pickupAddr,stopType:"pickup",priority:false,instructions:"",status:null,arrivedAt:null,departedAt:null,eta:null,photos:[],signature:null,dueBy:null,weight:wt,loadNum:1,manualPickup:true};
+    const puEntry={id:genId(),customer:cust,stop:qualifiedPU||rawPU,baseRate:0,fuelPct:0,isHourly:false,note:"Picking up for "+(q.stop||"delivery"),driverId:0,addr:q.pickupAddr,stopType:"pickup",priority:false,instructions:"",status:null,arrivedAt:null,departedAt:null,eta:null,photos:[],signature:null,dueBy:null,weight:wt,loadNum:1,manualPickup:true,fromQuoteId:q.id};
     return[puEntry,delEntry];
   }
   return[delEntry];
@@ -4120,8 +4135,16 @@ if(!q||!q.pushedTo)return;
 const targetDk=q.pushedTo;
 setLog(p=>{
   const dayEntries=p[targetDk]||[];
-  const filtered=dayEntries.filter(e=>!(e.stop===q.stop&&e.customer===q.customer&&Math.abs(e.baseRate-(q.rate||0))<1));
-  return{...p,[targetDk]:filtered};
+  /* Remove BOTH legs the push created (delivery + optional pickup). Prefer
+     the explicit fromQuoteId marker stamped by pushQuoteToDay; fall back to
+     the old heuristics for entries pushed before the marker existed (the
+     pickup leg's "Picking up for ..." note is its only stable fingerprint).
+     Tombstone every removed id, otherwise the transactional save / the
+     subscription merge sees them FB-only and resurrects them seconds later. */
+  const removed=dayEntries.filter(e=>e.fromQuoteId===q.id||(e.customer===q.customer&&((e.stopType!=="pickup"&&e.stop===q.stop&&Math.abs(e.baseRate-(q.rate||0))<1)||(e.stopType==="pickup"&&e.manualPickup&&e.note==="Picking up for "+(q.stop||"delivery")))));
+  if(removed.length)tombstone(removed.map(e=>e.id));
+  const removedIds=new Set(removed.map(e=>e.id));
+  return{...p,[targetDk]:dayEntries.filter(e=>!removedIds.has(e.id))};
 });
 setSavedQuotes(p=>p.map(x=>x.id===quoteId?{...x,status:"pending",pushedTo:null}:x));
 const updated={...q,status:"pending",pushedTo:null};
@@ -6741,7 +6764,7 @@ else{showToast("Pick a weekday (Mon-Fri)");}
 <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0,marginLeft:8}}>
 {drv&&<span style={{fontSize:9,background:DCOL[di]||"#78716c",color:"#fff",padding:"1px 4px",borderRadius:3,fontWeight:600}}>{drv.name.split(" ")[0]}</span>}
 {(()=>{const cu=CUSTOMERS[entry.customer];if(!cu||!cu.fuel_surcharge||cu.fuel_included)return null;if(entry.stopType==="pickup")return null;if(entry.fuelPct===0)return null;const pct=Math.round((entry.fuelPct||cu.fuel_surcharge)*100);return<span title={"Bill: add "+pct+"% fuel surcharge on top of line rate"} style={{fontSize:9,background:"#fffbeb",color:"#b45309",border:"1px solid #fde68a",padding:"1px 5px",borderRadius:4,fontWeight:700,letterSpacing:"0.02em"}}>+{pct}% FUEL</span>;})()}
-<InlineRate value={entry.baseRate+(entry.liftgateApplied&&!entry.isHourly?(entry.liftgateFee||75):0)} isHourly={entry.isHourly} onSave={r=>updateRate(entry.id,r)}/>
+<InlineRate value={entry.baseRate+(entry.liftgateApplied&&!entry.isHourly?(entry.liftgateFee||75):0)} isHourly={entry.isHourly} onSave={r=>updateRateForDay(entry.id,r,`${entry.weekOff}-${entry.dayIdx}`)}/>
 </div>
 </div>);})}
 </div>);});})()}
@@ -10360,7 +10383,11 @@ onChange={e=>{if(e.target.files[0]){const r=new FileReader();r.onload=ev=>addPho
 </div>
 
 {arrived&&!departed&&!entry.liftgateApplied&&<button onClick={()=>{
-sendNotificationToDriver(0,"🔄 LIFTGATE REQUEST from "+(driver?.name||"driver")+"\nStop: "+entry.stop+"\nApply $75 liftgate charge?","liftgate_request").catch(()=>{});
+/* Send via the messages system (same path as driver chat) — dispatch
+   subscribes to dm-{driverId} channels and pops these up; the old
+   notifications/0 write had no reader on the dispatch side. */
+const now=new Date().toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});
+saveMessage("dm-"+driverId,{from:"driver-"+driverId,fromName:driver?.name||"Driver",text:"🔄 LIFTGATE REQUEST\nStop: "+entry.stop+"\nApply $75 liftgate charge?",time:now,read:false}).catch(e=>console.error("Liftgate request FAILED:",e));
 showToast("Liftgate request sent to dispatch");
 }} style={{width:"100%",marginTop:6,background:"#fff7ed",border:"2px solid #fed7aa",borderRadius:8,padding:"8px 12px",cursor:"pointer",fontSize:12,fontWeight:700,color:"#ea580c",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
 🔄 Liftgate Required (+$75)
