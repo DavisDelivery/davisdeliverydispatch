@@ -123,7 +123,10 @@ export default async (req: Request, context: Context) => {
     intermediates: intermediates.slice(0, -1), // Exclude last (it's the destination)
     travelMode: "DRIVE",
     routingPreference: "TRAFFIC_AWARE",
-    optimizeWaypointOrder: noTime.length > 0, // Only optimize if there are flexible stops
+    // Only let Google reorder waypoints when NO stop has a time constraint —
+    // optimization reorders ALL intermediates, which would defeat the
+    // deadline-first ordering of time-constrained stops.
+    optimizeWaypointOrder: withTime.length === 0 && noTime.length > 0,
     computeAlternativeRoutes: false,
     languageCode: "en-US",
     units: "IMPERIAL",
@@ -186,7 +189,6 @@ export default async (req: Request, context: Context) => {
     // Calculate per-leg ETAs
     const legs = route.legs || [];
     let cumulativeMinutes = 0;
-    const now = new Date();
     const startHour = 7; // Assume 7 AM departure
     const startMinutes = startHour * 60;
 
@@ -218,7 +220,7 @@ export default async (req: Request, context: Context) => {
       cumulativeMinutes += legMinutes;
       // Add 5 min per stop for unloading
       const arrivalMinutes = startMinutes + cumulativeMinutes + i * 5;
-      const arrHour = Math.floor(arrivalMinutes / 60);
+      const arrHour = Math.floor(arrivalMinutes / 60) % 24; // wrap past midnight
       const arrMin = arrivalMinutes % 60;
       const ampm = arrHour >= 12 ? "PM" : "AM";
       const displayHour = arrHour > 12 ? arrHour - 12 : arrHour === 0 ? 12 : arrHour;
@@ -288,7 +290,16 @@ async function fallbackDirections(
       ? `${pickups[pickups.length - 1].lat},${pickups[pickups.length - 1].lng}`
       : `${origin.lat},${origin.lng}`;
 
-    const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${orgStr}&destination=${dest.lat},${dest.lng}&waypoints=optimize:true|${waypoints}&key=${apiKey}`;
+    // Mirror the main handler: only let Google reorder waypoints when no stop
+    // has a time constraint, otherwise keep the deadline-first order as given.
+    const hasTimeConstraints = deliveries.some(
+      (s) => s.dueBy && parseTimeConstraint(s.dueBy) !== null
+    );
+    const waypointsParam = hasTimeConstraints
+      ? waypoints
+      : `optimize:true|${waypoints}`;
+
+    const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${orgStr}&destination=${dest.lat},${dest.lng}&waypoints=${waypointsParam}&key=${apiKey}`;
     const resp = await fetch(url);
     const data = await resp.json();
 
@@ -305,10 +316,13 @@ async function fallbackDirections(
     const route = data.routes[0];
     const order = route.waypoint_order || [];
     const intermDels = deliveries.slice(0, -1);
-    const orderedDels = [
-      ...order.map((i: number) => intermDels[i]),
-      deliveries[deliveries.length - 1],
-    ];
+    const orderedDels =
+      order.length === intermDels.length
+        ? [
+            ...order.map((i: number) => intermDels[i]),
+            deliveries[deliveries.length - 1],
+          ]
+        : deliveries;
 
     const legs = route.legs || [];
     let cumulativeMinutes = 0;
@@ -337,7 +351,7 @@ async function fallbackDirections(
 
       cumulativeMinutes += legMinutes;
       const arrivalMinutes = startMinutes + cumulativeMinutes + i * 5;
-      const arrHour = Math.floor(arrivalMinutes / 60);
+      const arrHour = Math.floor(arrivalMinutes / 60) % 24; // wrap past midnight
       const arrMin = arrivalMinutes % 60;
       const ampm = arrHour >= 12 ? "PM" : "AM";
       const displayHour = arrHour > 12 ? arrHour - 12 : arrHour === 0 ? 12 : arrHour;

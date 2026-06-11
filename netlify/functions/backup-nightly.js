@@ -26,16 +26,22 @@ const COLLECTIONS = [
   'emserHours',
   'emserShifts',
   'dispatchNotes',
-  'customStops',
-  'stopOverrides',
-  'hiddenStops',
   'invoices',
   'driverLocations',
+  'audit',
 ];
 const SINGLE_DOCS = [
   'config/drivers',
   'config/driverCapacity',
+  'config/customStops',
+  'config/stopOverrides',
+  'config/hiddenStops',
 ];
+// Subcollections stored as {parent}/{docId}/items — e.g. chat messages under
+// messages/{channelKey}/items and driver notifications under
+// notifications/{driverId}/items. Backed up via a collection-group query on
+// 'items', filtered by top-level parent, and stored keyed by full doc path.
+const SUBCOLLECTION_PARENTS = ['messages', 'notifications'];
 
 // Retention policy
 const KEEP_DAILY = 14;   // last 14 days of daily backups
@@ -72,10 +78,11 @@ async function dumpFirestore() {
   const app = getFirebaseApp();
   const db = admin.firestore(app);
   const dump = {
-    version: 'backup-v1',
+    version: 'backup-v2',
     exportedAt: new Date().toISOString(),
     collections: {},
     singleDocs: {},
+    subcollections: {},
   };
   const errors = [];
 
@@ -108,17 +115,41 @@ async function dumpFirestore() {
     }
   }
 
+  // Read subcollections ('items' under messages/* and notifications/*) via a
+  // single collection-group query, then bucket each doc by its top-level parent
+  // and store it under its full Firestore path so restores are unambiguous.
+  for (const parent of SUBCOLLECTION_PARENTS) dump.subcollections[parent] = {};
+  try {
+    const snap = await db.collectionGroup('items').get();
+    snap.forEach(doc => {
+      const path = doc.ref.path; // e.g. "messages/{channelKey}/items/{docId}"
+      const topLevel = path.split('/')[0];
+      if (SUBCOLLECTION_PARENTS.includes(topLevel)) {
+        dump.subcollections[topLevel][path] = doc.data();
+      }
+    });
+  } catch (e) {
+    console.error('[BACKUP] Failed to read items subcollections:', e.message);
+    errors.push({ subcollection: 'items', error: String(e.message || e) });
+  }
+
   // Count stats for the summary
   let totalDocs = 0;
   for (const coll of Object.values(dump.collections)) totalDocs += Object.keys(coll).length;
   for (const val of Object.values(dump.singleDocs)) if (val) totalDocs++;
+  for (const sub of Object.values(dump.subcollections)) totalDocs += Object.keys(sub).length;
 
   dump.summary = {
     totalCollections: Object.keys(dump.collections).length,
     totalSingleDocs: Object.keys(dump.singleDocs).length,
+    totalSubcollectionDocs: Object.values(dump.subcollections)
+      .reduce((sum, sub) => sum + Object.keys(sub).length, 0),
     totalDocs,
     byCollection: Object.fromEntries(
       Object.entries(dump.collections).map(([k, v]) => [k, Object.keys(v).length])
+    ),
+    bySubcollection: Object.fromEntries(
+      Object.entries(dump.subcollections).map(([k, v]) => [k, Object.keys(v).length])
     ),
     errors: errors.length ? errors : undefined,
   };
@@ -270,6 +301,7 @@ exports.handler = async (event) => {
       durationMs,
       totalDocs: dump.summary.totalDocs,
       byCollection: dump.summary.byCollection,
+      bySubcollection: dump.summary.bySubcollection,
       errors: dump.summary.errors,
       rotation,
       log,
