@@ -1294,7 +1294,7 @@ polylinesRef.current.forEach(p=>p.setMap(null));
 },[]);/* eslint-disable-line react-hooks/exhaustive-deps */
 const makeDueLabel=(map,pos,text)=>{
 if(!window.google?.maps?.OverlayView)return null;
-const isWindow=text.includes("–")||text.includes("-")&&text.match(/\d.*–.*\d/);
+const isWindow=text.includes("–")||/\d\s*-\s*\d/.test(text);
 const isPickupBy=text.toLowerCase().startsWith("pickup by");
 const isPickupAfter=text.toLowerCase().startsWith("pickup after");
 const isPickup=isPickupBy||isPickupAfter||text.toLowerCase().startsWith("pickup");
@@ -1330,7 +1330,7 @@ return overlay;
 };
 useEffect(()=>{
 if(!mapReady||!mapInstanceRef.current||!window.google?.maps)return;
-const stopsKey=JSON.stringify((stops||[]).map(s=>({id:s.id,driverId:s.driverId,routeOrder:s.routeOrder,loadNum:s.loadNum,status:s.status,dueBy:s.dueBy,coords:s.coords})));
+const stopsKey=JSON.stringify((stops||[]).map(s=>({id:s.id,driverId:s.driverId,routeOrder:s.routeOrder,loadNum:s.loadNum,status:s.status,dueBy:s.dueBy,coords:s.coords})))+"|road:"+useRoadRoutes;
 const driversKey=JSON.stringify((drivers||[]).map(d=>d.id));
 if(stopsKey===stopsJsonRef.current&&driversKey===driversJsonRef.current)return;
 stopsJsonRef.current=stopsKey;
@@ -1485,7 +1485,7 @@ if(useRoadRoutes&&window.google?.maps?.DirectionsService&&positions.length<=25){
   svc.route({origin,destination:dest,waypoints,travelMode:window.google.maps.TravelMode.DRIVING,optimizeWaypoints:false},(result,status)=>{
     if(status==="OK"){
       const renderer=new window.google.maps.DirectionsRenderer({map,directions:result,suppressMarkers:true,preserveViewport:true,
-        polylineOptions:{strokeColor:col,strokeOpacity:isLoad1?0:0,strokeWeight,icons}});
+        polylineOptions:{strokeColor:col,strokeOpacity:isLoad1?strokeOpacity:0,strokeWeight,icons}});
       polylinesRef.current.push({setMap:(m)=>{renderer.setMap(m);}});
     }else{
       const line=new window.google.maps.Polyline({
@@ -3269,7 +3269,8 @@ const[chatImage,setChatImage]=useState(null); /* {base64, preview} */
 const[showMsgPanel,setShowMsgPanel]=useState(false);
 const[showMoreMenu,setShowMoreMenu]=useState(false);
 
-useEffect(()=>{_geocodeNotify=()=>{};return()=>{_geocodeNotify=null;};},[]);
+const[,forceGeo]=useState(0); /* bumped when an async geocode finishes so new pins render */
+useEffect(()=>{_geocodeNotify=()=>{forceGeo(n=>n+1);};return()=>{_geocodeNotify=null;};},[]);
 const[msgChannel,setMsgChannel]=useState(null); /* null=group, driverId=private */
 const[msgInput,setMsgInput]=useState("");
 const[allMessages,setAllMessages]=useState({}); /* {channelKey: [{id,from,text,time,fromName},...]} */
@@ -5574,13 +5575,6 @@ const txt=await r.text();
 if(r.ok){try{data=JSON.parse(txt);if(!data?.content)data=null;}catch(e){data=null;}}
 if(!data)errDetails="Netlify function returned: "+txt.slice(0,300);
 }catch(e){errDetails="Netlify function unreachable: "+e.message;}
-if(!data){
-try{
-const r2=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify(payload)});
-if(r2.ok){data=await r2.json();if(!data?.content)data=null;}
-else{const t2=await r2.text();errDetails+="\nDirect API: "+t2.slice(0,200);}
-}catch(e2){errDetails+="\nDirect API error: "+e2.message;}
-}
 if(data&&data.content){
 const assistantText=data.content.map(c=>c.type==="text"?c.text:"").join("")||"No response.";
 let parsedStops=null;
