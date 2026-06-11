@@ -4145,7 +4145,7 @@ setLog(p=>{
      pickup leg's "Picking up for ..." note is its only stable fingerprint).
      Tombstone every removed id, otherwise the transactional save / the
      subscription merge sees them FB-only and resurrects them seconds later. */
-  const removed=dayEntries.filter(e=>e.fromQuoteId===q.id||(e.customer===q.customer&&((e.stopType!=="pickup"&&e.stop===q.stop&&Math.abs(e.baseRate-(q.rate||0))<1)||(e.stopType==="pickup"&&e.manualPickup&&e.note==="Picking up for "+(q.stop||"delivery")))));
+  const removed=dayEntries.filter(e=>e.fromQuoteId===q.id||(e.customer===q.customer&&((e.stopType!=="pickup"&&e.stop===q.stop)||(e.stopType==="pickup"&&e.manualPickup&&e.note==="Picking up for "+(q.stop||"delivery")))));
   if(removed.length)tombstone(removed.map(e=>e.id));
   const removedIds=new Set(removed.map(e=>e.id));
   return{...p,[targetDk]:dayEntries.filter(e=>!removedIds.has(e.id))};
