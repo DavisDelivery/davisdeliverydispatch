@@ -74,9 +74,18 @@ const _fbCfg={apiKey:"AIzaSyDY2OceDzBWMHPR3C3O1oxktrCIy3mKMqU",authDomain:"glory
     import{initializeApp}from"https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
     import{getFirestore,doc,setDoc,getDoc,onSnapshot,collection,addDoc,updateDoc,deleteDoc,query,orderBy,enableIndexedDbPersistence,runTransaction}from"https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
     import{getStorage,ref as storageRef,uploadBytes,getDownloadURL}from"https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
+    import{getMessaging,getToken,onMessage}from"https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging.js";
     const app=initializeApp(${JSON.stringify(_fbCfg)});
     const db=getFirestore(app);
     const storage=getStorage(app);
+    /* FCM messaging is unsupported in some browsers (e.g. iOS Safari outside an
+       installed PWA) — create it lazily and surface a clear error to callers. */
+    let _msg=null;
+    const _getMessaging=()=>{
+      if(_msg)return _msg;
+      try{_msg=getMessaging(app);}catch(e){throw new Error("Push notifications are not supported in this browser: "+((e&&e.message)||e));}
+      return _msg;
+    };
     enableIndexedDbPersistence(db).catch(e=>{console.warn("[FB] Offline persistence failed:",e.code);});
     console.log("[FB] SDK loaded, creating ops...");
     window._fbOps={
@@ -118,6 +127,18 @@ const _fbCfg={apiKey:"AIzaSyDY2OceDzBWMHPR3C3O1oxktrCIy3mKMqU",authDomain:"glory
         const ref=storageRef(storage,path);
         await uploadBytes(ref,blob);
         return await getDownloadURL(ref);
+      },
+      /* FCM device token for web push. Throws (to the caller) when messaging
+         is unsupported or the token request fails — callers decide fallback. */
+      pushGetToken:async(vapidKey,swReg)=>{
+        const m=_getMessaging();
+        const token=await getToken(m,{vapidKey,serviceWorkerRegistration:swReg});
+        if(!token)throw new Error("FCM returned an empty token");
+        return token;
+      },
+      /* Foreground push messages (page open + focused). */
+      onPushMessage:(cb)=>{
+        try{return onMessage(_getMessaging(),cb);}catch(e){console.warn("[FB] Foreground push unavailable:",(e&&e.message)||e);return()=>{};}
       },
       /* Atomic read-modify-write. mergeFn receives current FB data (or null
          if doc doesn't exist) and returns the data to write. Firestore retries
@@ -585,6 +606,23 @@ const sendNotificationToDriver=async(driverId,msg,type)=>{
   if(!window._fbOps)return;
   await window._fbOps.add("notifications/"+String(driverId)+"/items",{msg,type,time:Date.now(),read:false});
 };
+/* Real device push (FCM) via the send-push Netlify function. Companion to the
+   Firestore in-app notification above — that one only shows while the driver
+   page is open; this one buzzes the phone even with the browser closed.
+   Fire-and-forget safe (never throws), but returns the fetch Response so
+   callers CAN await it and inspect status: 404 = driver never enabled
+   notifications, 410 = stale token (driver must re-enable). Pass
+   data.slug (getDriverSlug(driver.name)) so the notification deep-links to
+   the driver's page. */
+const sendPush=async(driverId,title,body,data)=>{
+  try{
+    return await fetch("/api/send-push",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({driverId:String(driverId),title,body,data:data||{}}),
+    });
+  }catch(e){console.warn("[PUSH] sendPush failed:",e);return null;}
+};
 const subscribeNotifications=(driverId,cb)=>{
   let unsub;
   _whenFB(()=>{unsub=window._fbOps.onCol("notifications/"+String(driverId)+"/items",(docs)=>{cb(docs);});});
@@ -808,7 +846,37 @@ const calcRouteMiles=(entries)=>{
   for(let i=1;i<pts.length;i++){total+=haversine(pts[i-1],pts[i]);}
   return Math.round(total*1.25);
 };
-const requestPushPermission=async()=>null;const onPushMessage=()=>{};const saveDriverToken=async()=>{};
+/* ───────────────────── WEB PUSH (FCM) ─────────────────────
+   Real device notifications, even with the app closed. The driver page asks
+   for permission, registers /firebase-messaging-sw.js, and saves the FCM
+   token to fcmTokens/{driverId}; dispatch sends via /api/send-push
+   (netlify/functions/send-push.js). All failures degrade silently — push is
+   an enhancement, never a blocker. */
+const VAPID_KEY="BIThI3aLcKZaZWdDtDKif5idE6wBYKQ79nNlItcjpWxz_aOuOAXvqUcSDeVLTkcG-IZ2cXxyGVbR0IyOMGewUiU";
+const requestPushPermission=async()=>{
+  try{
+    if(!("serviceWorker"in navigator)||!("Notification"in window))return null;
+    const reg=await navigator.serviceWorker.register("/firebase-messaging-sw.js");
+    const perm=await Notification.requestPermission();
+    if(perm!=="granted")return null;
+    /* Firebase loads async from the CDN — wait for _fbOps (same pattern as
+       _whenFB) before asking for a token. */
+    const token=await new Promise((resolve,reject)=>{
+      const t=setTimeout(()=>reject(new Error("Firebase SDK load timeout")),20000);
+      _whenFB(()=>{window._fbOps.pushGetToken(VAPID_KEY,reg).then(tok=>{clearTimeout(t);resolve(tok);}).catch(e=>{clearTimeout(t);reject(e);});});
+    });
+    return token||null;
+  }catch(e){console.warn("[PUSH] requestPushPermission failed:",e);return null;}
+};
+const saveDriverToken=async(driverId,token)=>{
+  try{
+    if(!window._fbOps||!token)return;
+    await window._fbOps.write("fcmTokens/"+String(driverId),{driverId,token,updatedAt:Date.now()});
+  }catch(e){console.warn("[PUSH] saveDriverToken failed:",e);}
+};
+const onPushMessage=(cb)=>{
+  _whenFB(()=>{try{window._fbOps.onPushMessage&&window._fbOps.onPushMessage(cb);}catch(e){console.warn("[PUSH] onPushMessage failed:",e);}});
+};
 
 const DAYS = ["Monday","Tuesday","Wednesday","Thursday","Friday"];
 
@@ -3397,6 +3465,18 @@ const calcPuMiles=(fromAddr,toAddr)=>{
 const wd=getWeekDates(wo);const dk=`${wo}-${sd}`;const dl=log[dk]||[];
 const emDk=getFbKey(wo,sd); /* date-based key for Emser hours/shifts */
 const showToast=useCallback(m=>{setToast(m);setTimeout(()=>setToast(null),2000);},[]);
+/* Per-driver "🔔 Test" button in Manage Drivers — sends a real device push so
+   the dispatcher can confirm the driver's phone is registered. */
+const sendTestPush=useCallback(async(d)=>{
+  try{
+    const res=await sendPush(d.id,"Test notification","Push notifications are working on this device 🎉",{slug:getDriverSlug(d.name)});
+    if(!res){showToast("Test push failed — network error");return;}
+    if(res.ok){showToast("Test push sent to "+d.name);}
+    else if(res.status===404){showToast(d.name+" hasn't enabled notifications on their phone yet");}
+    else if(res.status===410){showToast(d.name+"'s device token expired — they need to re-enable notifications");}
+    else{let em="";try{em=(await res.json()).error||"";}catch(e){}showToast("Test push failed"+(em?": "+em:" ("+res.status+")"));}
+  }catch(e){showToast("Test push failed: "+((e&&e.message)||e));}
+},[showToast]);
 useEffect(()=>{rpOrdersRef.current=rpOrders;},[rpOrders]);
 useEffect(()=>{
   if(view==="routes"&&!rpInited&&dl.length>0){
@@ -4489,7 +4569,13 @@ writeAuditLog({action:"reassign",customer:entry.customer,stop:entry.stop,driverI
 }
 if(entry&&did>0&&did!==oldDid){
 sendNotificationToDriver(did,"🔄 ROUTE CHANGED\nNew stop added to your route:\n"+entry.stop+(entry.customer?" ("+entry.customer+")":"")+(entry.addr?"\n📍 "+entry.addr:""),"route_change").catch(()=>{});
-if(oldDid>0)sendNotificationToDriver(oldDid,"🔄 ROUTE CHANGED\nStop removed from your route:\n"+entry.stop+(entry.customer?" ("+entry.customer+")":""),"route_change").catch(()=>{});
+const pushDrv=drivers.find(x=>x.id===did);
+sendPush(did,"Route changed","New stop added to your route: "+entry.stop+(entry.customer?" ("+entry.customer+")":""),pushDrv?{slug:getDriverSlug(pushDrv.name)}:undefined).catch(console.warn);
+if(oldDid>0){
+sendNotificationToDriver(oldDid,"🔄 ROUTE CHANGED\nStop removed from your route:\n"+entry.stop+(entry.customer?" ("+entry.customer+")":""),"route_change").catch(()=>{});
+const pushOld=drivers.find(x=>x.id===oldDid);
+sendPush(oldDid,"Route changed","Stop removed from your route: "+entry.stop+(entry.customer?" ("+entry.customer+")":""),pushOld?{slug:getDriverSlug(pushOld.name)}:undefined).catch(console.warn);
+}
 }
 };
 const reassignBulk=(eids,did)=>{
@@ -5431,6 +5517,7 @@ const notif={msg,type,time:now,id:Date.now()};
 setNotifications(p=>({...p,[drvId]:[notif,...(p[drvId]||[])]}));
 sendNotificationToDriver(drvId,msg,type).catch(e=>console.error("Notif save:",e));
 const drv=drivers.find(d=>d.id===drvId);
+sendPush(drvId,"Message from dispatch",msg,drv?{slug:getDriverSlug(drv.name)}:undefined).catch(console.warn);
 if(viaSms&&drv?.phone){
 window.open(`sms:${drv.phone}?&body=${encodeURIComponent("DAVIS DELIVERY DISPATCH\n"+msg)}`,"_blank");
 }
@@ -7418,6 +7505,7 @@ onAssignStop={mapActiveDrv?(stopId,drvId)=>{assignInOrder(stopId,mapActiveDrv,ma
 <div style={_s.f1}><div style={{fontSize:15,fontWeight:600}}>{d.name}{d.active===false&&<span style={{fontSize:9,marginLeft:6,padding:"1px 6px",borderRadius:4,background:"#f5f5f4",color:"#78716c",fontWeight:700,letterSpacing:"0.04em"}}>HIDDEN</span>}</div>{d.phone&&<div style={_s.sub11}>{d.phone}</div>}</div>
 <button onClick={()=>setDriverActive(d.id,d.active===false)} title={d.active===false?"Show this driver in the current fleet":"Hide from daily assignment UI (history preserved)"} style={{background:d.active===false?"#f5f5f4":"#dcfce7",border:"1px solid "+(d.active===false?"#d6d3d1":"#86efac"),borderRadius:999,padding:"3px 10px",cursor:"pointer",fontSize:10,fontWeight:700,color:d.active===false?"#78716c":"#166534",display:"flex",alignItems:"center",gap:4}}><span style={{width:8,height:8,borderRadius:999,background:d.active===false?"#a8a29e":"#16a34a"}}/>{d.active===false?"OFF":"ON"}</button>
 <button onClick={()=>{const slug=getDriverSlug(d.name);const url=`${window.location.origin}${window.location.pathname}#/driver/${slug}`;setShowLinkModal({name:d.name,url,phone:d.phone||""});}} style={{background:"#f0fdf4",border:"none",borderRadius:6,padding:"4px 8px",cursor:"pointer",fontSize:10,fontWeight:600,color:"#16a34a"}}>🔗 Link</button>
+<button onClick={()=>sendTestPush(d)} title="Send a test push notification to this driver's device" style={{background:"#fefce8",border:"none",borderRadius:6,padding:"4px 8px",cursor:"pointer",fontSize:10,fontWeight:600,color:"#ca8a04"}}>🔔 Test</button>
 <button onClick={()=>setDriverViewId(d.id)} style={{background:"#eff6ff",border:"none",borderRadius:6,padding:"4px 8px",cursor:"pointer",fontSize:10,fontWeight:600,color:"#2563eb"}}>View</button>
 <button onClick={()=>{setEditDrv(d.id);setEditNm(d.name);setEditPh(d.phone||"");}} style={{background:"#f5f5f4",border:"none",borderRadius:6,padding:"4px 10px",cursor:"pointer",fontSize:12}}>Edit</button>
 {drivers.length>1&&<button onClick={()=>rmDrv(d.id)} style={{background:"#fef2f2",border:"none",borderRadius:6,padding:"4px 10px",cursor:"pointer",fontSize:12,color:"#dc2626"}}>✕</button>}
@@ -8174,6 +8262,7 @@ style={{marginTop:8,width:"100%",display:"flex",alignItems:"center",justifyConte
 </div>
 {editDrv!==d.id&&<div style={{display:"flex",gap:6,paddingLeft:22}}>
 <button onClick={()=>{const slug=getDriverSlug(d.name);const url=`${window.location.origin}${window.location.pathname}#/driver/${slug}`;setShowLinkModal({name:d.name,url,phone:d.phone||""});}} style={{flex:1,background:"#f0fdf4",border:"none",borderRadius:6,padding:"6px 4px",cursor:"pointer",fontSize:11,fontWeight:600,color:"#16a34a"}}>🔗 Link</button>
+<button onClick={()=>sendTestPush(d)} title="Send a test push notification to this driver's device" style={{flex:1,background:"#fefce8",border:"none",borderRadius:6,padding:"6px 4px",cursor:"pointer",fontSize:11,fontWeight:600,color:"#ca8a04"}}>🔔 Test</button>
 <button onClick={()=>setDriverViewId(d.id)} style={{flex:1,background:"#eff6ff",border:"none",borderRadius:6,padding:"6px 4px",cursor:"pointer",fontSize:11,fontWeight:600,color:"#2563eb"}}>View</button>
 <button onClick={()=>{setEditDrv(d.id);setEditNm(d.name);setEditPh(d.phone||"");}} style={{flex:1,background:"#f5f5f4",border:"none",borderRadius:6,padding:"6px 4px",cursor:"pointer",fontSize:11,fontWeight:600}}>Edit</button>
 {drivers.length>1&&<button onClick={()=>rmDrv(d.id)} style={{background:"#fef2f2",border:"none",borderRadius:6,padding:"6px 12px",cursor:"pointer",fontSize:11,fontWeight:600,color:"#dc2626"}}>✕</button>}
@@ -9933,9 +10022,12 @@ useEffect(()=>{
 },[driverId]);
 useEffect(()=>{
   if(authenticated&&driverId){
+    /* Re-register on every load — FCM tokens rotate, and re-saving keeps
+       fcmTokens/{driverId} fresh. All failures are silent (push is an
+       enhancement; requestPushPermission/saveDriverToken never throw). */
     requestPushPermission().then(token=>{
       if(token)saveDriverToken(driverId,token);
-    });
+    }).catch(e=>console.warn("[PUSH] registration failed:",e));
   }
 },[authenticated,driverId]);
 
