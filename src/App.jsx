@@ -1770,6 +1770,7 @@ return(<div key={"load-"+ln}>
 <div style={{flex:1,height:2,background:loadColor,borderRadius:1,opacity:0.4}}/>
 </div>}
 {loadStops.map((entry,i)=>{
+const fullIdx=entries.findIndex(x=>x.id===entry.id);
 const c=CC[entry.customer]||CC["One-Off Delivery"];
 const addr=entry.addr||getAddr(entry.stop);
 const isPickup=entry.stopType==="pickup";
@@ -1831,7 +1832,7 @@ style={{display:"inline-flex",alignItems:"center",gap:6,background:BRAND.main,co
 <select defaultValue={entry.etaDest||""} onChange={e=>{const dest=e.target.value;const curMins=entry.eta||"";if(dest&&curMins)onEta(entry.id,curMins,dest);else if(dest){/* store dest, wait for mins */const el=e.target;el._dest=dest;}}} ref={el=>{if(el)el._dest=entry.etaDest||"";}}
 style={{flex:1,border:"1px solid #d6d3d1",borderRadius:8,padding:"8px",fontSize:12,outline:"none",background:"#fff",color:entry.etaDest?"#1c1917":"#a8a29e"}}>
 <option value="">ETA to where?</option>
-{entries.filter((_,ei)=>ei>i&&_.status!=="departed").map(ne=><option key={ne.id} value={ne.stop}>{ne.stop}</option>)}
+{entries.filter((_,ei)=>ei>fullIdx&&_.status!=="departed").map(ne=><option key={ne.id} value={ne.stop}>{ne.stop}</option>)}
 <option value="Davis Warehouse">{"🏠 Davis Warehouse"}</option>
 </select>
 <input placeholder="mins" type="number" inputMode="numeric" defaultValue={entry.eta||""} style={{width:70,border:"1px solid #d6d3d1",borderRadius:8,padding:"8px",fontSize:13,fontWeight:700,outline:"none",textAlign:"center"}}
@@ -3267,6 +3268,8 @@ const[chatInput,setChatInput]=useState("");
 const[chatLoading,setChatLoading]=useState(false);
 const[chatImage,setChatImage]=useState(null); /* {base64, preview} */
 const[showMsgPanel,setShowMsgPanel]=useState(false);
+const showMsgPanelRef=useRef(false);
+useEffect(()=>{showMsgPanelRef.current=showMsgPanel;},[showMsgPanel]);
 const[showMoreMenu,setShowMoreMenu]=useState(false);
 
 const[,forceGeo]=useState(0); /* bumped when an async geocode finishes so new pins render */
@@ -3789,7 +3792,7 @@ useEffect(()=>{
   if(!window._fbOps)return;
   const target=histWeekRange>=999?52:Math.min(histWeekRange,52);
   const weeksToLoad=[];
-  for(let w=wo-2;w>=wo-target;w--){
+  for(let w=wo-2;w>wo-target;w--){
     if(loadedHistWeeksRef.current.has(w))continue;
     weeksToLoad.push(w);
   }
@@ -4529,7 +4532,14 @@ const sibIds=siblings.map(e=>e.id);
 const driverName=(nid)=>nid===0?"Unassigned":(drivers.find(x=>x.id===nid)?.name||"Driver "+nid);
 if(entry.driverId===did){
   writeAuditLog({action:"reassign",customer:entry.customer,stop:entry.stop,driverId:0,details:driverName(did)+" → Unassigned"+(siblings.length>1?" ("+siblings.length+" stops)":"")});
-  setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>sibIds.includes(e.id)?{...e,driverId:0}:e)}));
+  setLog(p=>{
+    let all=(p[dk]||[]).map(e=>sibIds.includes(e.id)?{...e,driverId:0}:e);
+    sibIds.forEach(sid=>{
+      const ent=all.find(e=>e.id===sid);
+      if(ent&&ent.stopType==="delivery")all=rebuildPickupsFor(all,ent.customer);
+    });
+    return{...p,[dk]:all};
+  });
   showToast(siblings.length>1?`Removed ${siblings.length} stops`:"Removed from route");
   return;
 }
@@ -4765,18 +4775,6 @@ const removeEmserShift=(shiftId)=>{
   });
 };
 const calcAndApplyEmserHours=useCallback(()=>{const shifts=emserShifts[emDk]||[];const totalMins=shifts.reduce((sum,s)=>sum+calcShiftMins(s),0);const hours=Math.round(totalMins/15)*15/60;if(hours>0){setEmH(p=>({...p,[`${emDk}-emser`]:hours}));return hours;}return emH[`${emDk}-emser`]||4;},[emserShifts,emDk,emH]);
-useEffect(()=>{
-  const shifts=emserShifts[emDk]||[];
-  if(!shifts.length)return;
-  const totalMins=shifts.reduce((sum,s)=>sum+calcShiftMins(s),0);
-  if(totalMins>0){
-    const lgCount=dl.filter(e=>e.isHourly&&e.liftgateApplied&&!DISTANCE_BONUS_STOPS.includes(e.stop)).length;
-    const distBonus=dl.filter(e=>e.isHourly&&DISTANCE_BONUS_STOPS.includes(e.stop)).length;
-    const billedMins=totalMins+(lgCount+distBonus)*60;
-    const hours=Math.round(billedMins/15)*15/60;
-    setEmH(p=>{if(p[`${emDk}-emser`]===hours)return p;return{...p,[`${emDk}-emser`]:hours};});
-  }
-},[emserShifts,emDk,dl]);
 
 const getMsgKey=(ch)=>ch?"dm-"+ch:"group";
 const getMessages=(ch)=>allMessages[getMsgKey(ch)]||[];
@@ -4797,19 +4795,19 @@ useEffect(()=>{
   const unsubs=[];
   unsubs.push(subscribeMessages("group",(msgs)=>{
     setAllMessages(p=>{const prev=p["group"]||[];
-    if(msgs.length>prev.length){const newest=msgs[msgs.length-1];if(newest&&newest.from!=="dispatch"&&!showMsgPanel){setMsgPopup({from:newest.fromName||"Driver",text:newest.text,time:newest.time,channelKey:"group"});setTimeout(()=>setMsgPopup(null),8000);}}
+    if(msgs.length>prev.length){const newest=msgs[msgs.length-1];if(newest&&newest.from!=="dispatch"&&!showMsgPanelRef.current){setMsgPopup({from:newest.fromName||"Driver",text:newest.text,time:newest.time,channelKey:"group"});setTimeout(()=>setMsgPopup(null),8000);}}
     return{...p,"group":msgs};});
   }));
   drivers.forEach(d=>{
     const key="dm-"+d.id;
     unsubs.push(subscribeMessages(key,(msgs)=>{
       setAllMessages(p=>{const prev=p[key]||[];
-      if(msgs.length>prev.length){const newest=msgs[msgs.length-1];if(newest&&newest.from!=="dispatch"&&!showMsgPanel){setMsgPopup({from:newest.fromName||d.name,text:newest.text,time:newest.time,channelKey:key});setTimeout(()=>setMsgPopup(null),8000);}}
+      if(msgs.length>prev.length){const newest=msgs[msgs.length-1];if(newest&&newest.from!=="dispatch"&&!showMsgPanelRef.current){setMsgPopup({from:newest.fromName||d.name,text:newest.text,time:newest.time,channelKey:key});setTimeout(()=>setMsgPopup(null),8000);}}
       return{...p,[key]:msgs};});
     }));
   });
   return()=>unsubs.forEach(u=>u());
-},[drivers.length]);
+},[drivers.map(d=>d.id).join(",")]);
 
 /* Move a manifest entry up or down WITHIN ITS LOAD GROUP.
 
@@ -4995,7 +4993,7 @@ const wowPct=prevWkT>0?((wowDelta/prevWkT)*100):0;
    and the count chip says 'N deliveries'. A pickup leg is dispatcher
    bookkeeping, not a delivery, and historically inflated the count and
    showed up as a confusing 'PU' card alongside the actual delivery. */
-const getHistoryEntries=()=>{const all=[];const maxWks=histWeekRange>=999?52:histWeekRange;for(let w=wo;w>=wo-maxWks;w--){const wdates=getWeekDates(w);for(let d=0;d<5;d++){const k=`${w}-${d}`;(log[k]||[]).forEach(e=>all.push({...e,weekOff:w,dayIdx:d,dayName:DAYS[d],dayDate:wdates[d].date}));}}return all;};
+const getHistoryEntries=()=>{const all=[];const maxWks=histWeekRange>=999?52:histWeekRange;for(let w=wo;w>wo-maxWks;w--){const wdates=getWeekDates(w);for(let d=0;d<5;d++){const k=`${w}-${d}`;(log[k]||[]).forEach(e=>all.push({...e,weekOff:w,dayIdx:d,dayName:DAYS[d],dayDate:wdates[d].date}));}}return all;};
 const histAll=getHistoryEntries();
 const histFiltered=histAll.filter(e=>{
   if(e.stopType==="pickup")return false;
@@ -5347,6 +5345,16 @@ const importBackup=(file)=>{
       if(data.dispatchNotes)setDispNotes(prev=>({...prev,...data.dispatchNotes}));
       if(data.customStops&&Object.keys(data.customStops).length)setCustomStops(prev=>({...prev,...data.customStops}));
       if(data.savedQuotes){const sq=Array.isArray(data.savedQuotes)?data.savedQuotes:Object.values(data.savedQuotes);if(sq.length)setSavedQuotes(sq);}
+      /* Same additive philosophy as manifests: only fill days with no shifts. FB save handled by the emserShifts effect. */
+      if(data.emserShifts&&typeof data.emserShifts==="object")setEmserShifts(prev=>{const merged={...prev};Object.entries(data.emserShifts).forEach(([key,shifts])=>{if(shifts&&shifts.length>0&&(!merged[key]||merged[key].length===0))merged[key]=shifts;});return merged;});
+      if(data.stopOverrides&&Object.keys(data.stopOverrides).length)setStopOverrides(prev=>({...prev,...data.stopOverrides}));
+      if(Array.isArray(data.hiddenStops)&&data.hiddenStops.length)setHiddenStops(prev=>[...new Set([...prev,...data.hiddenStops])]);
+      if(data.driverCapacity&&Object.keys(data.driverCapacity).length)setDriverCapacity(prev=>({...prev,...data.driverCapacity}));
+      /* Drivers: merge by id — only add backup drivers missing from the current list, never remove/overwrite. */
+      if(Array.isArray(data.drivers)&&data.drivers.length){
+        const newDrvs=data.drivers.filter(bd=>bd&&bd.id!=null&&!drivers.some(d=>d.id===bd.id));
+        if(newDrvs.length){driverChangeSource.current="local";driverSaveInFlight.current=true;setDrivers(prev=>[...prev,...newDrvs.filter(bd=>!prev.some(d=>d.id===bd.id))]);}
+      }
     }catch(err){showToast("Failed to read backup: "+err.message);}
   };
   reader.readAsText(file);
@@ -6517,7 +6525,7 @@ return(
 {histMode==="photos"&&(()=>{
 const photosAll=[];
 const podEntries=[];
-histFiltered.forEach(e=>{if(e.photos&&e.photos.length>0){const addr=e.addr||getAddr(e.stop);const drv=drivers.find(d=>d.id===e.driverId);const validPhotos=(e.photos||[]);podEntries.push({...e,addr,driverName:drv?.name||"",validPhotos});validPhotos.forEach((p,pi)=>photosAll.push({src:p,stop:e.stop,customer:e.customer,dayName:e.dayName,dayDate:e.dayDate,signature:e.signature,id:e.id+"-"+pi,addr,driverName:drv?.name||"",arrivedAt:e.arrivedAt,departedAt:e.departedAt,weight:e.weight,allPhotos:validPhotos,entryId:e.id}));}});
+histFiltered.forEach(e=>{if(e.photos&&e.photos.length>0){const addr=e.addr||getAddr(e.stop);const drv=drivers.find(d=>d.id===e.driverId);const validPhotos=(e.photos||[]);podEntries.push({...e,addr,driverName:drv?.name||"",validPhotos});validPhotos.forEach((p,pi)=>photosAll.push({src:p,stop:e.stop,customer:e.customer,dayName:e.dayName,dayDate:e.dayDate,weekOff:e.weekOff,dayIdx:e.dayIdx,signature:e.signature,id:e.id+"-"+pi,addr,driverName:drv?.name||"",arrivedAt:e.arrivedAt,departedAt:e.departedAt,weight:e.weight,allPhotos:validPhotos,entryId:e.id}));}});
 photosAll.sort((a,b)=>b.weekOff!==a.weekOff?b.weekOff-a.weekOff:b.dayIdx-a.dayIdx);
 const printPOD=(pod)=>{const w=window.open("","_blank","width=800,height=900");if(!w)return;const isSigImg=pod.signature&&(pod.signature.startsWith("data:")||pod.signature.startsWith("http"));const photos=pod.allPhotos||pod.validPhotos||[];w.document.write(`<!DOCTYPE html><html><head><title>POD — ${pod.stop}</title><style>@media print{.no-print{display:none!important;}}body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;margin:0;padding:20px;color:#1c1917;}.header{display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid #1e5b92;padding-bottom:12px;margin-bottom:16px;}.header h1{margin:0;font-size:20px;color:#1e5b92;}.header .sub{font-size:11px;color:#78716c;}.pod-title{text-align:center;font-size:18px;font-weight:700;margin:12px 0;text-transform:uppercase;color:#1e5b92;letter-spacing:1px;}.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 24px;margin-bottom:16px;}.info-grid .label{font-size:10px;color:#78716c;text-transform:uppercase;font-weight:600;}.info-grid .value{font-size:13px;font-weight:600;margin-bottom:6px;}.photos{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0;}.photos img{max-width:320px;max-height:260px;border-radius:8px;border:1px solid #e7e5e4;object-fit:contain;}.sig-box{margin:16px 0;padding:12px;border:2px solid #16a34a;border-radius:8px;text-align:center;}.sig-box img{max-height:120px;}.sig-label{font-size:10px;color:#78716c;text-transform:uppercase;margin-bottom:4px;}.footer{margin-top:20px;border-top:1px solid #e7e5e4;padding-top:8px;font-size:9px;color:#a8a29e;text-align:center;}</style></head><body>`);w.document.write(`<button class="no-print" onclick="window.print()" style="position:fixed;top:12px;right:12px;background:#1e5b92;color:#fff;border:none;border-radius:8px;padding:10px 20px;font-size:14px;font-weight:700;cursor:pointer;z-index:10;">Print POD</button>`);w.document.write(`<div class="header"><div><h1>DAVIS DELIVERY SERVICE</h1><div class="sub">Buford, GA · (770) 271-9498</div></div><div style="text-align:right"><div style="font-size:12px;font-weight:600;">${pod.dayName||""} ${pod.dayDate||""}</div></div></div>`);w.document.write(`<div class="pod-title">Proof of Delivery</div>`);w.document.write(`<div class="info-grid"><div><div class="label">Customer</div><div class="value">${pod.customer||""}</div></div><div><div class="label">Driver</div><div class="value">${pod.driverName||"—"}</div></div><div><div class="label">Delivery To</div><div class="value">${pod.stop||""}</div></div><div><div class="label">Weight</div><div class="value">${pod.weight?pod.weight.toLocaleString()+" lbs":"—"}</div></div><div><div class="label">Address</div><div class="value">${pod.addr||"—"}</div></div><div><div class="label">Arrived / Departed</div><div class="value">${pod.arrivedAt||"—"} / ${pod.departedAt||"—"}</div></div></div>`);if(photos.length>0){w.document.write(`<div class="label" style="margin-top:12px;">Delivery Photos</div><div class="photos">`);photos.forEach(p=>{w.document.write(`<img src="${p}" onerror="this.style.display='none'"/>`);});w.document.write(`</div>`);}if(pod.signature){if(isSigImg){w.document.write(`<div class="sig-box"><div class="sig-label">Signature</div><img src="${pod.signature}"/></div>`);}else{w.document.write(`<div class="sig-box"><div class="sig-label">Received By</div><div style="font-size:18px;font-weight:700;">${pod.signature}</div></div>`);}}w.document.write(`<div class="footer">Generated by Davis Delivery Dispatch · ${new Date().toLocaleString()}</div></body></html>`);w.document.close();};
 return(<div>
@@ -6709,7 +6717,7 @@ else{showToast("Pick a weekday (Mon-Fri)");}
 <button onClick={()=>{setSavedQuotes(p=>p.filter(x=>x.id!==q.id));deleteQuoteFromFB(q.id).catch(e=>console.error("Quote del:",e));showToast("Quote deleted");}} style={{background:"none",border:"none",color:"#dc2626",fontSize:9,cursor:"pointer",padding:"2px 0"}}>Delete</button>
 </div>}
 {accepted&&q.pushedTo&&<div style={{display:"flex",alignItems:"center",gap:8,marginTop:6}}>
-<span style={{fontSize:10,color:"#16a34a",fontWeight:600}}>✓ Pushed to {DAYS[parseInt(q.pushedTo.split("-")[1])]||""}</span>
+<span style={{fontSize:10,color:"#16a34a",fontWeight:600}}>✓ Pushed to {DAYS[parseInt(q.pushedTo.slice(q.pushedTo.lastIndexOf("-")+1))]||""}</span>
 <button onClick={()=>unplanQuote(q.id)} style={{background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:6,padding:"3px 10px",cursor:"pointer",fontSize:10,color:"#dc2626",fontWeight:600}}>Unplan</button>
 </div>}
 </div>
@@ -7254,9 +7262,9 @@ onAssignStop={mapActiveDrv?(stopId,drvId)=>{assignInOrder(stopId,mapActiveDrv,ma
 <span style={{fontSize:13}}>📡</span>
 <span style={{fontSize:12,fontWeight:700,color:"#1c1917"}}>Motive GPS</span>
 </div>
-<span style={{fontSize:9,color:"#a8a29e",fontWeight:500}}>1 min polling</span>
+<span style={{fontSize:9,color:"#a8a29e",fontWeight:500}}>20s polling</span>
 </div>
-{drivers.filter(d=>d.id<=3).map((drv,di)=>{
+{drivers.map((drv,di)=>{
   const loc=driverLocs[drv.id];
   const on=gpsEnabled[drv.id]!==false;
   const col=DCOL[di]||BRAND.main;
@@ -7341,11 +7349,11 @@ onAssignStop={mapActiveDrv?(stopId,drvId)=>{assignInOrder(stopId,mapActiveDrv,ma
 </div>}
 {_mLGEntries.map(le=><div key={le.id} style={{display:"flex",alignItems:"center",gap:4,background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:6,padding:"4px 8px",marginBottom:3,fontSize:10}}>
 <span style={{fontWeight:700,color:"#ea580c"}}>+1h LG: {le.stop}</span>
-<button onClick={()=>{setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===le.id?{...e,liftgateApplied:false}:e)}));showToast("LG hour removed");}} style={{marginLeft:"auto",background:"#fef2f2",border:"1px solid #fecaca",borderRadius:4,padding:"1px 6px",cursor:"pointer",fontSize:8,fontWeight:700,color:"#dc2626"}}>✕</button>
+<button onClick={()=>removeLiftgate(le.id)} style={{marginLeft:"auto",background:"#fef2f2",border:"1px solid #fecaca",borderRadius:4,padding:"1px 6px",cursor:"pointer",fontSize:8,fontWeight:700,color:"#dc2626"}}>✕</button>
 </div>)}
-<div style={{display:"flex",gap:3}}>
+{totalMins===0&&<div style={{display:"flex",gap:3}}>
 {[4,5,6,7,8,9,10].map(h=><button key={h} onClick={()=>setEmH(p=>({...p,[`${emDk}-emser`]:h}))} style={{width:28,height:26,borderRadius:6,border:"none",cursor:"pointer",fontSize:12,fontWeight:600,background:hoursUsed===h?"#2563eb":"#e7e5e4",color:hoursUsed===h?"#fff":"#78716c"}}>{h}</button>)}
-</div>
+</div>}
 </div>);})()}
 
 {dl.length===0?<div style={{textAlign:"center",padding:"40px 20px",color:"#a8a29e"}}><div style={{fontSize:28,marginBottom:8}}>{"\uD83D\uDE9A"}</div><div style={{fontSize:13}}>No deliveries yet</div></div>
@@ -8183,7 +8191,7 @@ style={{marginTop:8,width:"100%",display:"flex",alignItems:"center",justifyConte
 </div>);})}
 <p style={{fontSize:10,color:"#a8a29e",margin:"8px 0 0"}}>Driver PINs = last 4 digits of their phone number</p>
 </div>
-{<div style={{marginTop:12}}><div style={{display:"flex",gap:6,marginBottom:6}}><input value={newDN} onChange={e=>setNewDN(e.target.value)} placeholder="Driver name" style={{flex:1,border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 12px",fontSize:14,outline:"none"}}/></div><div style={_s.flexG6}><input value={newDP} onChange={e=>setNewDP(e.target.value)} placeholder="Phone number" type="tel" onKeyDown={e=>e.key==="Enter"&&addDrvr()} style={{flex:1,border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 12px",fontSize:14,outline:"none"}}/><button onClick={addDrvr} style={{background:(!newDN.trim()||!newDP.trim())?"#e7e5e4":"#1c1917",color:(!newDN.trim()||!newDP.trim())?"#a8a29e":"#fff",border:"none",borderRadius:8,padding:"8px 16px",cursor:"pointer",fontSize:13,fontWeight:600}}>Add</button></div>{newDN.trim()&&!newDP.trim()&&<p style={{fontSize:11,color:"#dc2626",margin:"4px 0 0"}}>Phone required</p>}</div>}
+{<div style={{marginTop:12}}><div style={{display:"flex",gap:6,marginBottom:6}}><input value={newDN} onChange={e=>setNewDN(e.target.value)} placeholder="Driver name" style={{flex:1,border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 12px",fontSize:14,outline:"none"}}/></div><div style={_s.flexG6}><input value={newDP} onChange={e=>setNewDP(e.target.value)} placeholder="Phone number" type="tel" onKeyDown={e=>e.key==="Enter"&&addDrvr()} style={{flex:1,border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 12px",fontSize:14,outline:"none"}}/><button onClick={addDrvr} disabled={!newDN.trim()||!newDP.trim()} style={{background:(!newDN.trim()||!newDP.trim())?"#e7e5e4":"#1c1917",color:(!newDN.trim()||!newDP.trim())?"#a8a29e":"#fff",border:"none",borderRadius:8,padding:"8px 16px",cursor:"pointer",fontSize:13,fontWeight:600}}>Add</button></div>{newDN.trim()&&!newDP.trim()&&<p style={{fontSize:11,color:"#dc2626",margin:"4px 0 0"}}>Phone required</p>}</div>}
 </div>
 </div>
 </div>}
@@ -8816,7 +8824,7 @@ if(e.photos&&e.photos.length>0){
 const validPhotos=(e.photos||[]);
 const addr=e.addr||getAddr(e.stop);
 const drv=drivers.find(d=>d.id===e.driverId);
-validPhotos.forEach((p,pi)=>photosAll.push({src:p,stop:e.stop,customer:e.customer,dayName:e.dayName,dayDate:e.dayDate,weekOff:e.weekOff,signature:e.signature,addr,driverId:e.driverId,driverName:drv?.name||"",arrivedAt:e.arrivedAt,departedAt:e.departedAt,weight:e.weight,allPhotos:validPhotos,id:e.id+"-"+pi}));
+validPhotos.forEach((p,pi)=>photosAll.push({src:p,stop:e.stop,customer:e.customer,dayName:e.dayName,dayDate:e.dayDate,weekOff:e.weekOff,dayIdx:e.dayIdx,signature:e.signature,addr,driverId:e.driverId,driverName:drv?.name||"",arrivedAt:e.arrivedAt,departedAt:e.departedAt,weight:e.weight,allPhotos:validPhotos,id:e.id+"-"+pi}));
 }
 });
 photosAll.sort((a,b)=>b.weekOff!==a.weekOff?b.weekOff-a.weekOff:b.dayIdx-a.dayIdx);
@@ -8974,7 +8982,7 @@ else{showToast("Pick a weekday (Mon-Fri)");}
 <button onClick={()=>openEditQuote(q)} style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:8,padding:"7px 10px",cursor:"pointer",fontSize:11,color:"#2563eb",fontWeight:700}}>✎ Edit</button>
 <button onClick={()=>{setSavedQuotes(p=>p.filter(x=>x.id!==q.id));deleteQuoteFromFB(q.id).catch(e=>console.error("Quote del:",e));showToast("Deleted");}} style={{background:"#fef2f2",border:"none",borderRadius:8,padding:"7px 10px",cursor:"pointer",fontSize:11,color:"#dc2626",fontWeight:600}}>Delete</button></>}
 </div>}
-{accepted&&q.pushedTo&&<div style={{fontSize:10,color:"#16a34a",fontWeight:600,marginTop:4}}>✓ Pushed to {DAYS[parseInt(q.pushedTo.split("-")[1])]||""}</div>}
+{accepted&&q.pushedTo&&<div style={{fontSize:10,color:"#16a34a",fontWeight:600,marginTop:4}}>✓ Pushed to {DAYS[parseInt(q.pushedTo.slice(q.pushedTo.lastIndexOf("-")+1))]||""}</div>}
 </div>);})}
 {savedQuotes.filter(q=>quoteTab==="current"?q.status!=="accepted":q.status==="accepted").length===0&&savedQuotes.length>0&&<div style={{textAlign:"center",padding:"24px 16px",color:"#a8a29e"}}><div style={{fontSize:28,marginBottom:8}}>{quoteTab==="current"?"📋":"✅"}</div><div style={{fontSize:12}}>{quoteTab==="current"?"No open quotes":"No completed quotes"}</div></div>}
 </div>);
@@ -10255,6 +10263,7 @@ return(<div key={"load-"+ln}>
 <div style={{flex:1,height:2,background:loadColor,borderRadius:1,opacity:0.4}}/>
 </div>}
 {loadStops.map((entry,i)=>{
+const fullIdx=entries.findIndex(x=>x.id===entry.id);
 const c=CC[entry.customer]||CC["One-Off Delivery"];
 const addr=entry.addr||getAddr(entry.stop);
 const isPickup=entry.stopType==="pickup";
@@ -10304,8 +10313,8 @@ style={{display:"inline-flex",alignItems:"center",gap:6,background:BRAND.main,co
 🧭 Get Directions
 </a>}
 
-{!departed&&i<entries.length-1&&(()=>{
-const nextStop=entries.slice(i+1).find(e=>e.status!=="departed");
+{!departed&&fullIdx<entries.length-1&&(()=>{
+const nextStop=entries.slice(fullIdx+1).find(e=>e.status!=="departed");
 if(!nextStop)return null;
 const nextAddr=nextStop.addr||getAddr(nextStop.stop);
 return(<button onClick={()=>{
@@ -10361,7 +10370,7 @@ else{const curAddr=entry.addr||getAddr(entry.stop);if(curAddr){showToast("📍 U
 }}
 style={{flex:1,border:"1px solid #d6d3d1",borderRadius:8,padding:"8px",fontSize:12,outline:"none",background:"#fff",color:entry.etaDest?"#1c1917":"#a8a29e"}}>
 <option value="">ETA to where?</option>
-{entries.filter((_,ei)=>ei>i&&_.status!=="departed").map(ne=><option key={ne.id} value={ne.stop}>{ne.stop}</option>)}
+{entries.filter((_,ei)=>ei>fullIdx&&_.status!=="departed").map(ne=><option key={ne.id} value={ne.stop}>{ne.stop}</option>)}
 <option value="Davis Warehouse">{"🏠 Davis Warehouse"}</option>
 </select>
 <input placeholder="mins" type="number" inputMode="numeric" defaultValue={entry.eta||""} style={{width:70,border:"1px solid #d6d3d1",borderRadius:8,padding:"8px",fontSize:13,fontWeight:700,outline:"none",textAlign:"center"}}
