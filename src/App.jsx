@@ -370,10 +370,29 @@ const _mergeEntryDriver=(localE,fbE)=>{
 };
 
 const _mergeEntryDispatcher=(localE,fbE)=>{
-  /* Caller is dispatcher. Local wins on dispatcher fields (rate, instructions,
-     addr, order, etc.), FB wins on driver-stamped fields. Forward-only for
-     status and never-clobber for timestamps. */
+  /* Two dispatch screens (two dispatchers, or one person on desktop+phone)
+     share this doc. Dispatcher-owned fields (driverId, loadNum, rate,
+     instructions, addr, dueBy, …) are arbitrated by per-entry _rev: the side
+     with the higher revision wins. This is what stops a stale second screen
+     from silently reverting a newer assignment — the "planned on Brent, came
+     back unassigned" bug. Ties default to local, preserving this screen's own
+     in-flight edits and its stop ordering. Driver-stamped fields
+     (status/arrived/departed/photos/signature/shipPlan/eta) are reconciled
+     forward-only below, independent of _rev — the driver's phone owns those. */
   const out={...localE};
+  const localRev=localE._rev||0;
+  const fbRev=fbE._rev||0;
+  if(fbRev>localRev){
+    /* FB has a newer dispatcher revision for this entry — adopt its
+       dispatcher-owned fields. DRIVER_OWNED_FIELDS are skipped (handled by the
+       forward-only block) so a newer assignment never drags a driver stamp
+       backward. */
+    Object.keys(fbE).forEach(k=>{
+      if(k==="_rev"||DRIVER_OWNED_FIELDS.includes(k))return;
+      out[k]=fbE[k];
+    });
+  }
+  out._rev=Math.max(localRev,fbRev);
   const localRank=STATUS_RANK[localE.status]??0;
   const fbRank=STATUS_RANK[fbE.status]??0;
   if(fbRank>localRank)out.status=fbE.status;
@@ -397,6 +416,12 @@ const _mergeEntryDispatcher=(localE,fbE)=>{
   return out;
 };
 
+/* Compare an entry / a day's entries ignoring the _rev sync marker, so that
+   stamping a fresh _rev (see DispatchApp's setLog) is never itself mistaken for
+   a content change. */
+const _entryNoRev=(e)=>{if(!e||typeof e!=="object")return JSON.stringify(e);const{_rev,...rest}=e;return JSON.stringify(rest);};
+const _dayNoRev=(arr)=>JSON.stringify((arr||[]).map(e=>{if(!e||typeof e!=="object")return e;const{_rev,...rest}=e;return rest;}));
+
 const saveManifestDay=async(wo,sd,entries,callerDriverId,deletedIds)=>{
   const fbKey=getFbKey(wo,sd);
   if(!window._fbOps){
@@ -404,16 +429,24 @@ const saveManifestDay=async(wo,sd,entries,callerDriverId,deletedIds)=>{
     throw new Error("Firebase not loaded — _fbOps missing");
   }
   const isDriver=typeof callerDriverId==="number"&&callerDriverId>0;
+  const tomb=deletedIds instanceof Set?deletedIds:new Set(deletedIds||[]);
   /* Quick safety read — if local is empty but FB has data, bail without
      touching the doc. This is the classic feedback-loop signature: a stale
-     subscription wiped local, and a save is about to write that wipe back. */
+     subscription wiped local, and a save is about to write that wipe back.
+     Tombstone-aware: if every FB entry's id is tombstoned, this is a
+     legitimate delete-the-last-stop save, not a feedback wipe — without
+     this exception the empty save never lands, the dirty flag never clears,
+     and the stop resurrects once the 90s tombstone expires. */
   try{
     const peek=await window._fbOps.read("manifests/"+fbKey);
     const existingCount=peek?.entries?.length||0;
     const newCount=entries?.length||0;
     if(newCount===0&&existingCount>0){
-      console.warn("[SAVE] BLOCKED: refusing to overwrite "+fbKey+" (has "+existingCount+" entries) with empty array");
-      return "blocked";
+      const untombed=(peek.entries||[]).filter(e=>!(e&&e.id&&tomb.has(e.id)));
+      if(untombed.length>0){
+        console.warn("[SAVE] BLOCKED: refusing to overwrite "+fbKey+" ("+untombed.length+" of "+existingCount+" entries not tombstoned) with empty array");
+        return "blocked";
+      }
     }
   }catch(readErr){
     if(!entries||entries.length===0){
@@ -470,8 +503,7 @@ const saveManifestDay=async(wo,sd,entries,callerDriverId,deletedIds)=>{
          FB still carries it because our delete hasn't been written yet.
          Without this guard the entry resurrects on every save. Entries that
          are FB-only AND not tombstoned are genuine additions from another
-         writer and must be kept. */
-      const tomb=deletedIds instanceof Set?deletedIds:new Set(deletedIds||[]);
+         writer and must be kept. (tomb is built once above the peek guard.) */
       fbEntries.forEach(fbE=>{
         if(fbE&&fbE.id&&!localById[fbE.id]&&!tomb.has(fbE.id))merged.push(fbE);
       });
@@ -1289,7 +1321,7 @@ polylinesRef.current.forEach(p=>p.setMap(null));
 },[]);/* eslint-disable-line react-hooks/exhaustive-deps */
 const makeDueLabel=(map,pos,text)=>{
 if(!window.google?.maps?.OverlayView)return null;
-const isWindow=text.includes("–")||text.includes("-")&&text.match(/\d.*–.*\d/);
+const isWindow=text.includes("–")||/\d\s*-\s*\d/.test(text);
 const isPickupBy=text.toLowerCase().startsWith("pickup by");
 const isPickupAfter=text.toLowerCase().startsWith("pickup after");
 const isPickup=isPickupBy||isPickupAfter||text.toLowerCase().startsWith("pickup");
@@ -1325,7 +1357,7 @@ return overlay;
 };
 useEffect(()=>{
 if(!mapReady||!mapInstanceRef.current||!window.google?.maps)return;
-const stopsKey=JSON.stringify((stops||[]).map(s=>({id:s.id,driverId:s.driverId,routeOrder:s.routeOrder,loadNum:s.loadNum,status:s.status,dueBy:s.dueBy,coords:s.coords})));
+const stopsKey=JSON.stringify((stops||[]).map(s=>({id:s.id,driverId:s.driverId,routeOrder:s.routeOrder,loadNum:s.loadNum,status:s.status,dueBy:s.dueBy,coords:s.coords})))+"|road:"+useRoadRoutes;
 const driversKey=JSON.stringify((drivers||[]).map(d=>d.id));
 if(stopsKey===stopsJsonRef.current&&driversKey===driversJsonRef.current)return;
 stopsJsonRef.current=stopsKey;
@@ -1480,7 +1512,7 @@ if(useRoadRoutes&&window.google?.maps?.DirectionsService&&positions.length<=25){
   svc.route({origin,destination:dest,waypoints,travelMode:window.google.maps.TravelMode.DRIVING,optimizeWaypoints:false},(result,status)=>{
     if(status==="OK"){
       const renderer=new window.google.maps.DirectionsRenderer({map,directions:result,suppressMarkers:true,preserveViewport:true,
-        polylineOptions:{strokeColor:col,strokeOpacity:isLoad1?0:0,strokeWeight,icons}});
+        polylineOptions:{strokeColor:col,strokeOpacity:isLoad1?strokeOpacity:0,strokeWeight,icons}});
       polylinesRef.current.push({setMap:(m)=>{renderer.setMap(m);}});
     }else{
       const line=new window.google.maps.Polyline({
@@ -1765,6 +1797,7 @@ return(<div key={"load-"+ln}>
 <div style={{flex:1,height:2,background:loadColor,borderRadius:1,opacity:0.4}}/>
 </div>}
 {loadStops.map((entry,i)=>{
+const fullIdx=entries.findIndex(x=>x.id===entry.id);
 const c=CC[entry.customer]||CC["One-Off Delivery"];
 const addr=entry.addr||getAddr(entry.stop);
 const isPickup=entry.stopType==="pickup";
@@ -1826,7 +1859,7 @@ style={{display:"inline-flex",alignItems:"center",gap:6,background:BRAND.main,co
 <select defaultValue={entry.etaDest||""} onChange={e=>{const dest=e.target.value;const curMins=entry.eta||"";if(dest&&curMins)onEta(entry.id,curMins,dest);else if(dest){/* store dest, wait for mins */const el=e.target;el._dest=dest;}}} ref={el=>{if(el)el._dest=entry.etaDest||"";}}
 style={{flex:1,border:"1px solid #d6d3d1",borderRadius:8,padding:"8px",fontSize:12,outline:"none",background:"#fff",color:entry.etaDest?"#1c1917":"#a8a29e"}}>
 <option value="">ETA to where?</option>
-{entries.filter((_,ei)=>ei>i&&_.status!=="departed").map(ne=><option key={ne.id} value={ne.stop}>{ne.stop}</option>)}
+{entries.filter((_,ei)=>ei>fullIdx&&_.status!=="departed").map(ne=><option key={ne.id} value={ne.stop}>{ne.stop}</option>)}
 <option value="Davis Warehouse">{"🏠 Davis Warehouse"}</option>
 </select>
 <input placeholder="mins" type="number" inputMode="numeric" defaultValue={entry.eta||""} style={{width:70,border:"1px solid #d6d3d1",borderRadius:8,padding:"8px",fontSize:13,fontWeight:700,outline:"none",textAlign:"center"}}
@@ -2932,7 +2965,11 @@ const activeTombstones=()=>{
 };
 window._ddTombstones=tombstonesRef;
 const startupReadyRef=useRef(false);
-setTimeout(()=>{startupReadyRef.current=true;},5000);
+/* When the grace period ends, nudge the autosave effect (identity-only log
+   change) so any dirty marks deferred during the window get processed even
+   if no further edit/subscription event arrives. Guarded so only the first
+   timeout to fire does the flip+nudge. */
+setTimeout(()=>{if(!startupReadyRef.current){startupReadyRef.current=true;if(dirtyDaysRef.current.size>0)_rawSetLog(p=>({...p}));}},5000);
 const prevLogRef=useRef({});
 const logRef=useRef({}); /* always points to CURRENT log for .then() closures */
 const saveTimerRef=useRef(null);
@@ -2943,17 +2980,39 @@ logRef.current=log;
 const setLog=useCallback((updater)=>{
   _rawSetLog(prev=>{
     const next=typeof updater==="function"?updater(prev):updater;
+    const now=Date.now();
+    let result=next;
     Object.keys(next).forEach(k=>{
-      if(JSON.stringify(next[k])!==JSON.stringify(prev[k]||[])){
-        dirtyDaysRef.current.add(k);
-      }
+      const prevArr=prev[k]||[];
+      const nextArr=next[k]||[];
+      /* Compare ignoring _rev so re-stamping is never seen as a change. */
+      if(_dayNoRev(nextArr)===_dayNoRev(prevArr))return;
+      dirtyDaysRef.current.add(k);
+      /* Stamp a fresh, monotonic _rev on every entry whose dispatcher-visible
+         content changed. _mergeEntryDispatcher lets the higher _rev win, so
+         this edit can't be reverted by another screen's stale copy — the fix
+         for assignments silently reverting to Unassigned. Driver edits use a
+         different component/setter and never reach here. */
+      const prevById={};
+      prevArr.forEach(e=>{if(e&&e.id!=null)prevById[e.id]=e;});
+      if(result===next)result={...next};
+      result[k]=nextArr.map(e=>{
+        if(!e||e.id==null)return e;
+        const pe=prevById[e.id];
+        if(!pe||_entryNoRev(e)!==_entryNoRev(pe))return{...e,_rev:Math.max(now,((pe&&pe._rev)||0)+1)};
+        return e;
+      });
     });
-    return next;
+    return result;
   });
 },[]);
 useEffect(()=>{
   if(dirtyDaysRef.current.size===0)return;
-  if(!startupReadyRef.current){console.log("[SAVE] Skipping — startup grace period");dirtyDaysRef.current.clear();return;}
+  /* Defer (don't clear) during the startup grace period. Only genuine user
+     edits mark days dirty — subscription/hydration paths use _rawSetLog — so
+     clearing here threw away real edits made in the first 5s. The marks are
+     kept and processed once the window ends (see the flip+nudge timeout). */
+  if(!startupReadyRef.current){console.log("[SAVE] Deferring — startup grace period");return;}
   if(saveTimerRef.current)clearTimeout(saveTimerRef.current);
   saveTimerRef.current=setTimeout(()=>{
     saveTimerRef.current=null;
@@ -3254,9 +3313,12 @@ const[chatInput,setChatInput]=useState("");
 const[chatLoading,setChatLoading]=useState(false);
 const[chatImage,setChatImage]=useState(null); /* {base64, preview} */
 const[showMsgPanel,setShowMsgPanel]=useState(false);
+const showMsgPanelRef=useRef(false);
+useEffect(()=>{showMsgPanelRef.current=showMsgPanel;},[showMsgPanel]);
 const[showMoreMenu,setShowMoreMenu]=useState(false);
 
-useEffect(()=>{_geocodeNotify=()=>{};return()=>{_geocodeNotify=null;};},[]);
+const[,forceGeo]=useState(0); /* bumped when an async geocode finishes so new pins render */
+useEffect(()=>{_geocodeNotify=()=>{forceGeo(n=>n+1);};return()=>{_geocodeNotify=null;};},[]);
 const[msgChannel,setMsgChannel]=useState(null); /* null=group, driverId=private */
 const[msgInput,setMsgInput]=useState("");
 const[allMessages,setAllMessages]=useState({}); /* {channelKey: [{id,from,text,time,fromName},...]} */
@@ -3775,7 +3837,7 @@ useEffect(()=>{
   if(!window._fbOps)return;
   const target=histWeekRange>=999?52:Math.min(histWeekRange,52);
   const weeksToLoad=[];
-  for(let w=wo-2;w>=wo-target;w--){
+  for(let w=wo-2;w>wo-target;w--){
     if(loadedHistWeeksRef.current.has(w))continue;
     weeksToLoad.push(w);
   }
@@ -4099,11 +4161,11 @@ const qualifiedPU=(()=>{
   return rawPU;
 })();
 const targetDkEntries=()=>{
-  const delEntry={id:genId(),customer:cust,stop:q.stop||"Quote Delivery",baseRate:q.rate||0,fuelPct:0,isHourly:false,note:q.note||(q.miles?q.miles+"mi":""),driverId:0,addr:q.addr||"",stopType:"delivery",priority:false,instructions:"BOL & Pictures must be sent back via Email",status:null,arrivedAt:null,departedAt:null,eta:null,photos:[],signature:null,dueBy:null,weight:wt,loadNum:1,pickupFrom:qualifiedPU||null,liftgateApplied:!!q.liftgate,knownLiftgate:false,liftgateFee:q.liftgate?75:0};
+  const delEntry={id:genId(),customer:cust,stop:q.stop||"Quote Delivery",baseRate:q.rate||0,fuelPct:0,isHourly:false,note:q.note||(q.miles?q.miles+"mi":""),driverId:0,addr:q.addr||"",stopType:"delivery",priority:false,instructions:"BOL & Pictures must be sent back via Email",status:null,arrivedAt:null,departedAt:null,eta:null,photos:[],signature:null,dueBy:null,weight:wt,loadNum:1,pickupFrom:qualifiedPU||null,liftgateApplied:!!q.liftgate,knownLiftgate:false,liftgateFee:q.liftgate?75:0,fromQuoteId:q.id};
   if(rawPU&&q.pickupAddr){
     /* Quote has a real pickup location -> create the pickup leg too, so the
        driver gets a PU card at the correct address. */
-    const puEntry={id:genId(),customer:cust,stop:qualifiedPU||rawPU,baseRate:0,fuelPct:0,isHourly:false,note:"Picking up for "+(q.stop||"delivery"),driverId:0,addr:q.pickupAddr,stopType:"pickup",priority:false,instructions:"",status:null,arrivedAt:null,departedAt:null,eta:null,photos:[],signature:null,dueBy:null,weight:wt,loadNum:1,manualPickup:true};
+    const puEntry={id:genId(),customer:cust,stop:qualifiedPU||rawPU,baseRate:0,fuelPct:0,isHourly:false,note:"Picking up for "+(q.stop||"delivery"),driverId:0,addr:q.pickupAddr,stopType:"pickup",priority:false,instructions:"",status:null,arrivedAt:null,departedAt:null,eta:null,photos:[],signature:null,dueBy:null,weight:wt,loadNum:1,manualPickup:true,fromQuoteId:q.id};
     return[puEntry,delEntry];
   }
   return[delEntry];
@@ -4122,8 +4184,16 @@ if(!q||!q.pushedTo)return;
 const targetDk=q.pushedTo;
 setLog(p=>{
   const dayEntries=p[targetDk]||[];
-  const filtered=dayEntries.filter(e=>!(e.stop===q.stop&&e.customer===q.customer&&Math.abs(e.baseRate-(q.rate||0))<1));
-  return{...p,[targetDk]:filtered};
+  /* Remove BOTH legs the push created (delivery + optional pickup). Prefer
+     the explicit fromQuoteId marker stamped by pushQuoteToDay; fall back to
+     the old heuristics for entries pushed before the marker existed (the
+     pickup leg's "Picking up for ..." note is its only stable fingerprint).
+     Tombstone every removed id, otherwise the transactional save / the
+     subscription merge sees them FB-only and resurrects them seconds later. */
+  const removed=dayEntries.filter(e=>e.fromQuoteId===q.id||(e.customer===q.customer&&((e.stopType!=="pickup"&&e.stop===q.stop)||(e.stopType==="pickup"&&e.manualPickup&&e.note==="Picking up for "+(q.stop||"delivery")))));
+  if(removed.length)tombstone(removed.map(e=>e.id));
+  const removedIds=new Set(removed.map(e=>e.id));
+  return{...p,[targetDk]:dayEntries.filter(e=>!removedIds.has(e.id))};
 });
 setSavedQuotes(p=>p.map(x=>x.id===quoteId?{...x,status:"pending",pushedTo:null}:x));
 const updated={...q,status:"pending",pushedTo:null};
@@ -4507,7 +4577,14 @@ const sibIds=siblings.map(e=>e.id);
 const driverName=(nid)=>nid===0?"Unassigned":(drivers.find(x=>x.id===nid)?.name||"Driver "+nid);
 if(entry.driverId===did){
   writeAuditLog({action:"reassign",customer:entry.customer,stop:entry.stop,driverId:0,details:driverName(did)+" → Unassigned"+(siblings.length>1?" ("+siblings.length+" stops)":"")});
-  setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>sibIds.includes(e.id)?{...e,driverId:0}:e)}));
+  setLog(p=>{
+    let all=(p[dk]||[]).map(e=>sibIds.includes(e.id)?{...e,driverId:0}:e);
+    sibIds.forEach(sid=>{
+      const ent=all.find(e=>e.id===sid);
+      if(ent&&ent.stopType==="delivery")all=rebuildPickupsFor(all,ent.customer);
+    });
+    return{...p,[dk]:all};
+  });
   showToast(siblings.length>1?`Removed ${siblings.length} stops`:"Removed from route");
   return;
 }
@@ -4633,11 +4710,15 @@ if(window._fbOps?.uploadFile){
 const addSignature=(eid,dataUrl)=>setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,signature:dataUrl}:e)}));
 const updateHistPOD=(entryId,weekOff,dayIdx,updates)=>{
 const lk=`${weekOff}-${dayIdx}`;
-_rawSetLog(p=>{const entries=(p[lk]||[]).map(e=>e.id===entryId?{...e,...updates}:e);return{...p,[lk]:entries};});
+const now=Date.now();
+/* This dispatcher edit writes via _rawSetLog (not the stamping setLog), so it
+   must stamp _rev itself — otherwise a concurrent screen could revert the POD
+   edit (same class as the assignment-revert bug). Capture the freshly mapped
+   entries for the save too, rather than reading the stale `log` closure. */
+let updatedEntries=null;
+_rawSetLog(p=>{const entries=(p[lk]||[]).map(e=>e.id===entryId?{...e,...updates,_rev:Math.max(now,(e._rev||0)+1)}:e);updatedEntries=entries;return{...p,[lk]:entries};});
 dirtyDaysRef.current.add(lk);
-const fbKey=getFbKey(weekOff,dayIdx);
-const updatedEntries=(log[lk]||[]).map(e=>e.id===entryId?{...e,...updates}:e);
-saveManifestDay(weekOff,dayIdx,updatedEntries,0,activeTombstones()).then(()=>{dirtyDaysRef.current.delete(lk);showToast("POD saved");}).catch(()=>showToast("Save failed"));
+saveManifestDay(weekOff,dayIdx,updatedEntries||(log[lk]||[]),0,activeTombstones()).then(()=>{dirtyDaysRef.current.delete(lk);showToast("POD saved");}).catch(()=>showToast("Save failed"));
 };
 const setShipPlan=(eid,num)=>setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,shipPlan:num}:e)}));
 const setRefNum=(eid,num)=>setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,refNum:num}:e)}));
@@ -4743,18 +4824,6 @@ const removeEmserShift=(shiftId)=>{
   });
 };
 const calcAndApplyEmserHours=useCallback(()=>{const shifts=emserShifts[emDk]||[];const totalMins=shifts.reduce((sum,s)=>sum+calcShiftMins(s),0);const hours=Math.round(totalMins/15)*15/60;if(hours>0){setEmH(p=>({...p,[`${emDk}-emser`]:hours}));return hours;}return emH[`${emDk}-emser`]||4;},[emserShifts,emDk,emH]);
-useEffect(()=>{
-  const shifts=emserShifts[emDk]||[];
-  if(!shifts.length)return;
-  const totalMins=shifts.reduce((sum,s)=>sum+calcShiftMins(s),0);
-  if(totalMins>0){
-    const lgCount=dl.filter(e=>e.isHourly&&e.liftgateApplied&&!DISTANCE_BONUS_STOPS.includes(e.stop)).length;
-    const distBonus=dl.filter(e=>e.isHourly&&DISTANCE_BONUS_STOPS.includes(e.stop)).length;
-    const billedMins=totalMins+(lgCount+distBonus)*60;
-    const hours=Math.round(billedMins/15)*15/60;
-    setEmH(p=>{if(p[`${emDk}-emser`]===hours)return p;return{...p,[`${emDk}-emser`]:hours};});
-  }
-},[emserShifts,emDk,dl]);
 
 const getMsgKey=(ch)=>ch?"dm-"+ch:"group";
 const getMessages=(ch)=>allMessages[getMsgKey(ch)]||[];
@@ -4775,19 +4844,19 @@ useEffect(()=>{
   const unsubs=[];
   unsubs.push(subscribeMessages("group",(msgs)=>{
     setAllMessages(p=>{const prev=p["group"]||[];
-    if(msgs.length>prev.length){const newest=msgs[msgs.length-1];if(newest&&newest.from!=="dispatch"&&!showMsgPanel){setMsgPopup({from:newest.fromName||"Driver",text:newest.text,time:newest.time,channelKey:"group"});setTimeout(()=>setMsgPopup(null),8000);}}
+    if(msgs.length>prev.length){const newest=msgs[msgs.length-1];if(newest&&newest.from!=="dispatch"&&!showMsgPanelRef.current){setMsgPopup({from:newest.fromName||"Driver",text:newest.text,time:newest.time,channelKey:"group"});setTimeout(()=>setMsgPopup(null),8000);}}
     return{...p,"group":msgs};});
   }));
   drivers.forEach(d=>{
     const key="dm-"+d.id;
     unsubs.push(subscribeMessages(key,(msgs)=>{
       setAllMessages(p=>{const prev=p[key]||[];
-      if(msgs.length>prev.length){const newest=msgs[msgs.length-1];if(newest&&newest.from!=="dispatch"&&!showMsgPanel){setMsgPopup({from:newest.fromName||d.name,text:newest.text,time:newest.time,channelKey:key});setTimeout(()=>setMsgPopup(null),8000);}}
+      if(msgs.length>prev.length){const newest=msgs[msgs.length-1];if(newest&&newest.from!=="dispatch"&&!showMsgPanelRef.current){setMsgPopup({from:newest.fromName||d.name,text:newest.text,time:newest.time,channelKey:key});setTimeout(()=>setMsgPopup(null),8000);}}
       return{...p,[key]:msgs};});
     }));
   });
   return()=>unsubs.forEach(u=>u());
-},[drivers.length]);
+},[drivers.map(d=>d.id).join(",")]);
 
 /* Move a manifest entry up or down WITHIN ITS LOAD GROUP.
 
@@ -4973,7 +5042,7 @@ const wowPct=prevWkT>0?((wowDelta/prevWkT)*100):0;
    and the count chip says 'N deliveries'. A pickup leg is dispatcher
    bookkeeping, not a delivery, and historically inflated the count and
    showed up as a confusing 'PU' card alongside the actual delivery. */
-const getHistoryEntries=()=>{const all=[];const maxWks=histWeekRange>=999?52:histWeekRange;for(let w=wo;w>=wo-maxWks;w--){const wdates=getWeekDates(w);for(let d=0;d<5;d++){const k=`${w}-${d}`;(log[k]||[]).forEach(e=>all.push({...e,weekOff:w,dayIdx:d,dayName:DAYS[d],dayDate:wdates[d].date}));}}return all;};
+const getHistoryEntries=()=>{const all=[];const maxWks=histWeekRange>=999?52:histWeekRange;for(let w=wo;w>wo-maxWks;w--){const wdates=getWeekDates(w);for(let d=0;d<5;d++){const k=`${w}-${d}`;(log[k]||[]).forEach(e=>all.push({...e,weekOff:w,dayIdx:d,dayName:DAYS[d],dayDate:wdates[d].date}));}}return all;};
 const histAll=getHistoryEntries();
 const histFiltered=histAll.filter(e=>{
   if(e.stopType==="pickup")return false;
@@ -5325,6 +5394,16 @@ const importBackup=(file)=>{
       if(data.dispatchNotes)setDispNotes(prev=>({...prev,...data.dispatchNotes}));
       if(data.customStops&&Object.keys(data.customStops).length)setCustomStops(prev=>({...prev,...data.customStops}));
       if(data.savedQuotes){const sq=Array.isArray(data.savedQuotes)?data.savedQuotes:Object.values(data.savedQuotes);if(sq.length)setSavedQuotes(sq);}
+      /* Same additive philosophy as manifests: only fill days with no shifts. FB save handled by the emserShifts effect. */
+      if(data.emserShifts&&typeof data.emserShifts==="object")setEmserShifts(prev=>{const merged={...prev};Object.entries(data.emserShifts).forEach(([key,shifts])=>{if(shifts&&shifts.length>0&&(!merged[key]||merged[key].length===0))merged[key]=shifts;});return merged;});
+      if(data.stopOverrides&&Object.keys(data.stopOverrides).length)setStopOverrides(prev=>({...prev,...data.stopOverrides}));
+      if(Array.isArray(data.hiddenStops)&&data.hiddenStops.length)setHiddenStops(prev=>[...new Set([...prev,...data.hiddenStops])]);
+      if(data.driverCapacity&&Object.keys(data.driverCapacity).length)setDriverCapacity(prev=>({...prev,...data.driverCapacity}));
+      /* Drivers: merge by id — only add backup drivers missing from the current list, never remove/overwrite. */
+      if(Array.isArray(data.drivers)&&data.drivers.length){
+        const newDrvs=data.drivers.filter(bd=>bd&&bd.id!=null&&!drivers.some(d=>d.id===bd.id));
+        if(newDrvs.length){driverChangeSource.current="local";driverSaveInFlight.current=true;setDrivers(prev=>[...prev,...newDrvs.filter(bd=>!prev.some(d=>d.id===bd.id))]);}
+      }
     }catch(err){showToast("Failed to read backup: "+err.message);}
   };
   reader.readAsText(file);
@@ -5553,13 +5632,6 @@ const txt=await r.text();
 if(r.ok){try{data=JSON.parse(txt);if(!data?.content)data=null;}catch(e){data=null;}}
 if(!data)errDetails="Netlify function returned: "+txt.slice(0,300);
 }catch(e){errDetails="Netlify function unreachable: "+e.message;}
-if(!data){
-try{
-const r2=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify(payload)});
-if(r2.ok){data=await r2.json();if(!data?.content)data=null;}
-else{const t2=await r2.text();errDetails+="\nDirect API: "+t2.slice(0,200);}
-}catch(e2){errDetails+="\nDirect API error: "+e2.message;}
-}
 if(data&&data.content){
 const assistantText=data.content.map(c=>c.type==="text"?c.text:"").join("")||"No response.";
 let parsedStops=null;
@@ -6502,7 +6574,7 @@ return(
 {histMode==="photos"&&(()=>{
 const photosAll=[];
 const podEntries=[];
-histFiltered.forEach(e=>{if(e.photos&&e.photos.length>0){const addr=e.addr||getAddr(e.stop);const drv=drivers.find(d=>d.id===e.driverId);const validPhotos=(e.photos||[]);podEntries.push({...e,addr,driverName:drv?.name||"",validPhotos});validPhotos.forEach((p,pi)=>photosAll.push({src:p,stop:e.stop,customer:e.customer,dayName:e.dayName,dayDate:e.dayDate,signature:e.signature,id:e.id+"-"+pi,addr,driverName:drv?.name||"",arrivedAt:e.arrivedAt,departedAt:e.departedAt,weight:e.weight,allPhotos:validPhotos,entryId:e.id}));}});
+histFiltered.forEach(e=>{if(e.photos&&e.photos.length>0){const addr=e.addr||getAddr(e.stop);const drv=drivers.find(d=>d.id===e.driverId);const validPhotos=(e.photos||[]);podEntries.push({...e,addr,driverName:drv?.name||"",validPhotos});validPhotos.forEach((p,pi)=>photosAll.push({src:p,stop:e.stop,customer:e.customer,dayName:e.dayName,dayDate:e.dayDate,weekOff:e.weekOff,dayIdx:e.dayIdx,signature:e.signature,id:e.id+"-"+pi,addr,driverName:drv?.name||"",arrivedAt:e.arrivedAt,departedAt:e.departedAt,weight:e.weight,allPhotos:validPhotos,entryId:e.id}));}});
 photosAll.sort((a,b)=>b.weekOff!==a.weekOff?b.weekOff-a.weekOff:b.dayIdx-a.dayIdx);
 const printPOD=(pod)=>{const w=window.open("","_blank","width=800,height=900");if(!w)return;const isSigImg=pod.signature&&(pod.signature.startsWith("data:")||pod.signature.startsWith("http"));const photos=pod.allPhotos||pod.validPhotos||[];w.document.write(`<!DOCTYPE html><html><head><title>POD — ${pod.stop}</title><style>@media print{.no-print{display:none!important;}}body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;margin:0;padding:20px;color:#1c1917;}.header{display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid #1e5b92;padding-bottom:12px;margin-bottom:16px;}.header h1{margin:0;font-size:20px;color:#1e5b92;}.header .sub{font-size:11px;color:#78716c;}.pod-title{text-align:center;font-size:18px;font-weight:700;margin:12px 0;text-transform:uppercase;color:#1e5b92;letter-spacing:1px;}.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 24px;margin-bottom:16px;}.info-grid .label{font-size:10px;color:#78716c;text-transform:uppercase;font-weight:600;}.info-grid .value{font-size:13px;font-weight:600;margin-bottom:6px;}.photos{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0;}.photos img{max-width:320px;max-height:260px;border-radius:8px;border:1px solid #e7e5e4;object-fit:contain;}.sig-box{margin:16px 0;padding:12px;border:2px solid #16a34a;border-radius:8px;text-align:center;}.sig-box img{max-height:120px;}.sig-label{font-size:10px;color:#78716c;text-transform:uppercase;margin-bottom:4px;}.footer{margin-top:20px;border-top:1px solid #e7e5e4;padding-top:8px;font-size:9px;color:#a8a29e;text-align:center;}</style></head><body>`);w.document.write(`<button class="no-print" onclick="window.print()" style="position:fixed;top:12px;right:12px;background:#1e5b92;color:#fff;border:none;border-radius:8px;padding:10px 20px;font-size:14px;font-weight:700;cursor:pointer;z-index:10;">Print POD</button>`);w.document.write(`<div class="header"><div><h1>DAVIS DELIVERY SERVICE</h1><div class="sub">Buford, GA · (770) 271-9498</div></div><div style="text-align:right"><div style="font-size:12px;font-weight:600;">${pod.dayName||""} ${pod.dayDate||""}</div></div></div>`);w.document.write(`<div class="pod-title">Proof of Delivery</div>`);w.document.write(`<div class="info-grid"><div><div class="label">Customer</div><div class="value">${pod.customer||""}</div></div><div><div class="label">Driver</div><div class="value">${pod.driverName||"—"}</div></div><div><div class="label">Delivery To</div><div class="value">${pod.stop||""}</div></div><div><div class="label">Weight</div><div class="value">${pod.weight?pod.weight.toLocaleString()+" lbs":"—"}</div></div><div><div class="label">Address</div><div class="value">${pod.addr||"—"}</div></div><div><div class="label">Arrived / Departed</div><div class="value">${pod.arrivedAt||"—"} / ${pod.departedAt||"—"}</div></div></div>`);if(photos.length>0){w.document.write(`<div class="label" style="margin-top:12px;">Delivery Photos</div><div class="photos">`);photos.forEach(p=>{w.document.write(`<img src="${p}" onerror="this.style.display='none'"/>`);});w.document.write(`</div>`);}if(pod.signature){if(isSigImg){w.document.write(`<div class="sig-box"><div class="sig-label">Signature</div><img src="${pod.signature}"/></div>`);}else{w.document.write(`<div class="sig-box"><div class="sig-label">Received By</div><div style="font-size:18px;font-weight:700;">${pod.signature}</div></div>`);}}w.document.write(`<div class="footer">Generated by Davis Delivery Dispatch · ${new Date().toLocaleString()}</div></body></html>`);w.document.close();};
 return(<div>
@@ -6694,7 +6766,7 @@ else{showToast("Pick a weekday (Mon-Fri)");}
 <button onClick={()=>{setSavedQuotes(p=>p.filter(x=>x.id!==q.id));deleteQuoteFromFB(q.id).catch(e=>console.error("Quote del:",e));showToast("Quote deleted");}} style={{background:"none",border:"none",color:"#dc2626",fontSize:9,cursor:"pointer",padding:"2px 0"}}>Delete</button>
 </div>}
 {accepted&&q.pushedTo&&<div style={{display:"flex",alignItems:"center",gap:8,marginTop:6}}>
-<span style={{fontSize:10,color:"#16a34a",fontWeight:600}}>✓ Pushed to {DAYS[parseInt(q.pushedTo.split("-")[1])]||""}</span>
+<span style={{fontSize:10,color:"#16a34a",fontWeight:600}}>✓ Pushed to {DAYS[parseInt(q.pushedTo.slice(q.pushedTo.lastIndexOf("-")+1))]||""}</span>
 <button onClick={()=>unplanQuote(q.id)} style={{background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:6,padding:"3px 10px",cursor:"pointer",fontSize:10,color:"#dc2626",fontWeight:600}}>Unplan</button>
 </div>}
 </div>
@@ -6743,7 +6815,7 @@ else{showToast("Pick a weekday (Mon-Fri)");}
 <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0,marginLeft:8}}>
 {drv&&<span style={{fontSize:9,background:DCOL[di]||"#78716c",color:"#fff",padding:"1px 4px",borderRadius:3,fontWeight:600}}>{drv.name.split(" ")[0]}</span>}
 {(()=>{const cu=CUSTOMERS[entry.customer];if(!cu||!cu.fuel_surcharge||cu.fuel_included)return null;if(entry.stopType==="pickup")return null;if(entry.fuelPct===0)return null;const pct=Math.round((entry.fuelPct||cu.fuel_surcharge)*100);return<span title={"Bill: add "+pct+"% fuel surcharge on top of line rate"} style={{fontSize:9,background:"#fffbeb",color:"#b45309",border:"1px solid #fde68a",padding:"1px 5px",borderRadius:4,fontWeight:700,letterSpacing:"0.02em"}}>+{pct}% FUEL</span>;})()}
-<InlineRate value={entry.baseRate+(entry.liftgateApplied&&!entry.isHourly?(entry.liftgateFee||75):0)} isHourly={entry.isHourly} onSave={r=>updateRate(entry.id,r)}/>
+<InlineRate value={entry.baseRate+(entry.liftgateApplied&&!entry.isHourly?(entry.liftgateFee||75):0)} isHourly={entry.isHourly} onSave={r=>updateRateForDay(entry.id,r,`${entry.weekOff}-${entry.dayIdx}`)}/>
 </div>
 </div>);})}
 </div>);});})()}
@@ -7239,9 +7311,9 @@ onAssignStop={mapActiveDrv?(stopId,drvId)=>{assignInOrder(stopId,mapActiveDrv,ma
 <span style={{fontSize:13}}>📡</span>
 <span style={{fontSize:12,fontWeight:700,color:"#1c1917"}}>Motive GPS</span>
 </div>
-<span style={{fontSize:9,color:"#a8a29e",fontWeight:500}}>1 min polling</span>
+<span style={{fontSize:9,color:"#a8a29e",fontWeight:500}}>20s polling</span>
 </div>
-{drivers.filter(d=>d.id<=3).map((drv,di)=>{
+{drivers.map((drv,di)=>{
   const loc=driverLocs[drv.id];
   const on=gpsEnabled[drv.id]!==false;
   const col=DCOL[di]||BRAND.main;
@@ -7326,11 +7398,11 @@ onAssignStop={mapActiveDrv?(stopId,drvId)=>{assignInOrder(stopId,mapActiveDrv,ma
 </div>}
 {_mLGEntries.map(le=><div key={le.id} style={{display:"flex",alignItems:"center",gap:4,background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:6,padding:"4px 8px",marginBottom:3,fontSize:10}}>
 <span style={{fontWeight:700,color:"#ea580c"}}>+1h LG: {le.stop}</span>
-<button onClick={()=>{setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===le.id?{...e,liftgateApplied:false}:e)}));showToast("LG hour removed");}} style={{marginLeft:"auto",background:"#fef2f2",border:"1px solid #fecaca",borderRadius:4,padding:"1px 6px",cursor:"pointer",fontSize:8,fontWeight:700,color:"#dc2626"}}>✕</button>
+<button onClick={()=>removeLiftgate(le.id)} style={{marginLeft:"auto",background:"#fef2f2",border:"1px solid #fecaca",borderRadius:4,padding:"1px 6px",cursor:"pointer",fontSize:8,fontWeight:700,color:"#dc2626"}}>✕</button>
 </div>)}
-<div style={{display:"flex",gap:3}}>
+{totalMins===0&&<div style={{display:"flex",gap:3}}>
 {[4,5,6,7,8,9,10].map(h=><button key={h} onClick={()=>setEmH(p=>({...p,[`${emDk}-emser`]:h}))} style={{width:28,height:26,borderRadius:6,border:"none",cursor:"pointer",fontSize:12,fontWeight:600,background:hoursUsed===h?"#2563eb":"#e7e5e4",color:hoursUsed===h?"#fff":"#78716c"}}>{h}</button>)}
-</div>
+</div>}
 </div>);})()}
 
 {dl.length===0?<div style={{textAlign:"center",padding:"40px 20px",color:"#a8a29e"}}><div style={{fontSize:28,marginBottom:8}}>{"\uD83D\uDE9A"}</div><div style={{fontSize:13}}>No deliveries yet</div></div>
@@ -8168,7 +8240,7 @@ style={{marginTop:8,width:"100%",display:"flex",alignItems:"center",justifyConte
 </div>);})}
 <p style={{fontSize:10,color:"#a8a29e",margin:"8px 0 0"}}>Driver PINs = last 4 digits of their phone number</p>
 </div>
-{<div style={{marginTop:12}}><div style={{display:"flex",gap:6,marginBottom:6}}><input value={newDN} onChange={e=>setNewDN(e.target.value)} placeholder="Driver name" style={{flex:1,border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 12px",fontSize:14,outline:"none"}}/></div><div style={_s.flexG6}><input value={newDP} onChange={e=>setNewDP(e.target.value)} placeholder="Phone number" type="tel" onKeyDown={e=>e.key==="Enter"&&addDrvr()} style={{flex:1,border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 12px",fontSize:14,outline:"none"}}/><button onClick={addDrvr} style={{background:(!newDN.trim()||!newDP.trim())?"#e7e5e4":"#1c1917",color:(!newDN.trim()||!newDP.trim())?"#a8a29e":"#fff",border:"none",borderRadius:8,padding:"8px 16px",cursor:"pointer",fontSize:13,fontWeight:600}}>Add</button></div>{newDN.trim()&&!newDP.trim()&&<p style={{fontSize:11,color:"#dc2626",margin:"4px 0 0"}}>Phone required</p>}</div>}
+{<div style={{marginTop:12}}><div style={{display:"flex",gap:6,marginBottom:6}}><input value={newDN} onChange={e=>setNewDN(e.target.value)} placeholder="Driver name" style={{flex:1,border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 12px",fontSize:14,outline:"none"}}/></div><div style={_s.flexG6}><input value={newDP} onChange={e=>setNewDP(e.target.value)} placeholder="Phone number" type="tel" onKeyDown={e=>e.key==="Enter"&&addDrvr()} style={{flex:1,border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 12px",fontSize:14,outline:"none"}}/><button onClick={addDrvr} disabled={!newDN.trim()||!newDP.trim()} style={{background:(!newDN.trim()||!newDP.trim())?"#e7e5e4":"#1c1917",color:(!newDN.trim()||!newDP.trim())?"#a8a29e":"#fff",border:"none",borderRadius:8,padding:"8px 16px",cursor:"pointer",fontSize:13,fontWeight:600}}>Add</button></div>{newDN.trim()&&!newDP.trim()&&<p style={{fontSize:11,color:"#dc2626",margin:"4px 0 0"}}>Phone required</p>}</div>}
 </div>
 </div>
 </div>}
@@ -8801,7 +8873,7 @@ if(e.photos&&e.photos.length>0){
 const validPhotos=(e.photos||[]);
 const addr=e.addr||getAddr(e.stop);
 const drv=drivers.find(d=>d.id===e.driverId);
-validPhotos.forEach((p,pi)=>photosAll.push({src:p,stop:e.stop,customer:e.customer,dayName:e.dayName,dayDate:e.dayDate,weekOff:e.weekOff,signature:e.signature,addr,driverId:e.driverId,driverName:drv?.name||"",arrivedAt:e.arrivedAt,departedAt:e.departedAt,weight:e.weight,allPhotos:validPhotos,id:e.id+"-"+pi}));
+validPhotos.forEach((p,pi)=>photosAll.push({src:p,stop:e.stop,customer:e.customer,dayName:e.dayName,dayDate:e.dayDate,weekOff:e.weekOff,dayIdx:e.dayIdx,signature:e.signature,addr,driverId:e.driverId,driverName:drv?.name||"",arrivedAt:e.arrivedAt,departedAt:e.departedAt,weight:e.weight,allPhotos:validPhotos,id:e.id+"-"+pi}));
 }
 });
 photosAll.sort((a,b)=>b.weekOff!==a.weekOff?b.weekOff-a.weekOff:b.dayIdx-a.dayIdx);
@@ -8968,7 +9040,7 @@ else{showToast("Pick a weekday (Mon-Fri)");}
 <button onClick={()=>openEditQuote(q)} style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:8,padding:"7px 10px",cursor:"pointer",fontSize:11,color:"#2563eb",fontWeight:700}}>✎ Edit</button>
 <button onClick={()=>{setSavedQuotes(p=>p.filter(x=>x.id!==q.id));deleteQuoteFromFB(q.id).catch(e=>console.error("Quote del:",e));showToast("Deleted");}} style={{background:"#fef2f2",border:"none",borderRadius:8,padding:"7px 10px",cursor:"pointer",fontSize:11,color:"#dc2626",fontWeight:600}}>Delete</button></>}
 </div>}
-{accepted&&q.pushedTo&&<div style={{fontSize:10,color:"#16a34a",fontWeight:600,marginTop:4}}>✓ Pushed to {DAYS[parseInt(q.pushedTo.split("-")[1])]||""}</div>}
+{accepted&&q.pushedTo&&<div style={{fontSize:10,color:"#16a34a",fontWeight:600,marginTop:4}}>✓ Pushed to {DAYS[parseInt(q.pushedTo.slice(q.pushedTo.lastIndexOf("-")+1))]||""}</div>}
 </div>);})}
 {savedQuotes.filter(q=>quoteTab==="current"?q.status!=="accepted":q.status==="accepted").length===0&&savedQuotes.length>0&&<div style={{textAlign:"center",padding:"24px 16px",color:"#a8a29e"}}><div style={{fontSize:28,marginBottom:8}}>{quoteTab==="current"?"📋":"✅"}</div><div style={{fontSize:12}}>{quoteTab==="current"?"No open quotes":"No completed quotes"}</div></div>}
 </div>);
@@ -10249,6 +10321,7 @@ return(<div key={"load-"+ln}>
 <div style={{flex:1,height:2,background:loadColor,borderRadius:1,opacity:0.4}}/>
 </div>}
 {loadStops.map((entry,i)=>{
+const fullIdx=entries.findIndex(x=>x.id===entry.id);
 const c=CC[entry.customer]||CC["One-Off Delivery"];
 const addr=entry.addr||getAddr(entry.stop);
 const isPickup=entry.stopType==="pickup";
@@ -10298,8 +10371,8 @@ style={{display:"inline-flex",alignItems:"center",gap:6,background:BRAND.main,co
 🧭 Get Directions
 </a>}
 
-{!departed&&i<entries.length-1&&(()=>{
-const nextStop=entries.slice(i+1).find(e=>e.status!=="departed");
+{!departed&&fullIdx<entries.length-1&&(()=>{
+const nextStop=entries.slice(fullIdx+1).find(e=>e.status!=="departed");
 if(!nextStop)return null;
 const nextAddr=nextStop.addr||getAddr(nextStop.stop);
 return(<button onClick={()=>{
@@ -10355,7 +10428,7 @@ else{const curAddr=entry.addr||getAddr(entry.stop);if(curAddr){showToast("📍 U
 }}
 style={{flex:1,border:"1px solid #d6d3d1",borderRadius:8,padding:"8px",fontSize:12,outline:"none",background:"#fff",color:entry.etaDest?"#1c1917":"#a8a29e"}}>
 <option value="">ETA to where?</option>
-{entries.filter((_,ei)=>ei>i&&_.status!=="departed").map(ne=><option key={ne.id} value={ne.stop}>{ne.stop}</option>)}
+{entries.filter((_,ei)=>ei>fullIdx&&_.status!=="departed").map(ne=><option key={ne.id} value={ne.stop}>{ne.stop}</option>)}
 <option value="Davis Warehouse">{"🏠 Davis Warehouse"}</option>
 </select>
 <input placeholder="mins" type="number" inputMode="numeric" defaultValue={entry.eta||""} style={{width:70,border:"1px solid #d6d3d1",borderRadius:8,padding:"8px",fontSize:13,fontWeight:700,outline:"none",textAlign:"center"}}
@@ -10371,7 +10444,11 @@ onChange={e=>{if(e.target.files[0]){const r=new FileReader();r.onload=ev=>addPho
 </div>
 
 {arrived&&!departed&&!entry.liftgateApplied&&<button onClick={()=>{
-sendNotificationToDriver(0,"🔄 LIFTGATE REQUEST from "+(driver?.name||"driver")+"\nStop: "+entry.stop+"\nApply $75 liftgate charge?","liftgate_request").catch(()=>{});
+/* Send via the messages system (same path as driver chat) — dispatch
+   subscribes to dm-{driverId} channels and pops these up; the old
+   notifications/0 write had no reader on the dispatch side. */
+const now=new Date().toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"});
+saveMessage("dm-"+driverId,{from:"driver-"+driverId,fromName:driver?.name||"Driver",text:"🔄 LIFTGATE REQUEST\nStop: "+entry.stop+"\nApply $75 liftgate charge?",time:now,read:false}).catch(e=>console.error("Liftgate request FAILED:",e));
 showToast("Liftgate request sent to dispatch");
 }} style={{width:"100%",marginTop:6,background:"#fff7ed",border:"2px solid #fed7aa",borderRadius:8,padding:"8px 12px",cursor:"pointer",fontSize:12,fontWeight:700,color:"#ea580c",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
 🔄 Liftgate Required (+$75)
