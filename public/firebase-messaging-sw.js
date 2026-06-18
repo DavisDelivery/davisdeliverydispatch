@@ -29,7 +29,26 @@ messaging.onBackgroundMessage((payload) => {
 
 self.addEventListener('notificationclick', (event) => {
     event.notification.close();
-    const driverId = event.notification.data?.driverId;
-    const url = driverId ? `/#/driver/${driverId}` : '/';
-    event.waitUntil(clients.openWindow(url));
+    // The app router resolves driver NAME SLUGS (e.g. /#/driver/john), not
+    // numeric ids — deep-link via data.slug. Notifications we build in
+    // onBackgroundMessage carry the data payload directly on
+    // event.notification.data; the compat SDK sometimes nests it under
+    // data.FCM_MSG.data, so check both.
+    const d = event.notification.data || {};
+    const slug = d.slug || (d.FCM_MSG && d.FCM_MSG.data && d.FCM_MSG.data.slug) || null;
+    const url = slug ? `/#/driver/${slug}` : '/';
+    event.waitUntil(
+        clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+            // Focus an already-open app window instead of spawning a new one.
+            for (const client of clientList) {
+                if ('focus' in client) {
+                    if (slug && 'navigate' in client) {
+                        client.navigate(url).catch(() => {});
+                    }
+                    return client.focus();
+                }
+            }
+            return clients.openWindow(url);
+        })
+    );
 });
