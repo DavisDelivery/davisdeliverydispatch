@@ -370,10 +370,29 @@ const _mergeEntryDriver=(localE,fbE)=>{
 };
 
 const _mergeEntryDispatcher=(localE,fbE)=>{
-  /* Caller is dispatcher. Local wins on dispatcher fields (rate, instructions,
-     addr, order, etc.), FB wins on driver-stamped fields. Forward-only for
-     status and never-clobber for timestamps. */
+  /* Two dispatch screens (two dispatchers, or one person on desktop+phone)
+     share this doc. Dispatcher-owned fields (driverId, loadNum, rate,
+     instructions, addr, dueBy, …) are arbitrated by per-entry _rev: the side
+     with the higher revision wins. This is what stops a stale second screen
+     from silently reverting a newer assignment — the "planned on Brent, came
+     back unassigned" bug. Ties default to local, preserving this screen's own
+     in-flight edits and its stop ordering. Driver-stamped fields
+     (status/arrived/departed/photos/signature/shipPlan/eta) are reconciled
+     forward-only below, independent of _rev — the driver's phone owns those. */
   const out={...localE};
+  const localRev=localE._rev||0;
+  const fbRev=fbE._rev||0;
+  if(fbRev>localRev){
+    /* FB has a newer dispatcher revision for this entry — adopt its
+       dispatcher-owned fields. DRIVER_OWNED_FIELDS are skipped (handled by the
+       forward-only block) so a newer assignment never drags a driver stamp
+       backward. */
+    Object.keys(fbE).forEach(k=>{
+      if(k==="_rev"||DRIVER_OWNED_FIELDS.includes(k))return;
+      out[k]=fbE[k];
+    });
+  }
+  out._rev=Math.max(localRev,fbRev);
   const localRank=STATUS_RANK[localE.status]??0;
   const fbRank=STATUS_RANK[fbE.status]??0;
   if(fbRank>localRank)out.status=fbE.status;
@@ -396,6 +415,12 @@ const _mergeEntryDispatcher=(localE,fbE)=>{
   if(fbE.eta&&!localE.eta){out.eta=fbE.eta;out.etaDest=fbE.etaDest;out.etaSetAt=fbE.etaSetAt;}
   return out;
 };
+
+/* Compare an entry / a day's entries ignoring the _rev sync marker, so that
+   stamping a fresh _rev (see DispatchApp's setLog) is never itself mistaken for
+   a content change. */
+const _entryNoRev=(e)=>{if(!e||typeof e!=="object")return JSON.stringify(e);const{_rev,...rest}=e;return JSON.stringify(rest);};
+const _dayNoRev=(arr)=>JSON.stringify((arr||[]).map(e=>{if(!e||typeof e!=="object")return e;const{_rev,...rest}=e;return rest;}));
 
 const saveManifestDay=async(wo,sd,entries,callerDriverId,deletedIds)=>{
   const fbKey=getFbKey(wo,sd);
@@ -2953,12 +2978,30 @@ logRef.current=log;
 const setLog=useCallback((updater)=>{
   _rawSetLog(prev=>{
     const next=typeof updater==="function"?updater(prev):updater;
+    const now=Date.now();
+    let result=next;
     Object.keys(next).forEach(k=>{
-      if(JSON.stringify(next[k])!==JSON.stringify(prev[k]||[])){
-        dirtyDaysRef.current.add(k);
-      }
+      const prevArr=prev[k]||[];
+      const nextArr=next[k]||[];
+      /* Compare ignoring _rev so re-stamping is never seen as a change. */
+      if(_dayNoRev(nextArr)===_dayNoRev(prevArr))return;
+      dirtyDaysRef.current.add(k);
+      /* Stamp a fresh, monotonic _rev on every entry whose dispatcher-visible
+         content changed. _mergeEntryDispatcher lets the higher _rev win, so
+         this edit can't be reverted by another screen's stale copy — the fix
+         for assignments silently reverting to Unassigned. Driver edits use a
+         different component/setter and never reach here. */
+      const prevById={};
+      prevArr.forEach(e=>{if(e&&e.id!=null)prevById[e.id]=e;});
+      if(result===next)result={...next};
+      result[k]=nextArr.map(e=>{
+        if(!e||e.id==null)return e;
+        const pe=prevById[e.id];
+        if(!pe||_entryNoRev(e)!==_entryNoRev(pe))return{...e,_rev:Math.max(now,((pe&&pe._rev)||0)+1)};
+        return e;
+      });
     });
-    return next;
+    return result;
   });
 },[]);
 useEffect(()=>{
@@ -4665,11 +4708,15 @@ if(window._fbOps?.uploadFile){
 const addSignature=(eid,dataUrl)=>setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,signature:dataUrl}:e)}));
 const updateHistPOD=(entryId,weekOff,dayIdx,updates)=>{
 const lk=`${weekOff}-${dayIdx}`;
-_rawSetLog(p=>{const entries=(p[lk]||[]).map(e=>e.id===entryId?{...e,...updates}:e);return{...p,[lk]:entries};});
+const now=Date.now();
+/* This dispatcher edit writes via _rawSetLog (not the stamping setLog), so it
+   must stamp _rev itself — otherwise a concurrent screen could revert the POD
+   edit (same class as the assignment-revert bug). Capture the freshly mapped
+   entries for the save too, rather than reading the stale `log` closure. */
+let updatedEntries=null;
+_rawSetLog(p=>{const entries=(p[lk]||[]).map(e=>e.id===entryId?{...e,...updates,_rev:Math.max(now,(e._rev||0)+1)}:e);updatedEntries=entries;return{...p,[lk]:entries};});
 dirtyDaysRef.current.add(lk);
-const fbKey=getFbKey(weekOff,dayIdx);
-const updatedEntries=(log[lk]||[]).map(e=>e.id===entryId?{...e,...updates}:e);
-saveManifestDay(weekOff,dayIdx,updatedEntries,0,activeTombstones()).then(()=>{dirtyDaysRef.current.delete(lk);showToast("POD saved");}).catch(()=>showToast("Save failed"));
+saveManifestDay(weekOff,dayIdx,updatedEntries||(log[lk]||[]),0,activeTombstones()).then(()=>{dirtyDaysRef.current.delete(lk);showToast("POD saved");}).catch(()=>showToast("Save failed"));
 };
 const setShipPlan=(eid,num)=>setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,shipPlan:num}:e)}));
 const setRefNum=(eid,num)=>setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,refNum:num}:e)}));
