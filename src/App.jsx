@@ -61,6 +61,7 @@ greenBtn:{background:"#16a34a",color:"#fff",border:"none",borderRadius:8,padding
 inputMb4:{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"7px 10px",fontSize:12,outline:"none",marginBottom:4},
 };
 import { useState, useCallback, useEffect, useRef, Fragment, Component } from "react";
+import { dedupeIds, dedupeAutoPickups, sanitizeEntry, _mergeEntryDriver, _mergeEntryDispatcher, buildMergedEntries } from "./manifestLogic.js";
 
 const _SplitUI=({splitEntry,setSplitEntry})=>{const tw=splitEntry.totalWeight||0;const t1w=splitEntry.truck1Weight!==undefined?splitEntry.truck1Weight:Math.round(tw*(splitEntry.ratio/100));const t2w=tw-t1w;return(<><div style={_s.flexG6Mb6}><div style={_s.f1}><label style={_s.labelSm}>Total</label><input type="number" inputMode="numeric" value={tw||""} onChange={e=>{const newTw=parseInt(e.target.value)||0;setSplitEntry(p=>({...p,totalWeight:newTw,truck1Weight:Math.min(p.truck1Weight||Math.round(newTw/2),newTw)}));}} style={_s.splitTotal}/></div><div style={_s.f1}><label style={_s.labelBlue}>Truck 1</label><input type="number" inputMode="numeric" value={splitEntry.truck1Weight!==undefined?splitEntry.truck1Weight:""} onChange={e=>{const v=e.target.value;setSplitEntry(p=>({...p,truck1Weight:v===""?0:parseInt(v)||0}));}} style={_s.splitInput}/></div><div style={_s.f1}><label style={_s.labelGray}>Truck 2</label><div style={_s.splitT2}>{t2w.toLocaleString()}</div></div></div><input type="range" min={0} max={tw} step={100} value={t1w} onChange={e=>{const v=parseInt(e.target.value)||0;setSplitEntry(p=>({...p,truck1Weight:v}));}} style={_s.slider}/></>);};
 
@@ -174,67 +175,10 @@ const genId=()=>{
   return`e_${t}_${s}_${r}`;
 };
 
-/* Repair entries that already carry a colliding id in Firebase (created by
-   the old Date.now()+Math.random() scheme before genId existed). Two entries
-   with the same id corrupt every .map / .find / .filter keyed on id.
+/* dedupeIds, dedupeAutoPickups, sanitizeEntry, the per-ownership entry merges
+   and the save-merge core (buildMergedEntries) live in ./manifestLogic.js
+   (imported above) — pure, side-effect-free, covered by manifestLogic.test.js. */
 
-   The repair must be DETERMINISTIC — Chad's browser and every driver's phone
-   independently run this on the same FB data and must arrive at identical
-   ids, or they'd write divergent docs and fight forever. So duplicates get
-   an id derived from their own content + ordinal, not a random one. The
-   FIRST occurrence of an id keeps it; subsequent ones are re-stamped. */
-const dedupeIds=(entries)=>{
-  if(!Array.isArray(entries))return entries;
-  const seen=new Set();
-  let changed=false;
-  const out=entries.map((e,idx)=>{
-    if(!e)return e;
-    const id=e.id;
-    if(id==null||seen.has(id)||seen.has(String(id))){
-      changed=true;
-      /* Stable synthetic id from content + position. Same input -> same id
-         on every device. */
-      const basis=[e.customer||"",e.stop||"",e.addr||"",e.stopType||"",e.driverId||0,e.loadNum||1,idx].join("|");
-      let h=0;
-      for(let i=0;i<basis.length;i++){h=((h<<5)-h+basis.charCodeAt(i))|0;}
-      const newId="d_"+Math.abs(h).toString(36)+"_"+idx.toString(36);
-      seen.add(newId);
-      return{...e,id:newId};
-    }
-    seen.add(id);
-    return e;
-  });
-  return changed?out:entries;
-};
-
-/* Collapse semantically-duplicate AUTO pickups. An auto-pickup is uniquely
-   identified by (customer, stop, driverId, loadNum). The volatile-selPickup
-   grouping bug spawned multiple auto-pickups with the same identity but
-   different ids (the 'ghost pickup cards like crazy' bug). This keeps the
-   FIRST occurrence of each identity and drops the rest, healing existing
-   data on ingestion without waiting for a rebuildPickupsFor pass. Manual
-   pickups and deliveries are never touched. */
-const dedupeAutoPickups=(entries)=>{
-  if(!Array.isArray(entries))return entries;
-  const seen=new Set();
-  let changed=false;
-  const out=entries.filter(e=>{
-    if(!e||e.stopType!=="pickup"||e.manualPickup)return true;
-    /* An AUTO pickup with no driver is always an orphan — rebuildPickupsFor
-       only ever creates auto-pickups for assigned deliveries (driverId>0).
-       An unassigned one is a leftover that should have been tombstoned when
-       its delivery was unassigned/reassigned. Drop it outright. This clears
-       the stacks of unassigned "Emser - Norcross" ghost cards. */
-    if(!e.driverId||e.driverId===0){changed=true;return false;}
-    /* Collapse remaining auto-pickups sharing (customer, stop, driverId,
-       loadNum) — keep the first, drop the rest. */
-    const key=[e.customer||"",e.stop||"",e.driverId,e.loadNum||1].join("|");
-    if(seen.has(key)){changed=true;return false;}
-    seen.add(key);
-    return true;
-  });
-  return changed?out:entries;
-};
 
 const _whenFB=(cb)=>{
   if(window._fbLoaded&&window._fbOps){cb();return;}
@@ -330,72 +274,6 @@ const getAutoBackups=()=>{
    Status uses STATUS_RANK so we never advance backward (departed -> arrived
    is impossible). Same idea for *At timestamps (never clobber populated
    local timestamp with FB's missing). */
-const STATUS_RANK={null:0,undefined:0,"":0,"arrived":1,"departed":2};
-const DRIVER_OWNED_FIELDS=["status","arrivedAt","departedAt","photos","signature","shipPlan","eta","etaDest","etaSetAt"];
-
-const _mergeEntryDriver=(localE,fbE)=>{
-  /* Caller is the driver assigned to this entry. Take local's driver-owned
-     fields (with forward-only status) and FB's everything-else. */
-  const out={...fbE};
-  const localRank=STATUS_RANK[localE.status]??0;
-  const fbRank=STATUS_RANK[fbE.status]??0;
-  out.status=localRank>=fbRank?localE.status:fbE.status;
-  if(localE.arrivedAt)out.arrivedAt=localE.arrivedAt; else if(fbE.arrivedAt)out.arrivedAt=fbE.arrivedAt;
-  if(localE.departedAt)out.departedAt=localE.departedAt; else if(fbE.departedAt)out.departedAt=fbE.departedAt;
-  /* Photos are an append-only set — drivers add, no one removes. The
-     previous "longer array wins" rule dropped photos when two saves raced:
-     local=[A,B] and FB=[A,C] (other save just landed) have equal length, so
-     out.photos=fp=[A,C] and local's B was lost. Take the union of real
-     Storage URLs from both sides, keyed by URL, so concurrent uploads
-     can't clobber each other. Local-only placeholder/data values are kept
-     until the upload finishes and writes the real URL on a later save. */
-  const lp=localE.photos||[],fp=fbE.photos||[];
-  const seen=new Set();
-  const merged=[];
-  const real=(p)=>typeof p==="string"&&p.startsWith("https://");
-  fp.forEach(p=>{if(real(p)&&!seen.has(p)){seen.add(p);merged.push(p);}});
-  lp.forEach(p=>{if(real(p)&&!seen.has(p)){seen.add(p);merged.push(p);}});
-  /* Keep any local placeholders (data: URI mid-upload, or "photo_..."
-     pre-Storage entries) only if there are no real URLs in FB for this
-     entry yet — they will be replaced by a real URL once the upload
-     completes. */
-  if(!fp.some(real)){lp.forEach(p=>{if(!real(p)&&!seen.has(p)){seen.add(p);merged.push(p);}});}
-  out.photos=merged;
-  if(localE.signature&&localE.signature!=="signed")out.signature=localE.signature;
-  else if(fbE.signature)out.signature=fbE.signature;
-  if(localE.shipPlan)out.shipPlan=localE.shipPlan; else if(fbE.shipPlan)out.shipPlan=fbE.shipPlan;
-  if(localE.eta){out.eta=localE.eta;out.etaDest=localE.etaDest||null;out.etaSetAt=localE.etaSetAt||null;}
-  else if(fbE.eta){out.eta=fbE.eta;out.etaDest=fbE.etaDest||null;out.etaSetAt=fbE.etaSetAt||null;}
-  return out;
-};
-
-const _mergeEntryDispatcher=(localE,fbE)=>{
-  /* Caller is dispatcher. Local wins on dispatcher fields (rate, instructions,
-     addr, order, etc.), FB wins on driver-stamped fields. Forward-only for
-     status and never-clobber for timestamps. */
-  const out={...localE};
-  const localRank=STATUS_RANK[localE.status]??0;
-  const fbRank=STATUS_RANK[fbE.status]??0;
-  if(fbRank>localRank)out.status=fbE.status;
-  if(!localE.arrivedAt&&fbE.arrivedAt)out.arrivedAt=fbE.arrivedAt;
-  if(!localE.departedAt&&fbE.departedAt)out.departedAt=fbE.departedAt;
-  /* Union photos. See _mergeEntryDriver for the rationale — append-only
-     set, longer-wins drops concurrent uploads. Dispatcher doesn't add
-     photos, so this is mostly defensive (keep what FB has, plus any
-     dispatcher-local placeholders pre-upload). */
-  const lp=localE.photos||[],fp=fbE.photos||[];
-  const seen=new Set();
-  const merged=[];
-  const real=(p)=>typeof p==="string"&&p.startsWith("https://");
-  fp.forEach(p=>{if(real(p)&&!seen.has(p)){seen.add(p);merged.push(p);}});
-  lp.forEach(p=>{if(real(p)&&!seen.has(p)){seen.add(p);merged.push(p);}});
-  if(!fp.some(real)){lp.forEach(p=>{if(!real(p)&&!seen.has(p)){seen.add(p);merged.push(p);}});}
-  out.photos=merged;
-  if(fbE.signature&&(!localE.signature||localE.signature==="signed"))out.signature=fbE.signature;
-  if(fbE.shipPlan&&!localE.shipPlan)out.shipPlan=fbE.shipPlan;
-  if(fbE.eta&&!localE.eta){out.eta=fbE.eta;out.etaDest=fbE.etaDest;out.etaSetAt=fbE.etaSetAt;}
-  return out;
-};
 
 const saveManifestDay=async(wo,sd,entries,callerDriverId,deletedIds)=>{
   const fbKey=getFbKey(wo,sd);
@@ -431,56 +309,11 @@ const saveManifestDay=async(wo,sd,entries,callerDriverId,deletedIds)=>{
          would make fbById/localById silently drop one of the pair and the
          merge would behave unpredictably. dedupeIds is deterministic so the
          transaction stays consistent across retries and across devices. */
-      const fbEntries=dedupeIds(current?.entries||[]);
-      const localEntries=dedupeIds(entries||[]);
-      const fbById={};
-      fbEntries.forEach(e=>{if(e&&e.id)fbById[e.id]=e;});
-      const localById={};
-      localEntries.forEach(e=>{if(e&&e.id)localById[e.id]=e;});
-
-      /* Build the final entries set:
-         - Start from local (preserves dispatcher-driven order + new entries
-           the dispatcher added that FB doesn't have yet).
-         - For each local entry: if it exists in FB, merge per ownership.
-         - For FB entries the local doesn't have: include them (driver may
-           have added a stop on another tab; dispatcher's subscription may
-           not have caught up; etc.). */
-      const merged=localEntries.map(localE=>{
-        if(!localE||!localE.id)return localE;
-        const fbE=fbById[localE.id];
-        if(isDriver){
-          /* Driver only has authority over entries assigned to them. */
-          if(localE.driverId!==callerDriverId){
-            /* Not this driver's stop. If FB still has it, take FB's version.
-               If FB DROPPED it, the dispatcher deleted it — the driver must
-               not resurrect it by writing back their stale local copy. */
-            return fbE?fbE:null;
-          }
-          /* This driver's own stop — keep local (merged) even if FB lacks
-             it; drivers don't delete, so absence means not-yet-synced. */
-          if(!fbE)return localE;
-          return _mergeEntryDriver(localE,fbE);
-        }else{
-          if(!fbE)return localE;
-          return _mergeEntryDispatcher(localE,fbE);
-        }
-      }).filter(Boolean);
-      /* Append FB-only entries (FB has them, local doesn't) — EXCEPT
-         tombstoned IDs. A tombstoned ID is one the dispatcher just deleted;
-         FB still carries it because our delete hasn't been written yet.
-         Without this guard the entry resurrects on every save. Entries that
-         are FB-only AND not tombstoned are genuine additions from another
-         writer and must be kept. */
-      const tomb=deletedIds instanceof Set?deletedIds:new Set(deletedIds||[]);
-      fbEntries.forEach(fbE=>{
-        if(fbE&&fbE.id&&!localById[fbE.id]&&!tomb.has(fbE.id))merged.push(fbE);
-      });
-
-      /* Collapse any duplicate auto-pickups before persisting, so the
-         ghost-pickup cleanup reaches Firebase instead of being a local-only
-         fix that gets re-ingested next load. Deterministic — keeps the first
-         of each (customer, stop, driverId, loadNum). */
-      const deduped=dedupeAutoPickups(merged);
+      /* Merge FB + local with per-ownership rules, drop tombstoned FB-only
+         resurrections, and collapse duplicate auto-pickups. Pure + unit-tested
+         in manifestLogic.js (buildMergedEntries) so the concurrency scenarios
+         can't silently regress. */
+      const deduped=buildMergedEntries(current?.entries||[],entries||[],{isDriver,callerDriverId,deletedIds});
       /* Normalize photos / signature for write — bound size, drop undefined. */
       const safe=deduped.map(e=>{
         const copy={...e};
@@ -822,7 +655,7 @@ const _fixImetcoAddr=(e)=>{
   }
   return e;
 };
-const APP_VERSION="3.14.2";
+const APP_VERSION="3.14.4";
 const LOGO_URI="data:image/jpeg;base64,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";
 const LOGO_WHITE="data:image/jpeg;base64,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";
 
@@ -1122,8 +955,25 @@ const compressPhoto=(dataUrl,quality,maxDim)=>new Promise((resolve,reject)=>{
   img.src=dataUrl;
 });
 
-function getWeekDates(off=0){const now=new Date();const d=now.getDay();const mon=new Date(now);mon.setDate(now.getDate()-(d===0?6:d-1)+off*7);return DAYS.map((name,i)=>{const dt=new Date(mon);dt.setDate(mon.getDate()+i);return{name,date:dt.toLocaleDateString("en-US",{month:"short",day:"numeric"}),iso:dt.toISOString().slice(0,10)}});}
-function getFbKey(wo,dayIdx){const now=new Date();const d=now.getDay();const mon=new Date(now);mon.setDate(now.getDate()-(d===0?6:d-1)+wo*7+dayIdx);const y=mon.getFullYear();const m=String(mon.getMonth()+1).padStart(2,'0');const dd=String(mon.getDate()).padStart(2,'0');return y+'-'+m+'-'+dd;}
+/* SESSION-STABLE week/day reference. Both getWeekDates (display labels) and
+   getFbKey (Firebase doc ids) map a relative weekOffset/dayIdx onto absolute
+   calendar dates, while the local `log` is keyed by the RELATIVE
+   `${wo}-${dayIdx}`. If the absolute dates were recomputed from a live
+   `new Date()` on every call, the mapping would SLIDE the instant the wall
+   clock crosses midnight: the same local key would suddenly point at a
+   different Firebase doc, so a day the dispatcher was editing could be saved
+   into the wrong day's doc or merged from a stale one — the "deliveries moved /
+   disappeared on their own" failure when the app is left open overnight.
+   Freezing the reference at first use keeps every caller (display labels,
+   subscriptions, saves, render, history, Emser hours) agreeing on ONE mapping
+   for the whole session. The day-rollover watcher in DispatchApp re-anchors
+   with a clean reload once the real calendar day advances and the board is
+   idle. */
+let _weekRef=null;
+function _weekRefNow(){if(_weekRef===null)_weekRef=new Date();return _weekRef;}
+function _weekDayRolled(){if(_weekRef===null)return false;const n=new Date();return _weekRef.getFullYear()!==n.getFullYear()||_weekRef.getMonth()!==n.getMonth()||_weekRef.getDate()!==n.getDate();}
+function getWeekDates(off=0){const now=_weekRefNow();const d=now.getDay();const mon=new Date(now);mon.setDate(now.getDate()-(d===0?6:d-1)+off*7);return DAYS.map((name,i)=>{const dt=new Date(mon);dt.setDate(mon.getDate()+i);return{name,date:dt.toLocaleDateString("en-US",{month:"short",day:"numeric"}),iso:dt.toISOString().slice(0,10)}});}
+function getFbKey(wo,dayIdx){const now=_weekRefNow();const d=now.getDay();const mon=new Date(now);mon.setDate(now.getDate()-(d===0?6:d-1)+wo*7+dayIdx);const y=mon.getFullYear();const m=String(mon.getMonth()+1).padStart(2,'0');const dd=String(mon.getDate()).padStart(2,'0');return y+'-'+m+'-'+dd;}
 function fmt(n){const v=typeof n==="number"&&isFinite(n)?n:(parseFloat(n)||0);return "$"+v.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g,",");}
 
 function InlineRate({value,isHourly,onSave,accent}){
@@ -2862,50 +2712,11 @@ const DEFAULT_DRIVERS=[{id:1,name:"Trevor Seyers",phone:"404-394-9891"},{id:2,na
 function lsGet(key,fallback){try{const v=localStorage.getItem(key);if(v){const parsed=JSON.parse(v);return parsed;}return fallback;}catch{return fallback;}}
 function lsSet(key,val){try{localStorage.setItem(key,JSON.stringify(val));}catch{}}
 
-/* Defensive sanitizer — coerces every field on a delivery entry to a safe type so
-   bad Firestore data (undefined, wrong types, objects where strings expected)
-   can never crash render code that calls .split/.includes/.toFixed/etc. */
-function sanitizeEntry(e){
-  if(!e||typeof e!=="object")return null;
-  const safeStr=v=>typeof v==="string"?v:(v==null?"":String(v));
-  const safeNum=v=>typeof v==="number"&&isFinite(v)?v:(parseFloat(v)||0);
-  const safeStrOrNull=v=>typeof v==="string"?v:null;
-  return{
-    ...e,
-    id:e.id,
-    stop:safeStr(e.stop),
-    customer:safeStr(e.customer),
-    addr:safeStr(e.addr).replace(/5981 (Live Oak|Oakbrook) P(ark)?w(a)?y/i,"5470 Oakbrook Pkwy"),
-    note:safeStrOrNull(e.note),
-    instructions:safeStrOrNull(e.instructions),
-    shipPlan:safeStrOrNull(e.shipPlan),
-    refNum:safeStrOrNull(e.refNum),
-    dueBy:safeStrOrNull(e.dueBy),
-    pickupDueBy:safeStrOrNull(e.pickupDueBy),
-    pickupFrom:safeStrOrNull(e.pickupFrom),
-    eta:safeStrOrNull(e.eta),
-    etaDest:safeStrOrNull(e.etaDest),
-    stopType:safeStr(e.stopType),
-    status:safeStr(e.status),
-    driverId:safeNum(e.driverId),
-    baseRate:safeNum(e.baseRate),
-    liftgateFee:safeNum(e.liftgateFee),
-    fuelPct:safeNum(e.fuelPct),
-    weight:safeNum(e.weight),
-    loadNum:e.loadNum==null?undefined:safeNum(e.loadNum),
-    etaSetAt:e.etaSetAt==null?undefined:safeNum(e.etaSetAt),
-    isHourly:!!e.isHourly,
-    priority:!!e.priority,
-    liftgateApplied:!!e.liftgateApplied,
-    knownLiftgate:!!e.knownLiftgate,
-    wasSplit:!!e.wasSplit,
-  };
-}
 
 function DispatchApp(){
 const isDesktop=useIsDesktop();
 const[wo,setWo]=useState(0);
-const[sd,setSd]=useState(()=>{const d=new Date().getDay();return d>=1&&d<=5?d-1:0;});
+const[sd,setSd]=useState(()=>{const d=_weekRefNow().getDay();return d>=1&&d<=5?d-1:0;});
 const[log,_rawSetLog]=useState({});
 const dirtyDaysRef=useRef(new Set());
 const saveCooldownRef=useRef(new Set());
@@ -3736,9 +3547,45 @@ useEffect(()=>{
           return e;
         });
         const lk=`${wo-1}-${dayIdx}`;
-        const fbJson=JSON.stringify(entries);
+        /* Route the previous-week echo through the SAME guarded merge the
+           current-week handler uses (above). This used to be a blind
+           `updated[lk]=entries` overwrite — no tombstone filter, no
+           dirty/cooldown guard, no local-entry/order preservation. When `wo`
+           changed (paging to the next/previous week) or the date-based fbKey
+           slid across midnight, the day the dispatcher was actively editing
+           got re-subscribed HERE (as wo-1) and the blind overwrite replaced
+           the good local entries with the stale Firebase snapshot. Every
+           delivery that hadn't yet flushed through the ~2.5s debounced save
+           was wiped, while the older auto-pickups + their stored 'Load order'
+           notes (which WERE in FB) survived — the 'my deliveries disappeared'
+           bug. Sharing the current-week merge means neither subscription can
+           clobber unsynced local entries. */
+        const tombSet=activeTombstones();
+        const fbFiltered=tombSet.size?entries.filter(e=>!tombSet.has(e.id)):entries;
+        const dirtyOrCooldown=dirtyDaysRef.current.has(lk)||saveCooldownRef.current.has(lk);
+        const localEnts=prev[lk]||[];
+        let finalEntries=fbFiltered;
+        if(localEnts.length){
+          const localById={};
+          localEnts.forEach(e=>{if(e&&e.id)localById[e.id]=e;});
+          const fbById={};
+          fbFiltered.forEach(e=>{if(e&&e.id)fbById[e.id]=e;});
+          const out=[];
+          localEnts.forEach(localE=>{
+            if(!localE||!localE.id)return;
+            if(tombSet.has(localE.id))return;
+            const fbE=fbById[localE.id];
+            out.push(fbE?_mergeEntryDispatcher(localE,fbE):localE);
+          });
+          fbFiltered.forEach(fbE=>{
+            if(fbE&&fbE.id&&!localById[fbE.id])out.push(fbE);
+          });
+          finalEntries=out;
+        }
+        const fbJson=JSON.stringify(finalEntries);
         if(fbJson!==JSON.stringify(prev[lk]||[])){
-          updated[lk]=entries;
+          updated[lk]=finalEntries;
+          if(!dirtyOrCooldown)prevLogRef.current[lk]=fbJson;
           changed=true;
         }
       });
@@ -3747,6 +3594,25 @@ useEffect(()=>{
   });
   return()=>{unsubManifests();unsubPrevWeek();};
 },[wo]);
+/* Day-rollover re-anchor. _weekRefNow() freezes the week/day reference at mount
+   so the Firebase-doc <-> local-key mapping can never slide mid-session. Once
+   the real calendar day advances past that anchor the frozen "current week" is
+   stale, so re-anchor with a full reload — but ONLY when the board is idle:
+   nothing dirty, no save in cooldown, and the tab hidden. That way we never
+   reload over unsaved edits or interrupt active dispatching. If the conditions
+   aren't met we just wait and re-check next tick; the data stays correct (the
+   frozen mapping is internally consistent), only the week label is stale until
+   the safe reload lands. */
+useEffect(()=>{
+  const id=setInterval(()=>{
+    if(!_weekDayRolled())return;
+    if(dirtyDaysRef.current.size>0||saveCooldownRef.current.size>0)return;
+    if(typeof document!=="undefined"&&document.visibilityState==="visible")return;
+    clearInterval(id);
+    window.location.reload();
+  },60000);
+  return()=>clearInterval(id);
+},[]);
 
 /* On-demand history loader.
 
@@ -4108,9 +3974,14 @@ const targetDkEntries=()=>{
   }
   return[delEntry];
 };
-setLog(p=>({...p,[targetDk]:[...(p[targetDk]||[]),...targetDkEntries()]}));
-setSavedQuotes(p=>p.map(x=>x.id===quoteId?{...x,status:"accepted",pushedTo:targetDk}:x));
-const updated={...q,status:"accepted",pushedTo:targetDk};
+/* Record the ids of the entries this quote created so unplanQuote can remove
+   exactly them by id, instead of a value match that can collateral-delete a
+   second look-alike delivery. */
+const _newEnts=targetDkEntries();
+const _newIds=_newEnts.map(e=>e.id);
+setLog(p=>({...p,[targetDk]:[...(p[targetDk]||[]),..._newEnts]}));
+setSavedQuotes(p=>p.map(x=>x.id===quoteId?{...x,status:"accepted",pushedTo:targetDk,pushedIds:_newIds}:x));
+const updated={...q,status:"accepted",pushedTo:targetDk,pushedIds:_newIds};
 saveQuoteToFB(updated).catch(e=>console.error("Quote update:",e));
 showToast("Quote pushed to manifest");
 setQPushDay(null);
@@ -4122,11 +3993,34 @@ if(!q||!q.pushedTo)return;
 const targetDk=q.pushedTo;
 setLog(p=>{
   const dayEntries=p[targetDk]||[];
-  const filtered=dayEntries.filter(e=>!(e.stop===q.stop&&e.customer===q.customer&&Math.abs(e.baseRate-(q.rate||0))<1));
+  const removed=[];
+  let filtered;
+  if(Array.isArray(q.pushedIds)&&q.pushedIds.length){
+    /* Precise: remove exactly the entries this quote created, by id. */
+    const idSet=new Set(q.pushedIds);
+    filtered=dayEntries.filter(e=>{if(e&&idSet.has(e.id)){removed.push(e);return false;}return true;});
+  }else{
+    /* Legacy quotes pushed before pushedIds was tracked: fall back to a value
+       match, but remove only the FIRST matching delivery so a second
+       identical-looking delivery the user never unplanned isn't dropped too. */
+    let done=false;
+    filtered=dayEntries.filter(e=>{
+      if(!done&&e&&e.stopType==="delivery"&&e.stop===q.stop&&e.customer===q.customer&&Math.abs(e.baseRate-(q.rate||0))<1){done=true;removed.push(e);return false;}
+      return true;
+    });
+  }
+  /* Tombstone removed ids so the transactional save's FB-only append and
+     subscription echoes can't resurrect them; then rebuild auto-pickups for
+     affected customers so an orphaned pickup card (with a stale note) doesn't
+     linger. */
+  if(removed.length){
+    tombstone(removed.map(e=>e.id));
+    new Set(removed.filter(e=>e.customer).map(e=>e.customer)).forEach(c=>{filtered=rebuildPickupsFor(filtered,c);});
+  }
   return{...p,[targetDk]:filtered};
 });
-setSavedQuotes(p=>p.map(x=>x.id===quoteId?{...x,status:"pending",pushedTo:null}:x));
-const updated={...q,status:"pending",pushedTo:null};
+setSavedQuotes(p=>p.map(x=>x.id===quoteId?{...x,status:"pending",pushedTo:null,pushedIds:null}:x));
+const updated={...q,status:"pending",pushedTo:null,pushedIds:null};
 saveQuoteToFB(updated).catch(e=>console.error("Quote unplan:",e));
 showToast("Quote unplanned — removed from manifest");
 };
@@ -5082,10 +4976,17 @@ const handleDrop=(drvId,toIdx)=>{
 if(!dragSrc){setDragSrc(null);setDragOver(null);return;}
 if(dragSrc.drvId===drvId&&dragSrc.idx===toIdx){setDragSrc(null);setDragOver(null);return;}
 if(dragSrc.drvId===drvId){
-setLog(p=>{const all=[...(p[dk]||[])];const de=all.filter(e=>e.driverId===drvId);const rest=all.filter(e=>e.driverId!==drvId);const[moved]=de.splice(dragSrc.idx,1);de.splice(toIdx,0,moved);return{...p,[dk]:[...rest,...de]};});
+setLog(p=>{const all=[...(p[dk]||[])];const de=all.filter(e=>e.driverId===drvId);const rest=all.filter(e=>e.driverId!==drvId);
+/* Find the grabbed row by ID, not the drag-start array index — an index can
+   go stale if a subscription echo / auto-save reorders the list mid-drag,
+   splicing out (and moving) the WRONG stop. Falls back to idx for any drag
+   started before id tracking. */
+const srcIdx=dragSrc.id!=null?de.findIndex(e=>e.id===dragSrc.id):dragSrc.idx;
+if(srcIdx<0)return p;
+const[moved]=de.splice(srcIdx,1);const tgt=Math.min(Math.max(toIdx,0),de.length);de.splice(tgt,0,moved);return{...p,[dk]:[...rest,...de]};});
 }else{
 const srcEntries=dl.filter(e=>e.driverId===dragSrc.drvId);
-const entry=srcEntries[dragSrc.idx];
+const entry=dragSrc.id!=null?srcEntries.find(e=>e.id===dragSrc.id):srcEntries[dragSrc.idx];
 if(entry){
 reassign(entry.id,drvId);
 const targetName=drvId===0?"Unassigned":((drivers.find(d=>d.id===drvId))?.name||"driver");
@@ -5097,7 +4998,7 @@ setDragSrc(null);setDragOver(null);
 const reorderDriver=(drvId,orderedIds)=>{setLog(p=>{const all=[...(p[dk]||[])];const drvEntries2=all.filter(e=>e.driverId===drvId);const rest=all.filter(e=>e.driverId!==drvId);const ordered=orderedIds.map(id=>drvEntries2.find(e=>e.id===id)).filter(Boolean);const unordered=drvEntries2.filter(e=>!orderedIds.includes(e.id));return{...p,[dk]:[...rest,...ordered,...unordered]};});showToast("Routes applied");};
 const getCustColor=cust=>CC[cust]||CC["One-Off Delivery"];
 
-const jumpToDate=dateStr=>{const target=new Date(dateStr+"T12:00:00");const now=new Date();const tD=target.getDay();const tM=new Date(target);tM.setDate(target.getDate()-(tD===0?6:tD-1));const nD=now.getDay();const nM=new Date(now);nM.setDate(now.getDate()-(nD===0?6:nD-1));tM.setHours(0,0,0,0);nM.setHours(0,0,0,0);const diff=Math.round((tM-nM)/(7*24*60*60*1000));const dayIdx=tD===0?6:tD-1;setWo(diff);setSd(Math.min(Math.max(dayIdx,0),4));setShowDatePicker(false);setView("manifest");};
+const jumpToDate=dateStr=>{const target=new Date(dateStr+"T12:00:00");const now=_weekRefNow();const tD=target.getDay();const tM=new Date(target);tM.setDate(target.getDate()-(tD===0?6:tD-1));const nD=now.getDay();const nM=new Date(now);nM.setDate(now.getDate()-(nD===0?6:nD-1));tM.setHours(0,0,0,0);nM.setHours(0,0,0,0);const diff=Math.round((tM-nM)/(7*24*60*60*1000));const dayIdx=tD===0?6:tD-1;setWo(diff);setSd(Math.min(Math.max(dayIdx,0),4));setShowDatePicker(false);setView("manifest");};
 
 const buildManifestText=drvId=>{
 const drv=drivers.find(d=>d.id===drvId);
@@ -5657,7 +5558,7 @@ return(
 {cnt>0&&<span style={{position:"absolute",top:2,right:4,width:5,height:5,borderRadius:3,background:sd===i?"#fff":"#16a34a"}}/>}
 </button>);})}
 <button onClick={()=>setWo(w=>w+1)} style={{background:"transparent",border:"none",color:"#78716c",borderRadius:7,padding:"4px 10px",cursor:"pointer",fontSize:12}}>{"\u25B6"}</button>
-{wo!==0&&<button onClick={()=>{setWo(0);setSd(()=>{const d=new Date().getDay();return d>=1&&d<=5?d-1:0;});}} style={{background:"#16a34a",border:"none",borderRadius:7,padding:"4px 14px",cursor:"pointer",fontSize:11,fontWeight:600,color:"#fff",marginLeft:2}}>Today</button>}
+{wo!==0&&<button onClick={()=>{setWo(0);setSd(()=>{const d=_weekRefNow().getDay();return d>=1&&d<=5?d-1:0;});}} style={{background:"#16a34a",border:"none",borderRadius:7,padding:"4px 14px",cursor:"pointer",fontSize:11,fontWeight:600,color:"#fff",marginLeft:2}}>Today</button>}
 </div>
 </div>
 <div style={_s.flexC10}>
@@ -5840,7 +5741,13 @@ setLog(p=>{
     });
   });
   const allRouted=Object.values(rpOrders).flat();
-  all=all.map(e=>allRouted.includes(e.id)?e:{...e,driverId:0});
+  /* Only force-unassign stops the planner actually MANAGED — ones currently on
+     a real roster driver (or already unassigned). A stop on a stale/removed
+     driverId was never seeded into the planner (rpOrders is built from current
+     drivers only), so leaving it untouched stops Apply from silently
+     relocating a delivery the user never saw to Unassigned. */
+  const _rosterIds=new Set(drivers.map(d=>d.id));
+  all=all.map(e=>allRouted.includes(e.id)?e:((e.driverId===0||_rosterIds.has(e.driverId))?{...e,driverId:0}:e));
   Object.entries(rpOrders).forEach(([did,ids])=>{
     if(!ids.length)return;
     const drvId=Number(did);
@@ -6678,7 +6585,7 @@ style={{flex:1,border:"1px solid #d6d3d1",borderRadius:10,padding:"10px 14px",fo
 {!accepted&&<div style={{display:"flex",flexDirection:"column",gap:4,marginTop:8}}>
 {qPushDay&&qPushDay.quoteId===q.id?<div style={{display:"flex",flexDirection:"column",gap:4}}>
 <input type="date" onChange={e=>{if(e.target.value){
-const target=new Date(e.target.value+"T12:00:00");const now=new Date();
+const target=new Date(e.target.value+"T12:00:00");const now=_weekRefNow();
 const tD=target.getDay();const tM=new Date(target);tM.setDate(target.getDate()-(tD===0?6:tD-1));
 const nD=now.getDay();const nM=new Date(now);nM.setDate(now.getDate()-(nD===0?6:nD-1));
 tM.setHours(0,0,0,0);nM.setHours(0,0,0,0);
@@ -6996,7 +6903,7 @@ const c=CC[entry.customer]||CC["One-Off Delivery"];const isPU=entry.stopType==="
 const isDrgSrc=dragSrc?.drvId===drv.id&&dragSrc?.idx===eIdx;
 const isDrgOver=dragOver?.drvId===drv.id&&dragOver?.idx===eIdx;
 return(<div key={entry.id}>
-<div draggable onDragStart={()=>setDragSrc({drvId:drv.id,idx:eIdx})}
+<div draggable onDragStart={()=>setDragSrc({drvId:drv.id,idx:eIdx,id:entry.id})}
 onDragOver={ev=>{ev.preventDefault();setDragOver({drvId:drv.id,idx:eIdx});}}
 onDrop={()=>handleDrop(drv.id,eIdx)}
 style={{background:isDrgOver?"#dcfce7":isDrgSrc?"#fef9c3":done?"#f0fdf4":onSite?"#fffbeb":hasDue?"#fef2f2":isP?"#fef3c7":isPU?"#eff6ff":"#fff",border:isDrgOver?"2px dashed #16a34a":`1px solid ${done?"#bbf7d0":onSite?"#fde68a":hasDue?"#fca5a5":"#e7e5e4"}`,borderRadius:8,padding:"8px 10px",marginBottom:0,borderLeft:`3px solid ${isPU?"#2563eb":isP?"#f59e0b":c.accent}`,opacity:isDrgSrc?0.4:done?0.6:1,cursor:"grab",transition:"background 0.1s"}}>
@@ -8057,7 +7964,7 @@ return(
 <div style={_s.flexC6}>
 <span style={{fontSize:13,color:"#a8a29e",fontVariantNumeric:"tabular-nums"}}>{wo===0?"This Week":wo===-1?"Last Week":wo===1?"Next Week":`${wo>0?"+":""}${wo}w`}</span>
 <button onClick={()=>setShowDatePicker(!showDatePicker)} style={{background:showDatePicker?"#f5f5f4":"#44403c",border:"none",borderRadius:6,padding:"3px 8px",cursor:"pointer",fontSize:10,fontWeight:600,color:showDatePicker?"#1c1917":"#d6d3d1"}}>📅</button>
-{wo!==0&&<button onClick={()=>{setWo(0);setSd(()=>{const d=new Date().getDay();return d>=1&&d<=5?d-1:0;});}} style={{background:"#44403c",border:"none",borderRadius:6,padding:"3px 8px",cursor:"pointer",fontSize:10,fontWeight:600,color:"#d6d3d1"}}>Today</button>}
+{wo!==0&&<button onClick={()=>{setWo(0);setSd(()=>{const d=_weekRefNow().getDay();return d>=1&&d<=5?d-1:0;});}} style={{background:"#44403c",border:"none",borderRadius:6,padding:"3px 8px",cursor:"pointer",fontSize:10,fontWeight:600,color:"#d6d3d1"}}>Today</button>}
 </div>
 <button onClick={()=>setWo(w=>w+1)} style={NB}>▶</button>
 </div>
@@ -8403,7 +8310,7 @@ const eIdx=de.indexOf(entry);
 return(<div key={entry.id}>
 <ManifestStop entry={entry} eIdx={eIdx} total={de.length} drivers={drivers} onMove={dir=>moveInDriver(drv.id,entry.id,dir)} onReassign={did=>reassign(entry.id,did)} onRemove={()=>rmFromDriver(entry.id)} onDelete={()=>deleteDel(entry.id)} onUpdateInstructions={text=>updateInstructions(entry.id,text)} onShipPlan={val=>setShipPlan(entry.id,val)} onRefNum={val=>setRefNum(entry.id,val)} onToggleFuel={()=>toggleFuel(entry.id)} onDueBy={time=>setDueBy(entry.id,time)} onWeight={w=>setWeight(entry.id,w)} onLoadNum={n=>setLoadNum(entry.id,n)} onRate={r=>updateRate(entry.id,r)} onPhotoClick={setLightboxPhoto} onSetPickup={label=>setPickupFrom(entry.id,label)} maxLoad={getMaxLoad(drv.id)}
 onLiftgate={()=>{if(entry.isHourly){setEmH(p=>{const key=`${emDk}-emser`;const cur=p[key]||4;return{...p,[key]:cur+1};});setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===entry.id?{...e,liftgateApplied:true}:e)}));showToast("Liftgate +1 hr added");}else{manualLiftgate(entry.id);}}} onRemoveLiftgate={()=>removeLiftgate(entry.id)} onSplit={()=>setSplitEntry({id:entry.id,totalWeight:entry.weight||0,ratio:50,truck1Weight:Math.round((entry.weight||0)/2)})} driverLoadCounts={Object.fromEntries(drivers.map(d=>[d.id,getDriverLoadOptions(d.id)]))}
-isDragging={dragSrc?.drvId===drv.id&&dragSrc?.idx===eIdx} isDragOver={dragOver?.drvId===drv.id&&dragOver?.idx===eIdx} onDragStart={()=>setDragSrc({drvId:drv.id,idx:eIdx})} onDragOver={()=>setDragOver({drvId:drv.id,idx:eIdx})} onDrop={()=>handleDrop(drv.id,eIdx)}/>
+isDragging={dragSrc?.drvId===drv.id&&dragSrc?.idx===eIdx} isDragOver={dragOver?.drvId===drv.id&&dragOver?.idx===eIdx} onDragStart={()=>setDragSrc({drvId:drv.id,idx:eIdx,id:entry.id})} onDragOver={()=>setDragOver({drvId:drv.id,idx:eIdx})} onDrop={()=>handleDrop(drv.id,eIdx)}/>
 {splitEntry?.id===entry.id&&<div style={{margin:"0 0 4px",background:"#eff6ff",border:"2px solid #2563eb",borderRadius:10,padding:12}}>
 <div style={_s.splitTitle}>✂ Split Shipment</div>
 {<_SplitUI splitEntry={splitEntry} setSplitEntry={setSplitEntry}/>}
@@ -8423,7 +8330,7 @@ onDrop={()=>{if(dragSrc){handleDrop(0,ua.length);}}}
 style={{background:dragOver?.drvId===0?"#dcfce7":"#fff",border:dragOver?.drvId===0?"2px dashed #16a34a":"2px dashed #d6d3d1",borderRadius:14,padding:16,marginBottom:12,transition:"background 0.15s"}}><div style={{display:"flex",alignItems:"center",gap:8,marginBottom:ua.length?10:0}}><div style={{width:14,height:14,borderRadius:4,background:"#a8a29e"}}/><span style={{fontSize:15,fontWeight:700,color:"#78716c"}}>Unassigned</span><span style={{fontSize:12,color:"#a8a29e"}}>({ua.length})</span></div>
 {ua.map((entry,eIdx)=><div key={entry.id}><ManifestStop entry={entry} eIdx={eIdx} total={ua.length} drivers={drivers} onMove={dir=>moveInDriver(0,entry.id,dir)} onReassign={did=>reassign(entry.id,did)} onRemove={()=>deleteDel(entry.id)} onDelete={()=>deleteDel(entry.id)} onUpdateInstructions={text=>updateInstructions(entry.id,text)} onShipPlan={val=>setShipPlan(entry.id,val)} onRefNum={val=>setRefNum(entry.id,val)} onToggleFuel={()=>toggleFuel(entry.id)} onDueBy={time=>setDueBy(entry.id,time)} onWeight={w=>setWeight(entry.id,w)} onLoadNum={n=>setLoadNum(entry.id,n)} onRate={r=>updateRate(entry.id,r)} onPhotoClick={setLightboxPhoto} onSetPickup={label=>setPickupFrom(entry.id,label)} maxLoad={1}
 onLiftgate={()=>{if(entry.isHourly){setEmH(p=>{const key=`${emDk}-emser`;const cur=p[key]||4;return{...p,[key]:cur+1};});setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===entry.id?{...e,liftgateApplied:true}:e)}));showToast("Liftgate +1 hr added");}else{manualLiftgate(entry.id);}}} onRemoveLiftgate={()=>removeLiftgate(entry.id)} onSplit={()=>setSplitEntry({id:entry.id,totalWeight:entry.weight||0,ratio:50,truck1Weight:Math.round((entry.weight||0)/2)})} driverLoadCounts={Object.fromEntries(drivers.map(d=>[d.id,getDriverLoadOptions(d.id)]))}
-isDragging={dragSrc?.drvId===0&&dragSrc?.idx===eIdx} isDragOver={dragOver?.drvId===0&&dragOver?.idx===eIdx} onDragStart={()=>setDragSrc({drvId:0,idx:eIdx})} onDragOver={()=>setDragOver({drvId:0,idx:eIdx})} onDrop={()=>handleDrop(0,eIdx)}/>
+isDragging={dragSrc?.drvId===0&&dragSrc?.idx===eIdx} isDragOver={dragOver?.drvId===0&&dragOver?.idx===eIdx} onDragStart={()=>setDragSrc({drvId:0,idx:eIdx,id:entry.id})} onDragOver={()=>setDragOver({drvId:0,idx:eIdx})} onDrop={()=>handleDrop(0,eIdx)}/>
 {splitEntry?.id===entry.id&&<div style={{margin:"0 0 4px",background:"#eff6ff",border:"2px solid #2563eb",borderRadius:10,padding:12}}>
 <div style={_s.splitTitle}>✂ Split Shipment</div>
 {<_SplitUI splitEntry={splitEntry} setSplitEntry={setSplitEntry}/>}
@@ -8952,7 +8859,7 @@ if(pickups.length>0)return(<div style={{marginBottom:6}}>
 <label style={{flex:1,position:"relative"}}>
 <span style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",fontSize:12,color:"#16a34a",fontWeight:600,pointerEvents:"none"}}>📅 Select delivery date</span>
 <input type="date" onChange={e=>{if(e.target.value){
-const target=new Date(e.target.value+"T12:00:00");const now=new Date();
+const target=new Date(e.target.value+"T12:00:00");const now=_weekRefNow();
 const tD=target.getDay();const tM=new Date(target);tM.setDate(target.getDate()-(tD===0?6:tD-1));
 const nD=now.getDay();const nM=new Date(now);nM.setDate(now.getDate()-(nD===0?6:nD-1));
 tM.setHours(0,0,0,0);nM.setHours(0,0,0,0);
@@ -9817,7 +9724,7 @@ style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,width:"
 }
 function DriverPage({driverSlug}){
 const[wo,setWo]=useState(0);
-const[sd,setSd]=useState(()=>{const d=new Date().getDay();return d>=1&&d<=5?d-1:0;});
+const[sd,setSd]=useState(()=>{const d=_weekRefNow().getDay();return d>=1&&d<=5?d-1:0;});
 const[log,setLog]=useState({});
 const[toast,setToast]=useState(null);
 const[pinEntry,setPinEntry]=useState("");
@@ -10154,7 +10061,7 @@ return(
 </div>
 
 <div style={{display:"flex",gap:4,marginBottom:12}}>
-{["Mon","Tue","Wed","Thu","Fri"].map((day,i)=>{const isToday=wo===0&&i===(new Date().getDay()>=1&&new Date().getDay()<=5?new Date().getDay()-1:0);const isSelected=sd===i;const dayEntries=(log[`${wo}-${i}`]||[]).filter(e=>e.driverId===driverId);return(
+{["Mon","Tue","Wed","Thu","Fri"].map((day,i)=>{const _td=_weekRefNow().getDay();const isToday=wo===0&&i===(_td>=1&&_td<=5?_td-1:0);const isSelected=sd===i;const dayEntries=(log[`${wo}-${i}`]||[]).filter(e=>e.driverId===driverId);return(
 <button key={i} onClick={()=>setSd(i)} style={{flex:1,padding:"8px 2px",borderRadius:8,border:isSelected?"2px solid "+BRAND.main:isToday?"2px solid #d97706":"1px solid #d6d3d1",background:isSelected?BRAND.main:"#fff",cursor:"pointer",textAlign:"center"}}>
 <div style={{fontSize:11,fontWeight:700,color:isSelected?"#fff":isToday?"#d97706":"#57534e"}}>{day}</div>
 <div style={{fontSize:10,fontWeight:600,color:isSelected?"#93c5fd":isToday?"#d97706":"#78716c"}}>{wd[i].date}</div>
