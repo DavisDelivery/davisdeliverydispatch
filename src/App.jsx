@@ -61,6 +61,7 @@ greenBtn:{background:"#16a34a",color:"#fff",border:"none",borderRadius:8,padding
 inputMb4:{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"7px 10px",fontSize:12,outline:"none",marginBottom:4},
 };
 import { useState, useCallback, useEffect, useRef, Fragment, Component } from "react";
+import { dedupeIds, dedupeAutoPickups, sanitizeEntry, _mergeEntryDriver, _mergeEntryDispatcher, buildMergedEntries } from "./manifestLogic.js";
 
 const _SplitUI=({splitEntry,setSplitEntry})=>{const tw=splitEntry.totalWeight||0;const t1w=splitEntry.truck1Weight!==undefined?splitEntry.truck1Weight:Math.round(tw*(splitEntry.ratio/100));const t2w=tw-t1w;return(<><div style={_s.flexG6Mb6}><div style={_s.f1}><label style={_s.labelSm}>Total</label><input type="number" inputMode="numeric" value={tw||""} onChange={e=>{const newTw=parseInt(e.target.value)||0;setSplitEntry(p=>({...p,totalWeight:newTw,truck1Weight:Math.min(p.truck1Weight||Math.round(newTw/2),newTw)}));}} style={_s.splitTotal}/></div><div style={_s.f1}><label style={_s.labelBlue}>Truck 1</label><input type="number" inputMode="numeric" value={splitEntry.truck1Weight!==undefined?splitEntry.truck1Weight:""} onChange={e=>{const v=e.target.value;setSplitEntry(p=>({...p,truck1Weight:v===""?0:parseInt(v)||0}));}} style={_s.splitInput}/></div><div style={_s.f1}><label style={_s.labelGray}>Truck 2</label><div style={_s.splitT2}>{t2w.toLocaleString()}</div></div></div><input type="range" min={0} max={tw} step={100} value={t1w} onChange={e=>{const v=parseInt(e.target.value)||0;setSplitEntry(p=>({...p,truck1Weight:v}));}} style={_s.slider}/></>);};
 
@@ -174,80 +175,10 @@ const genId=()=>{
   return`e_${t}_${s}_${r}`;
 };
 
-/* Repair entries that already carry a colliding id in Firebase (created by
-   the old Date.now()+Math.random() scheme before genId existed). Two entries
-   with the same id corrupt every .map / .find / .filter keyed on id.
+/* dedupeIds, dedupeAutoPickups, sanitizeEntry, the per-ownership entry merges
+   and the save-merge core (buildMergedEntries) live in ./manifestLogic.js
+   (imported above) — pure, side-effect-free, covered by manifestLogic.test.js. */
 
-   The repair must be DETERMINISTIC — Chad's browser and every driver's phone
-   independently run this on the same FB data and must arrive at identical
-   ids, or they'd write divergent docs and fight forever. So duplicates get
-   an id derived from their own content + ordinal, not a random one. The
-   FIRST occurrence of an id keeps it; subsequent ones are re-stamped. */
-const dedupeIds=(entries)=>{
-  if(!Array.isArray(entries))return entries;
-  /* Repair colliding / null ids DETERMINISTICALLY and — critically —
-     INDEPENDENTLY OF ARRAY ORDER. The old scheme folded the array index `idx`
-     into the synthetic id (and used "first occurrence in array order keeps the
-     original id"). That was only deterministic if every device held the
-     entries in the same order. But the dispatcher preserves a manual order
-     that differs from Firebase/the driver's order, so two devices repairing
-     the same colliding pair produced DIFFERENT ids → the id-keyed save merge
-     then duplicated and cross-merged stops ("ghost"/moved deliveries).
-
-     New scheme: ids are a pure function of the MULTISET of entries, never their
-     positions. An id that appears exactly once (and isn't null) is kept. Every
-     entry whose id is null or shared by 2+ entries is re-stamped to
-     `d_<hash(originalId|contentBasis)>_<occ>`, where contentBasis excludes
-     position and `occ` only disambiguates entries that are otherwise identical
-     (same id AND same content) — and for those the resulting id-SET is itself
-     order-invariant. So [A,B] and [B,A] yield the same ids on every device. */
-  const idKey=(e)=>e.id==null?" null":String(e.id);
-  const idCount=new Map();
-  entries.forEach(e=>{if(e)idCount.set(idKey(e),(idCount.get(idKey(e))||0)+1);});
-  const hashStr=(s)=>{let h=0;for(let i=0;i<s.length;i++){h=((h<<5)-h+s.charCodeAt(i))|0;}return Math.abs(h).toString(36);};
-  const occ=new Map();
-  let changed=false;
-  const out=entries.map((e)=>{
-    if(!e)return e;
-    const k=idKey(e);
-    if(e.id!=null&&idCount.get(k)===1)return e; /* unique, non-null → keep */
-    changed=true;
-    const basis=[e.customer||"",e.stop||"",e.addr||"",e.stopType||"",e.driverId||0,e.loadNum||1].join("|");
-    const ck=k+"|"+basis;
-    const n=occ.get(ck)||0;occ.set(ck,n+1);
-    return{...e,id:"d_"+hashStr(ck)+"_"+n.toString(36)};
-  });
-  return changed?out:entries;
-};
-
-/* Collapse semantically-duplicate AUTO pickups. An auto-pickup is uniquely
-   identified by (customer, stop, driverId, loadNum). The volatile-selPickup
-   grouping bug spawned multiple auto-pickups with the same identity but
-   different ids (the 'ghost pickup cards like crazy' bug). This keeps the
-   FIRST occurrence of each identity and drops the rest, healing existing
-   data on ingestion without waiting for a rebuildPickupsFor pass. Manual
-   pickups and deliveries are never touched. */
-const dedupeAutoPickups=(entries)=>{
-  if(!Array.isArray(entries))return entries;
-  const seen=new Set();
-  let changed=false;
-  const out=entries.filter(e=>{
-    if(!e||e.stopType!=="pickup"||e.manualPickup)return true;
-    /* An AUTO pickup with no driver is always an orphan — rebuildPickupsFor
-       only ever creates auto-pickups for assigned deliveries (driverId>0).
-       An unassigned one is a leftover that should have been tombstoned when
-       its delivery was unassigned/reassigned. Drop it outright. This clears
-       the stacks of unassigned "Emser - Norcross" ghost cards. */
-    if(!e.driverId||e.driverId===0){changed=true;return false;}
-    /* Collapse remaining auto-pickups sharing (customer, stop, driverId,
-       loadNum) — keep the first, drop the rest. */
-    const key=[e.customer||"",e.stop||"",e.driverId,e.loadNum||1].join("|");
-    if(seen.has(key)){changed=true;return false;}
-    seen.add(key);
-    return true;
-  });
-  return changed?out:entries;
-};
 
 const _whenFB=(cb)=>{
   if(window._fbLoaded&&window._fbOps){cb();return;}
@@ -343,72 +274,6 @@ const getAutoBackups=()=>{
    Status uses STATUS_RANK so we never advance backward (departed -> arrived
    is impossible). Same idea for *At timestamps (never clobber populated
    local timestamp with FB's missing). */
-const STATUS_RANK={null:0,undefined:0,"":0,"arrived":1,"departed":2};
-const DRIVER_OWNED_FIELDS=["status","arrivedAt","departedAt","photos","signature","shipPlan","eta","etaDest","etaSetAt"];
-
-const _mergeEntryDriver=(localE,fbE)=>{
-  /* Caller is the driver assigned to this entry. Take local's driver-owned
-     fields (with forward-only status) and FB's everything-else. */
-  const out={...fbE};
-  const localRank=STATUS_RANK[localE.status]??0;
-  const fbRank=STATUS_RANK[fbE.status]??0;
-  out.status=localRank>=fbRank?localE.status:fbE.status;
-  if(localE.arrivedAt)out.arrivedAt=localE.arrivedAt; else if(fbE.arrivedAt)out.arrivedAt=fbE.arrivedAt;
-  if(localE.departedAt)out.departedAt=localE.departedAt; else if(fbE.departedAt)out.departedAt=fbE.departedAt;
-  /* Photos are an append-only set — drivers add, no one removes. The
-     previous "longer array wins" rule dropped photos when two saves raced:
-     local=[A,B] and FB=[A,C] (other save just landed) have equal length, so
-     out.photos=fp=[A,C] and local's B was lost. Take the union of real
-     Storage URLs from both sides, keyed by URL, so concurrent uploads
-     can't clobber each other. Local-only placeholder/data values are kept
-     until the upload finishes and writes the real URL on a later save. */
-  const lp=localE.photos||[],fp=fbE.photos||[];
-  const seen=new Set();
-  const merged=[];
-  const real=(p)=>typeof p==="string"&&p.startsWith("https://");
-  fp.forEach(p=>{if(real(p)&&!seen.has(p)){seen.add(p);merged.push(p);}});
-  lp.forEach(p=>{if(real(p)&&!seen.has(p)){seen.add(p);merged.push(p);}});
-  /* Keep any local placeholders (data: URI mid-upload, or "photo_..."
-     pre-Storage entries) only if there are no real URLs in FB for this
-     entry yet — they will be replaced by a real URL once the upload
-     completes. */
-  if(!fp.some(real)){lp.forEach(p=>{if(!real(p)&&!seen.has(p)){seen.add(p);merged.push(p);}});}
-  out.photos=merged;
-  if(localE.signature&&localE.signature!=="signed")out.signature=localE.signature;
-  else if(fbE.signature)out.signature=fbE.signature;
-  if(localE.shipPlan)out.shipPlan=localE.shipPlan; else if(fbE.shipPlan)out.shipPlan=fbE.shipPlan;
-  if(localE.eta){out.eta=localE.eta;out.etaDest=localE.etaDest||null;out.etaSetAt=localE.etaSetAt||null;}
-  else if(fbE.eta){out.eta=fbE.eta;out.etaDest=fbE.etaDest||null;out.etaSetAt=fbE.etaSetAt||null;}
-  return out;
-};
-
-const _mergeEntryDispatcher=(localE,fbE)=>{
-  /* Caller is dispatcher. Local wins on dispatcher fields (rate, instructions,
-     addr, order, etc.), FB wins on driver-stamped fields. Forward-only for
-     status and never-clobber for timestamps. */
-  const out={...localE};
-  const localRank=STATUS_RANK[localE.status]??0;
-  const fbRank=STATUS_RANK[fbE.status]??0;
-  if(fbRank>localRank)out.status=fbE.status;
-  if(!localE.arrivedAt&&fbE.arrivedAt)out.arrivedAt=fbE.arrivedAt;
-  if(!localE.departedAt&&fbE.departedAt)out.departedAt=fbE.departedAt;
-  /* Union photos. See _mergeEntryDriver for the rationale — append-only
-     set, longer-wins drops concurrent uploads. Dispatcher doesn't add
-     photos, so this is mostly defensive (keep what FB has, plus any
-     dispatcher-local placeholders pre-upload). */
-  const lp=localE.photos||[],fp=fbE.photos||[];
-  const seen=new Set();
-  const merged=[];
-  const real=(p)=>typeof p==="string"&&p.startsWith("https://");
-  fp.forEach(p=>{if(real(p)&&!seen.has(p)){seen.add(p);merged.push(p);}});
-  lp.forEach(p=>{if(real(p)&&!seen.has(p)){seen.add(p);merged.push(p);}});
-  if(!fp.some(real)){lp.forEach(p=>{if(!real(p)&&!seen.has(p)){seen.add(p);merged.push(p);}});}
-  out.photos=merged;
-  if(fbE.signature&&(!localE.signature||localE.signature==="signed"))out.signature=fbE.signature;
-  if(fbE.shipPlan&&!localE.shipPlan)out.shipPlan=fbE.shipPlan;
-  if(fbE.eta&&!localE.eta){out.eta=fbE.eta;out.etaDest=fbE.etaDest;out.etaSetAt=fbE.etaSetAt;}
-  return out;
-};
 
 const saveManifestDay=async(wo,sd,entries,callerDriverId,deletedIds)=>{
   const fbKey=getFbKey(wo,sd);
@@ -444,62 +309,11 @@ const saveManifestDay=async(wo,sd,entries,callerDriverId,deletedIds)=>{
          would make fbById/localById silently drop one of the pair and the
          merge would behave unpredictably. dedupeIds is deterministic so the
          transaction stays consistent across retries and across devices. */
-      const fbEntries=dedupeIds(current?.entries||[]);
-      const localEntries=dedupeIds(entries||[]);
-      const fbById={};
-      fbEntries.forEach(e=>{if(e&&e.id)fbById[e.id]=e;});
-      const localById={};
-      localEntries.forEach(e=>{if(e&&e.id)localById[e.id]=e;});
-
-      /* Build the final entries set:
-         - Start from local (preserves dispatcher-driven order + new entries
-           the dispatcher added that FB doesn't have yet).
-         - For each local entry: if it exists in FB, merge per ownership.
-         - For FB entries the local doesn't have: include them (driver may
-           have added a stop on another tab; dispatcher's subscription may
-           not have caught up; etc.). */
-      const merged=localEntries.map(localE=>{
-        if(!localE||!localE.id)return localE;
-        const fbE=fbById[localE.id];
-        if(isDriver){
-          /* Driver only has authority over entries assigned to them. */
-          if(localE.driverId!==callerDriverId){
-            /* Not this driver's stop. If FB still has it, take FB's version.
-               If FB DROPPED it, the dispatcher deleted it — the driver must
-               not resurrect it by writing back their stale local copy. */
-            return fbE?fbE:null;
-          }
-          /* This driver's own stop. Drivers can't CREATE stops (DriverPage has
-             no add-stop UI), so any stop the driver holds locally originated
-             from the dispatcher and therefore already existed in Firebase. If
-             FB now lacks it, the dispatcher DELETED it — honor that and drop it.
-             The old code returned localE here, which resurrected a deleted
-             delivery on the driver's next save: the driver carries no
-             tombstones, so the dropped stop would be re-appended FB-only and the
-             dispatcher would see their delete undone. */
-          if(!fbE)return null;
-          return _mergeEntryDriver(localE,fbE);
-        }else{
-          if(!fbE)return localE;
-          return _mergeEntryDispatcher(localE,fbE);
-        }
-      }).filter(Boolean);
-      /* Append FB-only entries (FB has them, local doesn't) — EXCEPT
-         tombstoned IDs. A tombstoned ID is one the dispatcher just deleted;
-         FB still carries it because our delete hasn't been written yet.
-         Without this guard the entry resurrects on every save. Entries that
-         are FB-only AND not tombstoned are genuine additions from another
-         writer and must be kept. */
-      const tomb=deletedIds instanceof Set?deletedIds:new Set(deletedIds||[]);
-      fbEntries.forEach(fbE=>{
-        if(fbE&&fbE.id&&!localById[fbE.id]&&!tomb.has(fbE.id))merged.push(fbE);
-      });
-
-      /* Collapse any duplicate auto-pickups before persisting, so the
-         ghost-pickup cleanup reaches Firebase instead of being a local-only
-         fix that gets re-ingested next load. Deterministic — keeps the first
-         of each (customer, stop, driverId, loadNum). */
-      const deduped=dedupeAutoPickups(merged);
+      /* Merge FB + local with per-ownership rules, drop tombstoned FB-only
+         resurrections, and collapse duplicate auto-pickups. Pure + unit-tested
+         in manifestLogic.js (buildMergedEntries) so the concurrency scenarios
+         can't silently regress. */
+      const deduped=buildMergedEntries(current?.entries||[],entries||[],{isDriver,callerDriverId,deletedIds});
       /* Normalize photos / signature for write — bound size, drop undefined. */
       const safe=deduped.map(e=>{
         const copy={...e};
@@ -2898,45 +2712,6 @@ const DEFAULT_DRIVERS=[{id:1,name:"Trevor Seyers",phone:"404-394-9891"},{id:2,na
 function lsGet(key,fallback){try{const v=localStorage.getItem(key);if(v){const parsed=JSON.parse(v);return parsed;}return fallback;}catch{return fallback;}}
 function lsSet(key,val){try{localStorage.setItem(key,JSON.stringify(val));}catch{}}
 
-/* Defensive sanitizer — coerces every field on a delivery entry to a safe type so
-   bad Firestore data (undefined, wrong types, objects where strings expected)
-   can never crash render code that calls .split/.includes/.toFixed/etc. */
-function sanitizeEntry(e){
-  if(!e||typeof e!=="object")return null;
-  const safeStr=v=>typeof v==="string"?v:(v==null?"":String(v));
-  const safeNum=v=>typeof v==="number"&&isFinite(v)?v:(parseFloat(v)||0);
-  const safeStrOrNull=v=>typeof v==="string"?v:null;
-  return{
-    ...e,
-    id:e.id,
-    stop:safeStr(e.stop),
-    customer:safeStr(e.customer),
-    addr:safeStr(e.addr).replace(/5981 (Live Oak|Oakbrook) P(ark)?w(a)?y/i,"5470 Oakbrook Pkwy"),
-    note:safeStrOrNull(e.note),
-    instructions:safeStrOrNull(e.instructions),
-    shipPlan:safeStrOrNull(e.shipPlan),
-    refNum:safeStrOrNull(e.refNum),
-    dueBy:safeStrOrNull(e.dueBy),
-    pickupDueBy:safeStrOrNull(e.pickupDueBy),
-    pickupFrom:safeStrOrNull(e.pickupFrom),
-    eta:safeStrOrNull(e.eta),
-    etaDest:safeStrOrNull(e.etaDest),
-    stopType:safeStr(e.stopType),
-    status:safeStr(e.status),
-    driverId:safeNum(e.driverId),
-    baseRate:safeNum(e.baseRate),
-    liftgateFee:safeNum(e.liftgateFee),
-    fuelPct:safeNum(e.fuelPct),
-    weight:safeNum(e.weight),
-    loadNum:e.loadNum==null?undefined:safeNum(e.loadNum),
-    etaSetAt:e.etaSetAt==null?undefined:safeNum(e.etaSetAt),
-    isHourly:!!e.isHourly,
-    priority:!!e.priority,
-    liftgateApplied:!!e.liftgateApplied,
-    knownLiftgate:!!e.knownLiftgate,
-    wasSplit:!!e.wasSplit,
-  };
-}
 
 function DispatchApp(){
 const isDesktop=useIsDesktop();
