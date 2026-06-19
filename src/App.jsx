@@ -1122,8 +1122,25 @@ const compressPhoto=(dataUrl,quality,maxDim)=>new Promise((resolve,reject)=>{
   img.src=dataUrl;
 });
 
-function getWeekDates(off=0){const now=new Date();const d=now.getDay();const mon=new Date(now);mon.setDate(now.getDate()-(d===0?6:d-1)+off*7);return DAYS.map((name,i)=>{const dt=new Date(mon);dt.setDate(mon.getDate()+i);return{name,date:dt.toLocaleDateString("en-US",{month:"short",day:"numeric"}),iso:dt.toISOString().slice(0,10)}});}
-function getFbKey(wo,dayIdx){const now=new Date();const d=now.getDay();const mon=new Date(now);mon.setDate(now.getDate()-(d===0?6:d-1)+wo*7+dayIdx);const y=mon.getFullYear();const m=String(mon.getMonth()+1).padStart(2,'0');const dd=String(mon.getDate()).padStart(2,'0');return y+'-'+m+'-'+dd;}
+/* SESSION-STABLE week/day reference. Both getWeekDates (display labels) and
+   getFbKey (Firebase doc ids) map a relative weekOffset/dayIdx onto absolute
+   calendar dates, while the local `log` is keyed by the RELATIVE
+   `${wo}-${dayIdx}`. If the absolute dates were recomputed from a live
+   `new Date()` on every call, the mapping would SLIDE the instant the wall
+   clock crosses midnight: the same local key would suddenly point at a
+   different Firebase doc, so a day the dispatcher was editing could be saved
+   into the wrong day's doc or merged from a stale one — the "deliveries moved /
+   disappeared on their own" failure when the app is left open overnight.
+   Freezing the reference at first use keeps every caller (display labels,
+   subscriptions, saves, render, history, Emser hours) agreeing on ONE mapping
+   for the whole session. The day-rollover watcher in DispatchApp re-anchors
+   with a clean reload once the real calendar day advances and the board is
+   idle. */
+let _weekRef=null;
+function _weekRefNow(){if(_weekRef===null)_weekRef=new Date();return _weekRef;}
+function _weekDayRolled(){if(_weekRef===null)return false;const n=new Date();return _weekRef.getFullYear()!==n.getFullYear()||_weekRef.getMonth()!==n.getMonth()||_weekRef.getDate()!==n.getDate();}
+function getWeekDates(off=0){const now=_weekRefNow();const d=now.getDay();const mon=new Date(now);mon.setDate(now.getDate()-(d===0?6:d-1)+off*7);return DAYS.map((name,i)=>{const dt=new Date(mon);dt.setDate(mon.getDate()+i);return{name,date:dt.toLocaleDateString("en-US",{month:"short",day:"numeric"}),iso:dt.toISOString().slice(0,10)}});}
+function getFbKey(wo,dayIdx){const now=_weekRefNow();const d=now.getDay();const mon=new Date(now);mon.setDate(now.getDate()-(d===0?6:d-1)+wo*7+dayIdx);const y=mon.getFullYear();const m=String(mon.getMonth()+1).padStart(2,'0');const dd=String(mon.getDate()).padStart(2,'0');return y+'-'+m+'-'+dd;}
 function fmt(n){const v=typeof n==="number"&&isFinite(n)?n:(parseFloat(n)||0);return "$"+v.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g,",");}
 
 function InlineRate({value,isHourly,onSave,accent}){
@@ -3783,6 +3800,25 @@ useEffect(()=>{
   });
   return()=>{unsubManifests();unsubPrevWeek();};
 },[wo]);
+/* Day-rollover re-anchor. _weekRefNow() freezes the week/day reference at mount
+   so the Firebase-doc <-> local-key mapping can never slide mid-session. Once
+   the real calendar day advances past that anchor the frozen "current week" is
+   stale, so re-anchor with a full reload — but ONLY when the board is idle:
+   nothing dirty, no save in cooldown, and the tab hidden. That way we never
+   reload over unsaved edits or interrupt active dispatching. If the conditions
+   aren't met we just wait and re-check next tick; the data stays correct (the
+   frozen mapping is internally consistent), only the week label is stale until
+   the safe reload lands. */
+useEffect(()=>{
+  const id=setInterval(()=>{
+    if(!_weekDayRolled())return;
+    if(dirtyDaysRef.current.size>0||saveCooldownRef.current.size>0)return;
+    if(typeof document!=="undefined"&&document.visibilityState==="visible")return;
+    clearInterval(id);
+    window.location.reload();
+  },60000);
+  return()=>clearInterval(id);
+},[]);
 
 /* On-demand history loader.
 
