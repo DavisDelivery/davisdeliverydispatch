@@ -198,3 +198,29 @@ describe("buildMergedEntries — multi-writer reconciliation (the core)", () => 
     expect(out.map((e) => e.id).sort()).toEqual(["a", "b"]);
   });
 });
+
+describe("regression: planned → delivered → reverted-to-Unassigned (the production incident)", () => {
+  // Dispatcher assigned Idlewood/Floorworx to Trevor (driverId 5). A stale
+  // Firebase echo for today still has them at driverId 0. The guarded
+  // dispatcher merge MUST keep the local assignment. The DEPLOYED v3.14.2
+  // prev-week handler blind-overwrites local with raw FB (updated[lk]=entries),
+  // throwing the assignment away — that is the bug that put delivered stops
+  // back in the Unassigned pile. _mergeEntryDispatcher never touches driverId,
+  // so the guarded path preserves it.
+  it("keeps the dispatcher's driver assignment when a stale FB copy says driverId 0", () => {
+    const localAssigned = del({ id: "idlewood", customer: "Idlewood", driverId: 5 });
+    const fbStaleUnassigned = del({ id: "idlewood", customer: "Idlewood", driverId: 0 });
+    const out = buildMergedEntries([fbStaleUnassigned], [localAssigned], { isDriver: false, callerDriverId: 0 });
+    expect(out).toHaveLength(1);
+    expect(out[0].driverId).toBe(5); // preserved, NOT reverted to Unassigned
+  });
+
+  it("a driver completing the pickup does not drag their deliveries back to Unassigned", () => {
+    const puDone = pu({ id: "pu", customer: "Emser", stop: "Emser - Norcross", driverId: 5, status: "departed" });
+    const d1 = del({ id: "idlewood", customer: "Idlewood", driverId: 5 });
+    const d2 = del({ id: "floorworx", customer: "Floorworx", driverId: 5 });
+    const out = buildMergedEntries([puDone, d1, d2], [puDone, d1, d2], { isDriver: true, callerDriverId: 5 });
+    expect(out.filter((e) => e.driverId === 0)).toHaveLength(0); // nothing fell back to Unassigned
+    expect(out.find((e) => e.id === "pu").status).toBe("departed"); // pickup stays done
+  });
+});
