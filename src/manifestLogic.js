@@ -150,16 +150,106 @@ export function sanitizeEntry(e){
   };
 }
 
+/* Stable CONTENT signature of a stop — its identity independent of the volatile
+   `id`. Used by two safety mechanisms:
+     1. Tombstones match (id AND signature), so a delete can only ever suppress
+        the SAME stop, never a different one that merely shares a (possibly
+        synthetic / collided) id.
+     2. The merge's signature-fallback reconciles a stop whose id diverged across
+        devices (a legacy collided/null id that dedupeIds re-stamped from a
+        since-edited field) by CONTENT instead of dropping it (driver-stamp loss)
+        or double-counting it (ghost duplicate).
+   Includes customer|stop|stopType|driverId|loadNum. addr is the ONLY dedupeIds
+   basis field excluded — it is the field most often normalized differently
+   between writers (IMETCO/Oakbrook rewrites), so including it would cause a
+   tombstone to MISS its own stop after normalization. driverId and loadNum ARE
+   included: two genuinely-distinct loads to the same customer+stop must have
+   DIFFERENT signatures, or the merge's signature-fallback would collapse them
+   and silently drop one (a delivery-loss path). The signature is only ever used
+   with an id match (tombstones) or a both-sides-unique guard (fallback), so it
+   cannot conflate two distinct stops. */
+export const entrySig=(e)=>{
+  if(!e||typeof e!=="object")return"";
+  return[e.customer||"",e.stop||"",e.stopType||"",e.driverId||0,e.loadNum||1].join("|");
+};
+
+/* Normalize a tombstone collection into a content-aware matcher. Accepts any of:
+     - a Set or array of bare ids        → legacy id-only match
+     - a Map of id -> signature          → match id AND signature (sig ""/null => id-only)
+     - an array of { id, sig } objects   → match id AND signature
+   A tombstone with a signature suppresses an incoming entry ONLY when its id AND
+   its content signature both agree, so an id collision can never silently delete
+   an unrelated stop — the failure mode that erased real deliveries from the
+   board. Returns { size, has(entry) }. */
+export const makeTombFilter=(deletedIds)=>{
+  const map=new Map(); /* String(id) -> Set<sig>; sig "" means id-only (match any content) */
+  const add=(id,sig)=>{
+    if(id==null)return;
+    const k=String(id); /* coerce so a numeric tombstone id matches a string entry id */
+    if(!map.has(k))map.set(k,new Set());
+    map.get(k).add(sig==null?"":sig);
+  };
+  if(deletedIds instanceof Map){deletedIds.forEach((sig,id)=>add(id,sig));}
+  else if(deletedIds instanceof Set){deletedIds.forEach(id=>add(id,""));}
+  else if(Array.isArray(deletedIds)){deletedIds.forEach(d=>{if(d&&typeof d==="object")add(d.id,d.sig);else add(d,"");});}
+  return{
+    size:map.size,
+    has(e){
+      if(!e||e.id==null)return false;
+      const sigs=map.get(String(e.id));
+      if(!sigs)return false;
+      if(sigs.has(""))return true;            /* id-only tombstone */
+      return sigs.has(entrySig(e));           /* must also match content */
+    },
+  };
+};
+
+/* Auto-pickups removed as a SIDE EFFECT of a local mutation (rebuildPickupsFor),
+   for the caller to tombstone. ONLY non-manual pickups are eligible: a delivery
+   must NEVER be tombstoned by a vanished/diff heuristic, because tombstoning a
+   delivery that merely fell out of an array (splice math, a transient duplicate
+   id, a colliding-twin delete) is precisely what permanently and silently erased
+   real deliveries across every device. Deliveries are only ever removed by an
+   explicit, deliberate delete of that exact stop — never inferred from a diff. */
+export const vanishedAutoPickups=(before,after)=>{
+  if(!Array.isArray(before))return[];
+  const surviving=new Set((after||[]).map(e=>e&&e.id));
+  return before.filter(e=>e&&e.id&&e.stopType==="pickup"&&!e.manualPickup&&!surviving.has(e.id));
+};
+
+/* Reorder `items` to follow `orderedIds`, with every item NOT named in the list
+   kept (appended after, in original order). Consumes by POSITION (each id claims
+   one not-yet-used matching item), so a legacy colliding-id pair can't collapse:
+   `orderedIds.map(id=>items.find(e=>e.id===id))` returned the first twin for both
+   slots and `items.filter(e=>!ids.includes(e.id))` then excluded BOTH — silently
+   dropping the second twin (a delivery). This conserves the full multiset. */
+export const orderByIds=(items,orderedIds)=>{
+  if(!Array.isArray(items))return items;
+  const used=new Array(items.length).fill(false);
+  const ordered=[];
+  (orderedIds||[]).forEach(id=>{
+    const idx=items.findIndex((e,i)=>!used[i]&&e&&e.id===id);
+    if(idx>=0){used[idx]=true;ordered.push(items[idx]);}
+  });
+  const leftover=items.filter((e,i)=>!used[i]);
+  return[...ordered,...leftover];
+};
+
 /* The heart of multi-writer reconciliation, used inside saveManifestDay's
    Firestore transaction. Given the current FB array and the caller's local
    array, produce the array to persist:
      - both id-repaired first (dedupeIds);
      - start from local (preserves dispatcher order + not-yet-synced adds);
      - per local entry, merge with FB per ownership (dispatcher vs the driver
-       it's assigned to); a driver drops any stop FB no longer has (honors a
-       dispatcher delete instead of resurrecting it);
+       it's assigned to); a stop whose id diverged is reconciled by CONTENT
+       (signature-fallback) rather than dropped; a driver drops any stop FB no
+       longer has (honors a dispatcher delete instead of resurrecting it);
      - append FB-only entries that aren't tombstoned (genuine concurrent adds),
        so a delete the caller just made doesn't come back;
+     - SAFETY NET: re-append any Firebase DELIVERY that is neither already in the
+       output nor explicitly (signature-)tombstoned, so a delivery can never
+       silently vanish at the merge layer regardless of id divergence, duplicate
+       ids, or a future bug in a caller;
      - collapse duplicate auto-pickups.
    Pure: same inputs → same output, no I/O. This is the surface the concurrency
    test suite locks down. */
@@ -170,21 +260,52 @@ export const buildMergedEntries=(fbEntriesRaw,localEntriesRaw,{isDriver=false,ca
   fbEntries.forEach(e=>{if(e&&e.id)fbById[e.id]=e;});
   const localById={};
   localEntries.forEach(e=>{if(e&&e.id)localById[e.id]=e;});
+  /* Signature index for reconciling a stop whose id diverged across devices by
+     CONTENT. The fallback fires ONLY when the signature is unique on BOTH sides
+     (exactly one FB entry and one local entry carry it) — an unambiguous 1:1
+     content match. That double-uniqueness guard is what prevents two distinct
+     stops (e.g. two different loads to the same customer+stop) from being merged
+     together and one silently dropped. usedFbIds tracks every FB entry consumed
+     by an id OR signature match so the FB-only-append can't re-add it as a ghost. */
+  const fbBySig={};const fbSigCount={};
+  fbEntries.forEach(e=>{if(e){const s=entrySig(e);fbSigCount[s]=(fbSigCount[s]||0)+1;if(!(s in fbBySig))fbBySig[s]=e;}});
+  const localSigCount={};
+  localEntries.forEach(e=>{if(e){const s=entrySig(e);localSigCount[s]=(localSigCount[s]||0)+1;}});
+  const usedFbIds=new Set();
+  const resolveFb=(localE)=>{
+    let fbE=fbById[localE.id];
+    if(!fbE){const s=entrySig(localE);const cand=fbBySig[s];if(cand&&fbSigCount[s]===1&&localSigCount[s]===1&&!usedFbIds.has(cand.id))fbE=cand;}
+    return fbE;
+  };
   const merged=localEntries.map(localE=>{
     if(!localE||!localE.id)return localE;
-    const fbE=fbById[localE.id];
+    const fbE=resolveFb(localE);
     if(isDriver){
-      if(localE.driverId!==callerDriverId){return fbE?fbE:null;}
+      if(localE.driverId!==callerDriverId){if(fbE){usedFbIds.add(fbE.id);return fbE;}return null;}
       if(!fbE)return null;
+      usedFbIds.add(fbE.id);
       return _mergeEntryDriver(localE,fbE);
     }else{
       if(!fbE)return localE;
+      usedFbIds.add(fbE.id);
       return _mergeEntryDispatcher(localE,fbE);
     }
   }).filter(Boolean);
-  const tomb=deletedIds instanceof Set?deletedIds:new Set(deletedIds||[]);
+  const tomb=makeTombFilter(deletedIds);
   fbEntries.forEach(fbE=>{
-    if(fbE&&fbE.id&&!localById[fbE.id]&&!tomb.has(fbE.id))merged.push(fbE);
+    if(fbE&&fbE.id&&!localById[fbE.id]&&!usedFbIds.has(fbE.id)&&!tomb.has(fbE))merged.push(fbE);
+  });
+  /* SAFETY NET — a delivery that exists in Firebase must never silently vanish.
+     The only legitimate removal of a delivery is an explicit, signature-matched
+     tombstone (the dispatcher deleted exactly that stop). Anything else that
+     would drop an FB delivery — id divergence, a duplicate-id map collapse, a
+     future bug in a caller — is caught here and the delivery is re-appended. */
+  const outIds=new Set(merged.map(e=>e&&e.id));
+  fbEntries.forEach(fbE=>{
+    if(!fbE||fbE.id==null||fbE.stopType!=="delivery")return;
+    if(outIds.has(fbE.id)||usedFbIds.has(fbE.id))return;
+    if(tomb.has(fbE))return; /* explicitly deleted — stays gone */
+    merged.push(fbE);
   });
   return dedupeAutoPickups(merged);
 };
