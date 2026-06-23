@@ -159,16 +159,18 @@ export function sanitizeEntry(e){
         devices (a legacy collided/null id that dedupeIds re-stamped from a
         since-edited field) by CONTENT instead of dropping it (driver-stamp loss)
         or double-counting it (ghost duplicate).
-   Deliberately LEAN — customer|stop|stopType only. addr is excluded (it is the
-   field most often normalized differently between writers — IMETCO/Oakbrook
-   rewrites), and driverId/loadNum are excluded because they are exactly the
-   mutable fields a reassign/load-change edits, which is what makes ids diverge
-   in the first place. The lean signature is only ever used together with an id
-   match (tombstones) or a uniqueness guard (fallback), so it cannot conflate two
-   genuinely-distinct stops. */
+   Includes customer|stop|stopType|driverId|loadNum. addr is the ONLY dedupeIds
+   basis field excluded — it is the field most often normalized differently
+   between writers (IMETCO/Oakbrook rewrites), so including it would cause a
+   tombstone to MISS its own stop after normalization. driverId and loadNum ARE
+   included: two genuinely-distinct loads to the same customer+stop must have
+   DIFFERENT signatures, or the merge's signature-fallback would collapse them
+   and silently drop one (a delivery-loss path). The signature is only ever used
+   with an id match (tombstones) or a both-sides-unique guard (fallback), so it
+   cannot conflate two distinct stops. */
 export const entrySig=(e)=>{
   if(!e||typeof e!=="object")return"";
-  return[e.customer||"",e.stop||"",e.stopType||""].join("|");
+  return[e.customer||"",e.stop||"",e.stopType||"",e.driverId||0,e.loadNum||1].join("|");
 };
 
 /* Normalize a tombstone collection into a content-aware matcher. Accepts any of:
@@ -180,11 +182,12 @@ export const entrySig=(e)=>{
    an unrelated stop — the failure mode that erased real deliveries from the
    board. Returns { size, has(entry) }. */
 export const makeTombFilter=(deletedIds)=>{
-  const map=new Map(); /* id -> Set<sig>; sig "" means id-only (match any content) */
+  const map=new Map(); /* String(id) -> Set<sig>; sig "" means id-only (match any content) */
   const add=(id,sig)=>{
     if(id==null)return;
-    if(!map.has(id))map.set(id,new Set());
-    map.get(id).add(sig==null?"":sig);
+    const k=String(id); /* coerce so a numeric tombstone id matches a string entry id */
+    if(!map.has(k))map.set(k,new Set());
+    map.get(k).add(sig==null?"":sig);
   };
   if(deletedIds instanceof Map){deletedIds.forEach((sig,id)=>add(id,sig));}
   else if(deletedIds instanceof Set){deletedIds.forEach(id=>add(id,""));}
@@ -193,7 +196,7 @@ export const makeTombFilter=(deletedIds)=>{
     size:map.size,
     has(e){
       if(!e||e.id==null)return false;
-      const sigs=map.get(e.id);
+      const sigs=map.get(String(e.id));
       if(!sigs)return false;
       if(sigs.has(""))return true;            /* id-only tombstone */
       return sigs.has(entrySig(e));           /* must also match content */
@@ -212,6 +215,24 @@ export const vanishedAutoPickups=(before,after)=>{
   if(!Array.isArray(before))return[];
   const surviving=new Set((after||[]).map(e=>e&&e.id));
   return before.filter(e=>e&&e.id&&e.stopType==="pickup"&&!e.manualPickup&&!surviving.has(e.id));
+};
+
+/* Reorder `items` to follow `orderedIds`, with every item NOT named in the list
+   kept (appended after, in original order). Consumes by POSITION (each id claims
+   one not-yet-used matching item), so a legacy colliding-id pair can't collapse:
+   `orderedIds.map(id=>items.find(e=>e.id===id))` returned the first twin for both
+   slots and `items.filter(e=>!ids.includes(e.id))` then excluded BOTH — silently
+   dropping the second twin (a delivery). This conserves the full multiset. */
+export const orderByIds=(items,orderedIds)=>{
+  if(!Array.isArray(items))return items;
+  const used=new Array(items.length).fill(false);
+  const ordered=[];
+  (orderedIds||[]).forEach(id=>{
+    const idx=items.findIndex((e,i)=>!used[i]&&e&&e.id===id);
+    if(idx>=0){used[idx]=true;ordered.push(items[idx]);}
+  });
+  const leftover=items.filter((e,i)=>!used[i]);
+  return[...ordered,...leftover];
 };
 
 /* The heart of multi-writer reconciliation, used inside saveManifestDay's
@@ -239,17 +260,21 @@ export const buildMergedEntries=(fbEntriesRaw,localEntriesRaw,{isDriver=false,ca
   fbEntries.forEach(e=>{if(e&&e.id)fbById[e.id]=e;});
   const localById={};
   localEntries.forEach(e=>{if(e&&e.id)localById[e.id]=e;});
-  /* Signature index of FB entries so a stop whose id diverged across devices
-     still reconciles by CONTENT. Only used when EXACTLY ONE FB entry carries a
-     given signature (no ambiguity), so two distinct stops can never be merged
-     together by accident. usedFbIds tracks every FB entry consumed by an id OR a
-     signature match, so the FB-only-append below can't re-add it as a ghost. */
+  /* Signature index for reconciling a stop whose id diverged across devices by
+     CONTENT. The fallback fires ONLY when the signature is unique on BOTH sides
+     (exactly one FB entry and one local entry carry it) — an unambiguous 1:1
+     content match. That double-uniqueness guard is what prevents two distinct
+     stops (e.g. two different loads to the same customer+stop) from being merged
+     together and one silently dropped. usedFbIds tracks every FB entry consumed
+     by an id OR signature match so the FB-only-append can't re-add it as a ghost. */
   const fbBySig={};const fbSigCount={};
   fbEntries.forEach(e=>{if(e){const s=entrySig(e);fbSigCount[s]=(fbSigCount[s]||0)+1;if(!(s in fbBySig))fbBySig[s]=e;}});
+  const localSigCount={};
+  localEntries.forEach(e=>{if(e){const s=entrySig(e);localSigCount[s]=(localSigCount[s]||0)+1;}});
   const usedFbIds=new Set();
   const resolveFb=(localE)=>{
     let fbE=fbById[localE.id];
-    if(!fbE){const s=entrySig(localE);const cand=fbBySig[s];if(cand&&fbSigCount[s]===1&&!usedFbIds.has(cand.id))fbE=cand;}
+    if(!fbE){const s=entrySig(localE);const cand=fbBySig[s];if(cand&&fbSigCount[s]===1&&localSigCount[s]===1&&!usedFbIds.has(cand.id))fbE=cand;}
     return fbE;
   };
   const merged=localEntries.map(localE=>{
