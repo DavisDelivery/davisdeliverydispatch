@@ -1,22 +1,20 @@
 /**
- * Davis Delivery Dispatch — Outbound SMS gateway (Twilio).
+ * Davis Delivery Dispatch — Outbound SMS gateway (SimpleTexting).
  *
  *   GET  /api/send-sms              → { configured: boolean }
- *   POST /api/send-sms { to, body } → sends an SMS, returns { ok, sid } or error
+ *   POST /api/send-sms { to, body } → sends an SMS, returns { ok, id } or error
  *
  * The app probes GET once on load: when the gateway is NOT configured it falls
- * back to opening the device's native sms: composer (today's behavior), so this
- * is strictly additive — nothing changes until the env vars below are set.
+ * back to opening the device's native sms: composer (the original behavior), so
+ * this is strictly additive — nothing changes until the env vars below are set.
  *
  * ENV VARS (Netlify → Site settings → Environment variables):
- *   TWILIO_ACCOUNT_SID          — Account SID (starts with "AC...")
- *   TWILIO_AUTH_TOKEN           — Auth Token
- *   TWILIO_FROM_NUMBER          — your Twilio number in E.164, e.g. +14045551234
- *                                 (or set TWILIO_MESSAGING_SERVICE_SID instead)
- *   TWILIO_MESSAGING_SERVICE_SID — optional, use a Messaging Service instead of a
- *                                 single From number
+ *   SIMPLETEXTING_API_TOKEN     — your SimpleTexting API token (Settings → API)
+ *   SIMPLETEXTING_ACCOUNT_PHONE — the SimpleTexting number you send from
+ *                                 (digits, e.g. 8005551234)
  *
- * No npm dependency — talks to the Twilio REST API over raw https.
+ * No npm dependency — talks to the SimpleTexting v2 REST API over raw https.
+ * Docs: https://api-doc.simpletexting.com/
  */
 const https = require('https');
 
@@ -31,26 +29,20 @@ const json = (statusCode, obj) => ({
   body: JSON.stringify(obj),
 });
 
-/* Normalize a phone number to E.164 (US default). Accepts "404-394-9891",
-   "(404) 394 9891", "+14043949891", etc. */
-function toE164(raw) {
-  if (!raw) return '';
-  const s = String(raw).trim();
-  if (s.startsWith('+')) return '+' + s.slice(1).replace(/\D/g, '');
-  const d = s.replace(/\D/g, '');
-  if (d.length === 10) return '+1' + d;
-  if (d.length === 11 && d[0] === '1') return '+' + d;
-  return d ? '+' + d : '';
+/* SimpleTexting wants plain digits (its examples use "1234567890"). Strip a
+   leading US country code so "+1 404-394-9891" and "404-394-9891" match. */
+function toDigits(raw) {
+  let d = String(raw || '').replace(/\D/g, '');
+  if (d.length === 11 && d[0] === '1') d = d.slice(1);
+  return d;
 }
 
 exports.handler = async function (event) {
   if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers: CORS, body: '' };
 
-  const sid = process.env.TWILIO_ACCOUNT_SID;
-  const token = process.env.TWILIO_AUTH_TOKEN;
-  const from = process.env.TWILIO_FROM_NUMBER;
-  const msgService = process.env.TWILIO_MESSAGING_SERVICE_SID;
-  const configured = !!(sid && token && (from || msgService));
+  const token = process.env.SIMPLETEXTING_API_TOKEN;
+  const accountPhone = process.env.SIMPLETEXTING_ACCOUNT_PHONE;
+  const configured = !!(token && accountPhone);
 
   if (event.httpMethod === 'GET') return json(200, { configured });
   if (event.httpMethod !== 'POST') return json(405, { ok: false, error: 'method_not_allowed' });
@@ -59,26 +51,26 @@ exports.handler = async function (event) {
   let payload = {};
   try { payload = JSON.parse(event.body || '{}'); } catch { return json(400, { ok: false, error: 'bad_json' }); }
 
-  const to = toE164(payload.to);
-  const body = (payload.body == null ? '' : String(payload.body)).slice(0, 1500);
-  if (!to || !body) return json(400, { ok: false, error: 'missing_to_or_body' });
+  const contactPhone = toDigits(payload.to);
+  const text = (payload.body == null ? '' : String(payload.body)).slice(0, 1500);
+  if (!contactPhone || !text) return json(400, { ok: false, error: 'missing_to_or_body' });
 
-  const form = new URLSearchParams();
-  form.append('To', to);
-  if (msgService) form.append('MessagingServiceSid', msgService);
-  else form.append('From', toE164(from));
-  form.append('Body', body);
-  const data = form.toString();
+  const data = JSON.stringify({
+    contactPhone,
+    accountPhone: toDigits(accountPhone),
+    mode: 'AUTO', // SimpleTexting picks SMS for plain text, splitting long messages
+    text,
+  });
 
   const result = await new Promise((resolve) => {
     const req = https.request(
       {
         method: 'POST',
-        hostname: 'api.twilio.com',
-        path: `/2010-04-01/Accounts/${sid}/Messages.json`,
-        auth: `${sid}:${token}`,
+        hostname: 'api-app2.simpletexting.com',
+        path: '/v2/api/messages',
         headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
+          Authorization: 'Bearer ' + token,
+          'Content-Type': 'application/json',
           'Content-Length': Buffer.byteLength(data),
         },
       },
@@ -94,11 +86,14 @@ exports.handler = async function (event) {
   });
 
   if (result.status >= 200 && result.status < 300) {
-    let sidOut = '';
-    try { sidOut = JSON.parse(result.body).sid || ''; } catch { /* ignore */ }
-    return json(200, { ok: true, sid: sidOut });
+    let id = '';
+    try { id = JSON.parse(result.body).id || ''; } catch { /* ignore */ }
+    return json(200, { ok: true, id });
   }
   let errMsg = result.body;
-  try { errMsg = JSON.parse(result.body).message || errMsg; } catch { /* ignore */ }
+  try {
+    const parsed = JSON.parse(result.body);
+    errMsg = parsed.message || (parsed.errors && JSON.stringify(parsed.errors)) || errMsg;
+  } catch { /* ignore */ }
   return json(502, { ok: false, error: errMsg, status: result.status });
 };

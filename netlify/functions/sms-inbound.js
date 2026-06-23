@@ -1,13 +1,17 @@
 /**
- * Davis Delivery Dispatch — Inbound SMS webhook (Twilio).
+ * Davis Delivery Dispatch — Inbound SMS webhook (SimpleTexting).
  *
- * Point your Twilio number's "A MESSAGE COMES IN" webhook at:
- *   POST https://<your-site>/api/sms-inbound
+ * In SimpleTexting, set your incoming-message forwarding / webhook URL to:
+ *   https://<your-site>/api/sms-inbound
  *
- * It matches the sender's number to a driver (config/drivers) and drops the text
- * into that driver's dispatch chat thread (messages/dm-<driverId>/items), so an
- * SMS reply shows up in the same in-app conversation dispatch already uses. A
- * text from an unknown number lands in the group thread labeled with the number.
+ * SimpleTexting forwards inbound texts here as:
+ *   - SMS  → GET  with query params: ?from=<driver>&to=<your#>&subject=&text=<msg>
+ *   - MMS  → POST with JSON body:    { from, to, subject, text, attachments }
+ *
+ * It matches the sender (`from`) to a driver (config/drivers, last-10-digits) and
+ * drops the text into that driver's dispatch chat thread (messages/dm-<id>/items),
+ * so an SMS reply shows up in the same in-app conversation. Unknown numbers land
+ * in the group thread labeled with the number.
  *
  * ENV VARS:
  *   FIREBASE_SERVICE_ACCOUNT — same Admin SDK JSON the nightly backup uses.
@@ -28,20 +32,27 @@ function firestore() {
 /* Last 10 digits, so "404-394-9891" and "+14043949891" compare equal. */
 const digits10 = (s) => String(s || '').replace(/\D/g, '').slice(-10);
 
-const twiml = () => ({
-  statusCode: 200,
-  headers: { 'Content-Type': 'text/xml' },
-  body: '<?xml version="1.0" encoding="UTF-8"?><Response></Response>',
-});
+/* SimpleTexting sends SMS as GET query params and MMS as a JSON (or form) POST. */
+function parseInbound(event) {
+  if (event.httpMethod === 'GET') return event.queryStringParameters || {};
+  const headers = event.headers || {};
+  const ct = (headers['content-type'] || headers['Content-Type'] || '').toLowerCase();
+  const raw = event.body || '';
+  if (ct.includes('application/json')) {
+    try { return JSON.parse(raw); } catch { return {}; }
+  }
+  return querystring.parse(raw);
+}
 
 exports.handler = async function (event) {
-  if (event.httpMethod !== 'POST') return { statusCode: 405, body: 'Method not allowed' };
+  if (event.httpMethod !== 'GET' && event.httpMethod !== 'POST') {
+    return { statusCode: 405, body: 'Method not allowed' };
+  }
 
-  let params = {};
-  try { params = querystring.parse(event.body || ''); } catch { return twiml(); }
-  const from = params.From || '';
-  const text = (params.Body == null ? '' : String(params.Body)).trim();
-  if (!from || !text) return twiml();
+  const params = parseInbound(event);
+  const from = params.from || params.From || '';
+  const text = (params.text == null ? (params.Body || '') : String(params.text)).trim();
+  if (!from || !text) return { statusCode: 200, body: '' };
 
   try {
     const db = firestore();
@@ -71,5 +82,5 @@ exports.handler = async function (event) {
   } catch (e) {
     console.error('[SMS-INBOUND]', (e && e.message) || e);
   }
-  return twiml();
+  return { statusCode: 200, body: '' };
 };

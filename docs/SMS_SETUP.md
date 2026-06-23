@@ -1,15 +1,15 @@
-# SMS Texting Setup (Twilio)
+# SMS Texting Setup (SimpleTexting)
 
-The dispatch app can send and receive real text messages once a Twilio account
-is connected. **Until the environment variables below are set, nothing changes**
-— "Text manifest" and "Notify" keep opening your phone's native SMS app exactly
-like before. The moment the variables are present, those actions send
-automatically (from any device, server-side) and driver replies flow back into
-the in-app chat.
+The dispatch app sends and receives real text messages through your existing
+**SimpleTexting** account. **Until the environment variables below are set,
+nothing changes** — "Text manifest" and "Notify" keep opening your phone's
+native SMS app exactly like before. Once the variables are present, those
+actions send automatically (server-side, from any device) and driver replies
+flow back into the in-app chat.
 
 ## What you get
 
-| Feature | Before | After Twilio is connected |
+| Feature | Before | After SimpleTexting is connected |
 |---|---|---|
 | **Text manifest / Notify** | Opens your phone's SMS app, you tap send | Sends automatically, server-side, from any device |
 | **Dispatch → driver chat (DM)** | In-app only | Also delivered to the driver's phone as a text |
@@ -18,11 +18,11 @@ the in-app chat.
 
 Group chat messages stay in-app (they are not mass-texted).
 
-## 1. Twilio account
+## 1. SimpleTexting credentials
 
-1. Create a Twilio account and buy an SMS-capable phone number (or set up a
-   Messaging Service).
-2. From the Twilio Console grab your **Account SID** and **Auth Token**.
+1. Log in to SimpleTexting.
+2. Go to **Settings → API** and create / copy your **API token**.
+3. Note the **phone number** your account sends from (your SimpleTexting number).
 
 ## 2. Netlify environment variables
 
@@ -30,10 +30,8 @@ Netlify → your site → **Site configuration → Environment variables**. Add:
 
 | Variable | Value |
 |---|---|
-| `TWILIO_ACCOUNT_SID` | Account SID (starts with `AC…`) |
-| `TWILIO_AUTH_TOKEN` | Auth Token |
-| `TWILIO_FROM_NUMBER` | your Twilio number in E.164, e.g. `+14045551234` |
-| `TWILIO_MESSAGING_SERVICE_SID` | *(optional)* use a Messaging Service instead of `TWILIO_FROM_NUMBER` |
+| `SIMPLETEXTING_API_TOKEN` | your SimpleTexting API token |
+| `SIMPLETEXTING_ACCOUNT_PHONE` | your SimpleTexting sending number, digits only, e.g. `8005551234` |
 
 `FIREBASE_SERVICE_ACCOUNT` is already set for the nightly backup — the inbound
 webhook reuses it, so no new Firebase setup is needed.
@@ -42,15 +40,15 @@ Redeploy (or trigger a deploy) so the functions pick up the new variables.
 
 ## 3. Inbound replies (two-way)
 
-In the Twilio Console, open your number's **Messaging configuration** and set
-**"A message comes in"** to **Webhook / HTTP POST**:
+In SimpleTexting, set the **incoming-message forwarding / webhook URL** to:
 
 ```
 https://<your-site>/api/sms-inbound
 ```
 
-Driver numbers are matched against the phone numbers saved in **Manage Drivers**
-(last 10 digits), so make sure each driver's number is filled in.
+SimpleTexting forwards inbound texts there (SMS as a `GET`, MMS as a `POST`).
+Driver numbers are matched against the numbers saved in **Manage Drivers** (last
+10 digits), so make sure each driver's number is filled in.
 
 ## 4. Verify
 
@@ -58,18 +56,32 @@ Driver numbers are matched against the phone numbers saved in **Manage Drivers**
   `{"configured":true}`.
 - Open the dispatcher board, hit **Notify** on a driver — the modal footer should
   read *"auto-sends via SMS gateway"*. Send a test; you should see "Text sent ✓".
-- Text the Twilio number from a driver's phone — it should appear in that
+- Text your SimpleTexting number from a driver's phone — it should appear in that
   driver's chat thread.
 
 ## Endpoints (reference)
 
 - `GET  /api/send-sms` → `{ configured: boolean }`
-- `POST /api/send-sms` `{ to, body }` → `{ ok, sid }`
-- `POST /api/sms-inbound` → Twilio inbound webhook (returns empty TwiML)
+- `POST /api/send-sms` `{ to, body }` → `{ ok, id }`
+  - Calls `POST https://api-app2.simpletexting.com/v2/api/messages` with
+    `{ contactPhone, accountPhone, mode: "AUTO", text }` and
+    `Authorization: Bearer <token>`.
+- `GET|POST /api/sms-inbound` → SimpleTexting incoming-message webhook (returns 200)
 
 ## Notes
 
-- US numbers default to `+1`; numbers already in `+E.164` are used as-is.
-- Standard Twilio carrier compliance applies (A2P 10DLC registration for US
-  long-code traffic, and honoring STOP/HELP keywords). Twilio handles STOP/HELP
-  opt-out automatically at the account level.
+- US numbers are sent as plain digits (a leading `1` country code is stripped),
+  matching SimpleTexting's API examples.
+- `mode: "AUTO"` lets SimpleTexting send plain text as SMS and split long
+  manifests across segments automatically.
+- SimpleTexting handles carrier compliance (10DLC / toll-free verification) and
+  STOP/HELP opt-out at the account level.
+- The inbound webhook only writes chat messages. If you want to harden it, you
+  can later verify SimpleTexting's `x-simpletexting-signature` (HMAC-SHA256)
+  header — not required for it to work.
+
+## Switching providers
+
+The app talks only to `/api/send-sms` and `/api/sms-inbound`. To swap to a
+different SMS provider later, change just those two Netlify functions — no app
+changes needed.
