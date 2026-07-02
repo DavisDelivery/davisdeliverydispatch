@@ -55,6 +55,33 @@ export const dedupeAutoPickups=(entries)=>{
   return changed?out:entries;
 };
 
+/* Reap ORPHANED auto-pickups. An auto-pickup is DERIVED data — it exists only
+   because rebuildPickupsFor generated it from ≥1 same-customer delivery on the
+   same (driver, load). Several mutation paths historically removed deliveries
+   without re-running the rebuild (or without tombstoning the removed pickup, so
+   the save merge resurrected it from Firebase) — leaving a pickup card on a
+   driver whose deliveries are gone, with a stale "Load order" note. Rather than
+   chase every caller forever, enforce the invariant here: an auto-pickup with
+   NO matching delivery (same customer, same driverId, same loadNum) is dropped.
+   Manual pickups and deliveries are never touched. Safe to run at every
+   merge/ingest: rebuildPickupsFor only ever creates pickups where matching
+   deliveries exist, so a legitimate pickup can never be reaped. */
+export const reapOrphanAutoPickups=(entries)=>{
+  if(!Array.isArray(entries))return entries;
+  const delKeys=new Set();
+  entries.forEach(e=>{
+    if(e&&e.stopType==="delivery"&&e.driverId>0)delKeys.add([e.customer||"",e.driverId,e.loadNum||1].join("|"));
+  });
+  let changed=false;
+  const out=entries.filter(e=>{
+    if(!e||e.stopType!=="pickup"||e.manualPickup)return true;
+    if(delKeys.has([e.customer||"",e.driverId||0,e.loadNum||1].join("|")))return true;
+    changed=true;
+    return false;
+  });
+  return changed?out:entries;
+};
+
 /* Status only ever advances (null → arrived → departed), never backward. */
 export const STATUS_RANK={null:0,undefined:0,"":0,"arrived":1,"departed":2};
 export const DRIVER_OWNED_FIELDS=["status","arrivedAt","departedAt","photos","signature","shipPlan","eta","etaDest","etaSetAt"];
@@ -307,5 +334,8 @@ export const buildMergedEntries=(fbEntriesRaw,localEntriesRaw,{isDriver=false,ca
     if(tomb.has(fbE))return; /* explicitly deleted — stays gone */
     merged.push(fbE);
   });
-  return dedupeAutoPickups(merged);
+  /* Orphan reap LAST, after the delivery safety-net re-append, so a rescued
+     delivery keeps its pickup. Self-heals any orphan already persisted in
+     Firebase: the merge drops it, and the transaction write makes that stick. */
+  return reapOrphanAutoPickups(dedupeAutoPickups(merged));
 };

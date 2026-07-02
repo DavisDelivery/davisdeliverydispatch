@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   dedupeIds,
   dedupeAutoPickups,
+  reapOrphanAutoPickups,
   sanitizeEntry,
   _mergeEntryDispatcher,
   _mergeEntryDriver,
@@ -220,9 +221,11 @@ describe("regression: planned → delivered → reverted-to-Unassigned (the prod
   });
 
   it("a driver completing the pickup does not drag their deliveries back to Unassigned", () => {
+    /* Realistic shape: an auto-pickup's customer matches its deliveries' customer
+       (rebuildPickupsFor derives it that way); Idlewood/Floorworx are STOPS. */
     const puDone = pu({ id: "pu", customer: "Emser", stop: "Emser - Norcross", driverId: 5, status: "departed" });
-    const d1 = del({ id: "idlewood", customer: "Idlewood", driverId: 5 });
-    const d2 = del({ id: "floorworx", customer: "Floorworx", driverId: 5 });
+    const d1 = del({ id: "idlewood", customer: "Emser", stop: "Idlewood - Norcross", driverId: 5 });
+    const d2 = del({ id: "floorworx", customer: "Emser", stop: "Floorworx - Norcross", driverId: 5 });
     const out = buildMergedEntries([puDone, d1, d2], [puDone, d1, d2], { isDriver: true, callerDriverId: 5 });
     expect(out.filter((e) => e.driverId === 0)).toHaveLength(0); // nothing fell back to Unassigned
     expect(out.find((e) => e.id === "pu").status).toBe("departed"); // pickup stays done
@@ -425,14 +428,14 @@ describe("buildMergedEntries — delivery-conservation safety net", () => {
     // UNRELATED stop whose id collides with the delivery's id. The delivery must
     // survive — this genuinely exercises the FB-only append + safety net.
     const puEmser = pu({ id: "pu_emser", customer: "Emser Tile", stop: "Emser - Roswell", driverId: 5 });
-    const roundTripDel = del({ id: "shared", customer: "Advanced Flooring Design", stop: "Mableton", driverId: 5 });
+    const roundTripDel = del({ id: "shared", customer: "Emser Tile", stop: "Advanced Flooring Design - Mableton", driverId: 5 });
     const unrelatedDeleted = del({ id: "shared", customer: "Something Else", stop: "Decatur" });
     const out = buildMergedEntries(
       [puEmser, roundTripDel], // in Firebase
       [], // NOT in local
       { isDriver: false, callerDriverId: 0, deletedIds: new Map([["shared", entrySig(unrelatedDeleted)]]) }
     );
-    expect(out.some((e) => e.customer === "Advanced Flooring Design" && e.stopType === "delivery")).toBe(true);
+    expect(out.some((e) => e.stop === "Advanced Flooring Design - Mableton" && e.stopType === "delivery")).toBe(true);
     expect(out.some((e) => e.stopType === "pickup")).toBe(true);
   });
 
@@ -449,5 +452,71 @@ describe("buildMergedEntries — delivery-conservation safety net", () => {
     const A = del({ id: "X", customer: "Idlewood", stop: "Decatur", driverId: 5 });
     const safe = buildMergedEntries([B], [], { isDriver: false, callerDriverId: 0, deletedIds: new Map([["X", entrySig(A)]]) });
     expect(safe.some((e) => e.customer === "Advanced Flooring Design")).toBe(true);
+  });
+});
+
+/* ====================================================================== */
+describe("reapOrphanAutoPickups — auto-pickups are derived data (orphan self-heal)", () => {
+  it("drops an auto-pickup whose driver has NO deliveries for that customer (the Brent orphan)", () => {
+    const orphan = pu({ customer: "Emser Tile", stop: "Emser - Norcross", driverId: 1, note: "Load order: Idlewood, Floorworx" });
+    const otherCustDel = del({ customer: "Florida Tile", driverId: 1 });
+    const out = reapOrphanAutoPickups([orphan, otherCustDel]);
+    expect(out).toHaveLength(1);
+    expect(out[0].customer).toBe("Florida Tile");
+  });
+
+  it("keeps an auto-pickup backed by a same-customer delivery on the same driver+load", () => {
+    const p1 = pu({ customer: "Emser Tile", stop: "Emser - Roswell", driverId: 2, loadNum: 2 });
+    const d1 = del({ customer: "Emser Tile", stop: "D3 - Woodstock", driverId: 2, loadNum: 2 });
+    expect(reapOrphanAutoPickups([p1, d1])).toHaveLength(2);
+  });
+
+  it("is load-scoped: deliveries on Load 2 do not save a Load 1 pickup (the setLoadNum ghost)", () => {
+    const stale = pu({ customer: "Emser Tile", stop: "Emser - Norcross", driverId: 2, loadNum: 1 });
+    const fresh = pu({ customer: "Emser Tile", stop: "Emser - Norcross", driverId: 2, loadNum: 2 });
+    const d1 = del({ customer: "Emser Tile", driverId: 2, loadNum: 2 });
+    const out = reapOrphanAutoPickups([stale, fresh, d1]);
+    expect(out).toHaveLength(2);
+    expect(out.filter((e) => e.stopType === "pickup")[0].loadNum).toBe(2);
+  });
+
+  it("is driver-scoped: another driver's delivery does not save the pickup", () => {
+    const orphan = pu({ customer: "Emser Tile", driverId: 1 });
+    const d1 = del({ customer: "Emser Tile", driverId: 2 });
+    expect(reapOrphanAutoPickups([orphan, d1])).toHaveLength(1);
+  });
+
+  it("NEVER touches manual pickups or deliveries", () => {
+    const manual = pu({ customer: "Florida Tile", driverId: 0, manualPickup: true });
+    const uDel = del({ customer: "Caliber", driverId: 0 });
+    const out = reapOrphanAutoPickups([manual, uDel]);
+    expect(out).toHaveLength(2);
+  });
+
+  it("returns the same reference when nothing is reaped", () => {
+    const arr = [del(), pu()];
+    expect(reapOrphanAutoPickups(arr)).toBe(arr);
+  });
+
+  it("buildMergedEntries self-heals: an orphan pickup persisted in Firebase is dropped at merge", () => {
+    const orphan = pu({ id: "PU1", customer: "Emser Tile", stop: "Emser - Norcross", driverId: 1 });
+    const out = buildMergedEntries([orphan], [orphan], { isDriver: false, callerDriverId: 0 });
+    expect(out).toHaveLength(0);
+  });
+
+  it("buildMergedEntries keeps a backed pickup through the merge", () => {
+    const p1 = pu({ id: "PU1", customer: "Emser Tile", stop: "Emser - Norcross", driverId: 1 });
+    const d1 = del({ id: "D1", customer: "Emser Tile", driverId: 1 });
+    const out = buildMergedEntries([p1, d1], [p1, d1], { isDriver: false, callerDriverId: 0 });
+    expect(out).toHaveLength(2);
+  });
+
+  it("a delivery rescued by the conservation safety net keeps its pickup alive", () => {
+    const p1 = pu({ id: "PU1", customer: "Emser Tile", stop: "Emser - Norcross", driverId: 1 });
+    const d1 = del({ id: "D1", customer: "Emser Tile", driverId: 1 });
+    /* local lost the delivery (bug) but kept the pickup; FB still has both */
+    const out = buildMergedEntries([p1, d1], [p1], { isDriver: false, callerDriverId: 0 });
+    expect(out.some((e) => e.id === "D1")).toBe(true);
+    expect(out.some((e) => e.id === "PU1")).toBe(true);
   });
 });
