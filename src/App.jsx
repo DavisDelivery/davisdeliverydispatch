@@ -275,7 +275,7 @@ const getAutoBackups=()=>{
    is impossible). Same idea for *At timestamps (never clobber populated
    local timestamp with FB's missing). */
 
-const saveManifestDay=async(wo,sd,entries,callerDriverId,deletedIds)=>{
+const saveManifestDay=async(wo,sd,entries,callerDriverId,deletedIds,allowEmpty)=>{
   const fbKey=getFbKey(wo,sd);
   if(!window._fbOps){
     console.error("[SAVE] ABORT: window._fbOps not available");
@@ -289,12 +289,12 @@ const saveManifestDay=async(wo,sd,entries,callerDriverId,deletedIds)=>{
     const peek=await window._fbOps.read("manifests/"+fbKey);
     const existingCount=peek?.entries?.length||0;
     const newCount=entries?.length||0;
-    if(newCount===0&&existingCount>0){
+    if(newCount===0&&existingCount>0&&!allowEmpty){
       console.warn("[SAVE] BLOCKED: refusing to overwrite "+fbKey+" (has "+existingCount+" entries) with empty array");
       return "blocked";
     }
   }catch(readErr){
-    if(!entries||entries.length===0){
+    if((!entries||entries.length===0)&&!allowEmpty){
       console.warn("[SAVE] BLOCKED: can't verify "+fbKey+", refusing empty write");
       return "blocked";
     }
@@ -438,6 +438,23 @@ const subscribeNotifications=(driverId,cb)=>{
 const markNotificationRead=async(driverId,notifId)=>{
   if(!window._fbOps)return;
   await window._fbOps.update("notifications/"+String(driverId)+"/items/"+notifId,{read:true});
+};
+/* Liftgate approval channel (driver → dispatch). The driver's request must reach
+   the dispatcher's approval queue; a per-driver notification never did (nobody
+   subscribes to notifications/0), so the $75 was silently never billed. Route it
+   through a shared Firestore collection both sides watch. */
+const submitLiftgateRequest=async(req)=>{
+  if(!window._fbOps)return;
+  await window._fbOps.write("liftgateRequests/"+req.id,{...req});
+};
+const resolveLiftgateRequest=async(id)=>{
+  if(!window._fbOps)return;
+  await window._fbOps.remove("liftgateRequests/"+id); /* removed once approved/denied so the queue only ever holds pending items */
+};
+const subscribeLiftgateRequests=(cb)=>{
+  let unsub;
+  _whenFB(()=>{unsub=window._fbOps.onCol("liftgateRequests",(docs)=>{cb(docs);});});
+  return()=>{if(unsub)unsub();};
 };
 
 const saveQuoteToFB=async(quote)=>{
@@ -674,7 +691,7 @@ const _fixImetcoAddr=(e)=>{
   }
   return e;
 };
-const APP_VERSION="3.15.2";
+const APP_VERSION="3.15.3";
 const LOGO_URI="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAoHBwgHBgoICAgLCgoLDhgQDg0NDh0VFhEYIx8lJCIfIiEmKzcvJik0KSEiMEExNDk7Pj4+JS5ESUM8SDc9Pjv/2wBDAQoLCw4NDhwQEBw7KCIoOzs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozv/wAARCACMARgDASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD2KigUUAFFFFABRRRQAUUUUAFFFFABRRRQAUUUUAFGKKKACiiigAooooAKKKKACiiigAooooAKKKKACiiigAooooAKKKKACig0UAAooFFABRRRQAUUUUAFFFFABRRRQAUUUUAFFFFABRRRQAUUUUAFFFFABRRRQAUUUUAFFFFABRRRQAUUUUAFFFFABRRRQAUUUUAAooFFABRRRQAUUUUAFFZV34o0GxmaG61e0ikQ4ZDIMqfQ4qJPGPhxjj+2rMH/AGpMfzquSXYnnj3Nqiqltq+m3hAtdQtZyegjmVj+hq3Saa3GncKKKKQyO4uIbSFp7iVIYk+87tgD8apf8JFov/QWsv8Av8tU/Gwz4Qv/APdX/wBDWvI4YJLidIYYzJLIwVEXqxPau3D4aNWDk3Y4sRiZUpKKVz2lfEGjMcDVbMn/AK7r/jV2KaKdN8MiSJ/eRgw/MV4y/hjXkUs2kXWB1xHn+VVbS9vdKuvMtZpbWZDyBlT9CP6GtfqUZL3JGX1yUX78T3Oiud8I+KF8QWzxTqsd7AAZFXo4/vD+o7V0VefODhLlkd8JqceaJXu9Qs7BVa8uobcOcKZXC5PtmooNa0u6nWC31G1llf7qJKCT9BXm/j7Vf7Q8QG2RsxWQ8sehfqx/kPwrnrO6ksbyG7h4kgcOv1Fd9PBc1NSb1OGeN5ZuKWh7nPPFbQtNPIsUSDLO5wFHuao/8JDopOP7Ws8/9dlqZGttZ0kN963vIf8Ax1hXil9ZSWF9PZTD54XKN747/iOaxw9CNVtN2aNsRXlSs0rpnu1FYvhHU/7V8O20zNuljHlS/wC8vGfxGD+NaGqX6aZplzfSfdgjLY9T2H4nFc7g1Ll6nQppx5uhFLrukQSvFLqdpHIh2sjTAFT6Gpl1Kxeza8S8ga2XO6YONgx714eTLdXJJzJNM+fdmY/4mvUdZ05NJ+HdxYJ/yxtgGPq24En88111cNGm4q+rOSliZVFJ20Rsx69pEsixx6paO7kKqrMCST0Aq/XiWh/8h/T/APr6j/8AQhXqHjDWpNE0N5oCBcTOIoj/AHSckn8ADUVsNyTjCLvcqjieeDlJbF+/1vTNLO2+voYGP8LN835DmqcXjDw9M+1NVhBP9/Kj8yK8mtLS81fUBBbq9xdTEnluT6kk/wA61LvwX4gs4jI1h5qgZPkuHI/Ac10fVKUdJS1MfrdWWsY6HrsU0c8YkikWRG6MjAg/iKdXmHw7ttRk1h5IZ5IbSAfv0/hduy4Pfv6jFen1xVqSpT5b3OyjUdSHNawUUUVibBRQaKAAUUCigAooqC5tIrsbJwXj7x5wrfUd/oeKBGZdeIGldrfRLNtSuAcM6ttgjP8AtSdD9Fya5bxBp+sx6rodxquqmd7i/Rfs0ClIYwPm4HVjx1NegoiRoqIoVVGAqjAA9hXMeMVzqHh8/wB2+ZvyjY/0relK0rJGNSN43bPI7bVL23vJJbeQs0rlnjZBIsmTk7lOQa9Z8I3P2rTY5BbNbwk7JbO4UgQt/eiL8lD/AHecdumK8r0JWurkWxnmiRtgzE+08yIp6ezGu+uPBei2Pi7TLSaKa6tb2GZcTzMx81cEHPHbPFdeI5X7rOShzLVHZTaJo94P32mWU2e5hUn88VQdJPDEiSJJJJo7sFkSRixsyeAyk8mPPBB+71HGaYfAHhn+HTCn+5PIP/ZqZN4C0l7eSGKfUbdZFKkJeyEYPHIJII9q4047Nu39eZ2NS3SV/wCvI6UUVl+G7hrjw/ZmT/WxJ5MmTzvQ7G/Va1Kyas7Gqd1cwvG7BfB+oFjgbV5P++teY+HWH/CTaZyObpO/vXpPxA/5EfU/9xP/AENa8i8Kn/irtJ/6/I/516OFdqMvn+R5+JjetF/1ue/gVxPxL0uI6P8A2vHGouLd1WRv76E45+hI/Wu2rifijq0Nr4c/s7eDcXjrhO4RTkt9MgCuOg5KorHXXSdN3OL8FasLfxZYYyvnSeSw7ENx/PFeua1qS6Ro9zfNgmJMoPVjwo/PFeK+CLR73xlpiIMiObzWPoFGf8K7j4if2prd5aaBpFrLcFP39wUGFUnhAW6DjJ/EV14hKdaN/mctBuFKVvkcTDDPqN+kCEvPcyBc+rMev65rZ8Y6Gmh6siQDFvLErIT6gYb9Rn8ak0rT7DwPqSajr+rRTXcSHy7C1zI6sRjLHoMDPX1q8PEuveM7nGjaXa2Vtbk5vrtQ/k+pDEYB9gCa3lXfOpR+FGEaC5GpfEzZ8B6m1v4eeLUc20Nu/wC6mn+RGVucAnrg5/MVl/EKx02ILrrXEytcgRpFHD/rHA6ljjaMY7duKz7TxFo+n+J7JHmk1qYyhJ9TvGLBM8ful6KAcc13HjTRzrXhe7tkXdPGvnQ/7684/EZH41yOThWU9rnUoqdLk3scb8MNdUapPpb5UXKeZGD03r1/MfyrZ+JWp+VZW2mI3zTt5sg/2V6fmf5V5XpWoy6XqtrqEP37eVXA9R3H4jIrT8V+IW1nxHdXkEh+z5CQgj+Beh/Hk/jXU6V66m9jn9pag4I6HwFpf9oeIkndcxWa+afTd0Ufnz+Fd74xH/FJaj/1y/8AZhWf8OtMex8MRXM4/f3x848YwvRB+XP41c8cOY/BmqMvUQ8f99CuSrU58Qn0TR00qXJQa6tHmGh/8jBp/wD19R/+hCvQ/iHp8t54fWaFS5tZfMcDn5cEE/hnNeU6BcSS+JtLDNx9si4HH8Qr32aSOGKSWZ1SNFLOzHgAdSa3xVTlqxkuhjhafNSlF9TxHSdVuNG1CO+tCvmICMMMhgeoNdzY/Ey1fC39hJCe7wtvH5HBq5feB9B1uIXthK1t5w3rJbENG+e+08fliuP8Q+BdX0SxlvobiC9t4RufCFHVfXGSD+BqnUw9d+9oyI08RRXu7Hp2l6jpupwvcabNFIrNmTYMNu/2h1zx3q9XgXhzXrvSdftbuOUhTIqSoOjoTgg/nn6177XFiKPspabHdQq+0jruFFFFc5uFFFFAAOlFA6UUAFFFRTXCwDLJI2egRCx/SgCWuY8XjN7op9LmU/lA5q1c+KoYCQtnKxH9+eCIf+PPn9K5/UdcOtahZK4sLVYGlKg6lFI8jNEyKoVe5LDvW1ODTuY1Jpqx5fp8zQJM8blHEAKsDgghkIP6Vcu/EmtX7W5u9SnlNsxeJi2GQngkMMGnxeF/ESIR/Yl7ym05iI9P8KVNPttI2ya60lvK7ERW32cSvxwWZSwAXPA6k4PHFeo5Q33PNSntsX9O8WiLAvlu5/8Aaa7lP8nU/wA67PRtb0HVIp5DPf2KW6K0k/8AaMvlrk4AyzZBJ7EVzOlwW+uXE+ly+H7S7eOISx3WmMtvI0ZxhgrHDdRwenQ1SSxfTbDxLp0iyqY4oJAJo9jYEoxkfRuxI9DXPKMJabM2jKUdd0d3b6rpWmK40nxXZyB5GkaG+kDhmJ5O8YYZ/H6V0OjawmrRSfu1jliI3BJBIjBhlWRxwynn0PB4r5+Oa9L8C6nPYrZxfYnktLi2hWW4U8QsZJFTI75JxWdagoxunqaUa7lKx0vxB/5EfU/9xP8A0Na8RtbuexvIbu2bZNA4eNsZww6cGvoi/sLXVLKSyvYRNbygB0JIzg57e4rF/wCFfeFf+gPH/wB/H/8AiqihXjTi4yRpWoynJNM8xf4h+KpEK/2ntz3SFAfzxWG8l/q9/l2nvbuY47u7Gva18AeFVORo0R+ruf61rWGk6dpaFbCxgtgevlRhSfqeprT6zTj8ETP6vOXxSON8K6JaeA9Jm1nXpkhupl27c5KL12Lj7zHvj09s1zPiT4k6lqxkt9N3afZnglT+9kHuw6fQfnXp2q+GNG1udZ9Ss/tLou1N0jgKPYA4FU4/APhaKRZF0eLchDDLuRkexODWUasL881dmkqU7csHZHCeDfh7LrATUtYDxWbfMkWcPP7k9Qv6mvUpdLs5NJk0tYEjtHiMXlooAVSMcCrYwBxRWVSrKo7s1p0owVkfN+oWUunX9xYzgiS3kaNvfBxn+te5+DNZ/tzwxaXTnMyL5U3++vBP4jB/Gnah4O8PareyXt9piSzyY3uXYbsDA6Edqt6ToWmaFHJFplqLdJWDOodiCcYzyTW1avGpBK2plSoypybvoeK+NNH/ALE8U3dsi4hkbzof91ucfgcj8Kp6BpT63rtppyg4mkAcjsg5Y/kDXuWreGtG1yWOXUrFLiSJSqMWYEDOccEVHpfhXQtGujd6dp6QzFSm8OzcHqOSfStFi0oW6mbwr579DWjjSKNY41CooCqo7AdBWD48/wCRJ1X/AK4/+zCugzVe+sbbUrKWzvIhLBMu10JI3D8K4ou0k2dkleLR4F4c/wCRn0v/AK/Iv/QxXp/xPOtNoqw6fbs9kxJu3j5cAdAR129yfata38C+GbW5iuYNKRJYXDo3mP8AKwOQetdBmumrXUpqSWxz06LjBxb3Pn3RfFGsaCT/AGdeskbHLRMN8ZP0PT8MVqav8RNd1jTpLCU28MUq7ZDDGQzj0yScD6V6lqXgzw9qzmS60uHzDyZIsxsfqVxms+H4aeFo3DmyllHo9w5H861+sUW+Zx1M/YVUrKWh5n4N0C41/X4FSMm2gkWS4kxwqg5xn1OMYr3iq9lY2mnWy21lbR28K9EjUKKsVy1qrqyudFGkqasFFFFYmwUUUUAAooFFABXD+NvDep3+sw63avH9nsbViyFzv3LuYEDGD1H5V3FQXVlbXsey5hWRfQ5q4ScXdETipKx4prGlaBBZa/LZPGzW13bpaESbsoy5bHrznn2rK0GC7ju0v4rO5eFBIomihZ1RyhAOQOxINewT/DjwnPn/AIlKxH1ikdMfkaSHwJBY2/kaXrmsWEQJIjiuQVBPXgrXUsQuWxzOg73PGI7KQqPPuktm/u3AlXH/AI6RXc/DzTNL1691D7ZDFcpb2MFvGrjO0FTvI9DnPNdPN4T8SqD9l8b3g9p7dHrCm8D+N4b64v7XxBaSXFxD5Mr7fKLp6YC4z79aJVVNWvb+vQI0nB3tc8/0/UP7NuN8RnEsLsqTw3DRsFz2wD/k1tp4lzdtdXD3t07w+Q4uHjmV4852kFRkZ5qW2+HXizTL1J00mwvgoI2TSJJGc+qkituHw94oH+s8EeGT9VC/yatnUp+vzMlTn6fIwDr2k9f7Gt8/9esVSWWtte61Y29v58ayXMCrAsipFhWGBsVRnHJ6+9WtV+HXiPVbz7TFpOmacCoDRQXPyEjuBjiuj8E+EtV8LCZ59Ms7i4mYZm+2Y2KOgUbOOpyc1MqtPlut/UapVOaz29DZ+Ipx4JvznHzR8g4/5aLWVpI06x8cWln4buzLaS2sjX0MdwZo4yMbGyScEniuze3S+tDDf2sTo/3onxIp/Mc0Wmn2dghSytILZW5KwxhAfyriU7R5TrcLy5jzS0gsrjxZqj3lvp8u3VmHmXOpNBIgyPuoOG/qeK6a4v7Wx+JrveXcVvGdIADTSBFz5vuetbsmgaPNO1xLpNk8zNvMjW6li3XOcdai1uDQo4Wv9ZtLSRUAXzJoBI3XhRwSevQVbqKTJVNpGXqEgf4iaCyPlGsrhgQcg9MH3rm9VW8sdXvvBtuJBFrV1HPbuD/q4nOZh+G3+deix21m7QXKwRFo49sMmwZRCOg7gYxxTbhbBLqG5uFt1nAZIpZNoYcEsFJ56Ak47CpjUt0KlC/U4bxxBbjxFoto0NtJAlpKBFc3Zt48AqBlx3H60/xJHBH8PNOhtoIfLN5Cvk210ZUJLnKrITzk5Ga6yOLRPEltHeNa219ECyxvNAD0ODjcM4yPxq0umaetqlqtlbi3jYOkQiXYrA5BA6A55pqpZLyF7PV+Zx3giCK51HX7cWrWVkNlu+mSzmRo2wdzc9AQeMdfwpvhbTLqTxJPZ312bi28Nkw2iknLF+VZvUquBXbLaWqXT3a28S3EihXlCAOwHQE9TTo7a3hlllihjSSYgyuqgFyOASe9J1L38xqna3kZfi4K3hXUEa/XTw0W37SxICZI645wenHrXO+AprOG/v8ATorK3iuI4EkeayvGnglHIBGT8rV2UFzaajFMsTLPGkjQyArldy8MOeuDx6UywtdMtBNHp1vawgPiVbdVXDY6Njvg9/Wkp2i4jcbyUjzj4fwWjXNhcS22n+dvk2znUm+0E5YD9znHt9Oaq+JzGms+Jp306aZ0niSK9W5Ma2bMgwSAemeelenQ6Fo9vOtxBpVlFKhysiQKGU+oIFJdLo9u0qXa2cZvc+aJQo88KuTuz97Cg9egFae2XNzWM/Ze7Y5zxL52jW2ieJDIbh9N2RXjociaJwAx9/mwR9aoeRMPhjrmr3W4XWrRyXb5J+VT9wD6L/Outa/0FtJ2NLaGwP7nyyBs4Gdu3HpzjHTnpT5L7RZnTSZLiykM0Y22hZW3oRxhe4wPpUqdklYvk1vc5fxJLG0Phmz1K4e30e5XF24coGYRgorMOgJzVy3g0G08Na/F4fvPNiSCTzI0nMiRN5Z4XPTPXg11Etpbz2xtpreKWAgDynQFcDoMHimwafZW1obSC0git2BBiSMKhB65A45pc+lg5NbnB/Dy3s1ntZvs+npcNaZEsWpNLM5IGd0ROF45PpXolUbXRNJsZxPaaZaW8oBAkigVWAPXkCr1TUlzSuVCPLGwUUUVBYUUUUAAooFFABRRRQAUUUUAFFFFABRRRQAUUUUAFFFFABXF+Jp7++8QrbaYsksmm25mWNNpHnOQoO1uG2xsxwSMlhXaVBHY2sN5NeRwRrcThRLIB8zgDAyfamnYTVzixa+M51kgSW9s1ErBJJJY5DhnCqc91RFZz3LOAOKr3Nr4q1C2ktbyyvXhckF2aFnVXmIbHPURAKOnDsfQV6HimvGkiMjqGVgQQe4NPmFynF+EL7VbvUpoDC8dnZCRXTzVMYkZsqgYfe2oF57l2J7CoivjkQpdRee0siEyW0hjAWYI54OeI9xQAdTszxurs7GwtdNthbWcKwxAk7Rk5J7knkn61YxRcLHCz2njIlzHcXix4i2qskZkbcUVs54GxUZjjq0ntTJG8byLJL9muQ8yyl4kljVY2XJjVTnO05GWA52gdyR3uBRijmDlOSlttYsNG0ez0yxn3QukkyCRR5mGywkfPBbLMcA5PH1z4IfGYWG5WCaOTzVMkG6JPNYIzuzkfwlikY7hVz1xXe4oxRzBynFRJ4rlubNP9PjhdUlnklaMHzQRuXAPyJgHA56njgVZ17RJNW1O8uJrSYRw26QWrQojPK5cO55ONo2quGIGC3rXWYoxSuFjz288O6/IymQPLeyXAu/OiIEZd/kkjdsghFhVV4GSTkelb2kWd5F4hknt7e6s9OeJjNFclfml+UIIwM7VVFIznB469a6TFGKfMHKFFFFSUFFFFABRRRQAGiiigAHSigUUAFFFFABRRRQAUUUUAFFFFABRRRQAUUUUAFFFFABRRRQAUUUUAFFFFABRRRQAUUUUAFFFFABRRRQAUUUUAFFFFAAelFBopAAopKXNMAoozRmgAoozRmgAooozQAUUZozQAUUmaXNABRRmjNABRRmjNABRRmjNABRRmjNABRSZpaACikzS5oAKKKM0AFFGaM0AFFGaKACijNGaACiikoAU0UlFAH//2Q==";
 const LOGO_WHITE="data:image/jpeg;base64,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";
 
@@ -1688,7 +1705,7 @@ style={{display:"inline-flex",alignItems:"center",gap:6,background:BRAND.main,co
 </div>}
 <div style={{display:"flex",gap:6,marginTop:10,flexWrap:"wrap"}}>
 {!arrived&&<button onClick={()=>onStatusUpdate(entry.id,"arrived")} style={{flex:1,background:"#f59e0b",color:"#fff",border:"none",borderRadius:10,padding:"10px",cursor:"pointer",fontSize:13,fontWeight:600}}>Arrived</button>}
-{arrived&&!departed&&<button onClick={()=>{if(!canDepart){return;}onStatusUpdate(entry.id,"departed");}} style={{flex:1,background:canDepart?"#16a34a":"#a8a29e",color:"#fff",border:"none",borderRadius:10,padding:"10px",cursor:canDepart?"pointer":"not-allowed",fontSize:13,fontWeight:600}}>{canDepart?"Departed":"Enter Ship Plan # First"}</button>}
+{arrived&&!departed&&<button onClick={()=>{if(!canDepart){return;}const _sv=(shipPlanInputs[entry.id]||"").trim();if(_sv&&_sv!==entry.shipPlan&&onShipPlan)onShipPlan(entry.id,_sv);onStatusUpdate(entry.id,"departed");}} style={{flex:1,background:canDepart?"#16a34a":"#a8a29e",color:"#fff",border:"none",borderRadius:10,padding:"10px",cursor:canDepart?"pointer":"not-allowed",fontSize:13,fontWeight:600}}>{canDepart?"Departed":"Enter Ship Plan # First"}</button>}
 {arrived&&(
 <div style={{width:"100%",marginTop:4}}>
 <div style={{display:"flex",gap:6,marginBottom:4}}>
@@ -1769,10 +1786,11 @@ if(hasMultiPickup&&(!selectedPickup||selectedPickup==="custom"&&!pickupName.trim
 const stopName=customStop||customerName||(isOneOff?"One-Off":"Quote");const cust=isOneOff?"One-Off Delivery":"Quote Delivery";const noteParts=[`${mi}mi`,liftgate?"LG":"",noFuel?"No Fuel":(effFuelPct>0?`${Math.round(effFuelPct*100)}% Fuel`:""),gravel?"Gravel":"",extraPallets?"4-5 Pallets":""].filter(Boolean);const noteItems=noteParts.join(" | ");const finalNote=[notes.trim(),noteItems].filter(Boolean).join(" — ");
 const wt=parseInt(weight)||0;
 /* The quote `total` is the all-in customer-facing price — base + fuel +
-   liftgate + add-ons combined. The manifest re-applies liftgateFee on top
-   of baseRate at render time, so if we save baseRate=total AND liftgateFee=75
-   the customer would get billed $75 twice. Strip LG from baseRate so manifest
-   math reproduces the correct total. */
+   liftgate + add-ons — and it's already baked into baseRateForManifest. The
+   manifest reconstructs the bill as baseRate + baseRate×fuelPct + liftgateFee,
+   so to reproduce `total` EXACTLY the entry must (a) strip the $75 LG from
+   baseRate (liftgateFee re-adds it) AND (b) carry fuelPct:0 — otherwise the
+   fuel already inside baseRate is charged a SECOND time and compounded. */
 const baseRateForManifest=liftgate?Math.max(0,total-75):total;
 /* If this quote is for a known multi-location pickup customer (Traditions
    in Tile etc.), store a fully-qualified pickupFrom — "Traditions - Alpharetta"
@@ -1789,9 +1807,9 @@ const _qualifiedPickup=(()=>{
   return pickupName;
 })();
 if(pickupName&&originAddr&&onAddQuote){
-  onAddQuote(cust,{puStop:_qualifiedPickup,puAddr:originAddr,puNote:`Picking up for ${stopName}`+(notes.trim()?" | "+notes.trim():"")},{delStop:stopName,delAddr:destAddr,delRate:baseRateForManifest,delNote:"from "+_qualifiedPickup+" | "+finalNote,pickupFrom:_qualifiedPickup,delWeight:wt,delFuelPct:effFuelPct,delLiftgate:liftgate},drvId);
+  onAddQuote(cust,{puStop:_qualifiedPickup,puAddr:originAddr,puNote:`Picking up for ${stopName}`+(notes.trim()?" | "+notes.trim():"")},{delStop:stopName,delAddr:destAddr,delRate:baseRateForManifest,delNote:"from "+_qualifiedPickup+" | "+finalNote,pickupFrom:_qualifiedPickup,delWeight:wt,delFuelPct:0,delLiftgate:liftgate},drvId);
 }else{
-  onAdd(cust,stopName,baseRateForManifest,drvId,{note:(_qualifiedPickup?"from "+_qualifiedPickup+" | ":"")+finalNote,addr:destAddr,stopType:"delivery",pickupFrom:_qualifiedPickup||null,weight:wt,fuelPct:effFuelPct,liftgateApplied:liftgate,knownLiftgate:false,liftgateFee:liftgate?75:0});
+  onAdd(cust,stopName,baseRateForManifest,drvId,{note:(_qualifiedPickup?"from "+_qualifiedPickup+" | ":"")+finalNote,addr:destAddr,stopType:"delivery",pickupFrom:_qualifiedPickup||null,weight:wt,fuelPct:0,liftgateApplied:liftgate,knownLiftgate:false,liftgateFee:liftgate?75:0});
 }
 };
 return(
@@ -2739,6 +2757,7 @@ const[sd,setSd]=useState(()=>{const d=_weekRefNow().getDay();return d>=1&&d<=5?d
 const[log,_rawSetLog]=useState({});
 const dirtyDaysRef=useRef(new Set());
 const saveCooldownRef=useRef(new Set());
+const intentionalClearRef=useRef(new Set()); /* dayKeys the user deliberately emptied — lets the empty-write guard permit that one save */
 /* Tombstones: IDs of entries the dispatcher intentionally deleted, keyed by
    id -> expiry timestamp. The manifest doc is a full-blob overwrite, so a
    save can't tell "entry deleted by me" apart from "entry added by another
@@ -2773,7 +2792,11 @@ const activeTombstones=()=>{
 };
 window._ddTombstones=tombstonesRef;
 const startupReadyRef=useRef(false);
-setTimeout(()=>{startupReadyRef.current=true;},5000);
+const[saveTick,setSaveTick]=useState(0);
+/* One-shot startup grace: after 5s flip the flag AND bump saveTick so the save
+   effect re-runs and FLUSHES any edits the user made during startup — those are
+   held, never discarded. */
+useEffect(()=>{const _t=setTimeout(()=>{startupReadyRef.current=true;setSaveTick(x=>x+1);},5000);return()=>clearTimeout(_t);},[]);
 const prevLogRef=useRef({});
 const logRef=useRef({}); /* always points to CURRENT log for .then() closures */
 const saveTimerRef=useRef(null);
@@ -2794,7 +2817,7 @@ const setLog=useCallback((updater)=>{
 },[]);
 useEffect(()=>{
   if(dirtyDaysRef.current.size===0)return;
-  if(!startupReadyRef.current){console.log("[SAVE] Skipping — startup grace period");dirtyDaysRef.current.clear();return;}
+  if(!startupReadyRef.current){return;} /* hold edits during the 5s grace — do NOT clear dirty flags (that silently discarded real user edits); the saveTick flush persists them once grace ends */
   if(saveTimerRef.current)clearTimeout(saveTimerRef.current);
   saveTimerRef.current=setTimeout(()=>{
     saveTimerRef.current=null;
@@ -2815,13 +2838,14 @@ useEffect(()=>{
         if(done===toSave.length)setSaveStatus("");
         return;
       }
-      saveManifestDay(wOff,dIdx,entries,0,activeTombstones()).then((result)=>{
+      saveManifestDay(wOff,dIdx,entries,0,activeTombstones(),intentionalClearRef.current.has(dayKey)).then((result)=>{
         if(result==="blocked"){
           console.warn("[SAVE] Keeping dirty flag for",dayKey,"— save was blocked, local state preserved");
           done++;
-          if(done===toSave.length){setSaveStatus("");} 
+          if(done===toSave.length){setSaveStatus("");}
           return;
         }
+        intentionalClearRef.current.delete(dayKey); /* clear consumed — a later accidental wipe is guarded again */
         prevLogRef.current[dayKey]=savedJson;
         /* Only clear dirty if current log matches what we saved.
            logRef.current is always the LATEST log, not the closure's stale copy. */
@@ -2845,7 +2869,7 @@ useEffect(()=>{
       });
     });
   },2500);
-},[log]);
+},[log,saveTick]);
 
 const lastAutoBackupRef=useRef(0);
 useEffect(()=>{
@@ -2925,7 +2949,7 @@ const loadRevenueHistory=async()=>{
       }
       const[mans,emsers]=await Promise.all([
         Promise.all(dayKeys.map(k=>window._fbOps.read("manifests/"+k).catch(()=>null))),
-        Promise.all(dayKeys.map(k=>window._fbOps.read("emserHours/"+k).catch(()=>null))),
+        Promise.all(dayKeys.map(k=>window._fbOps.read("emserHours/"+k+"-emser").catch(()=>null))),
       ]);
       const weekEntries=[];
       mans.forEach((snap,di)=>{if(snap?.entries?.length){snap.entries.filter(e=>e.stopType!=="pickup").forEach(e=>weekEntries.push({...e,_date:dayKeys[di],_dayIdx:di}));}});
@@ -4096,6 +4120,10 @@ const qualifiedPU=(()=>{
 })();
 const targetDkEntries=()=>{
   const delEntry={id:genId(),customer:cust,stop:q.stop||"Quote Delivery",baseRate:q.rate||0,fuelPct:0,isHourly:false,note:q.note||(q.miles?q.miles+"mi":""),driverId:0,addr:q.addr||"",stopType:"delivery",priority:false,instructions:"BOL & Pictures must be sent back via Email",status:null,arrivedAt:null,departedAt:null,eta:null,photos:[],signature:null,dueBy:null,weight:wt,loadNum:1,pickupFrom:qualifiedPU||null,liftgateApplied:!!q.liftgate,knownLiftgate:false,liftgateFee:q.liftgate?75:0};
+  /* q.rate is the all-in quoted total (base+fuel+LG). computeDay re-adds the
+     $75 via liftgateFee, so strip it from baseRate here or the LG bills twice.
+     (fuelPct:0 above keeps fuel single — it's already inside q.rate.) */
+  if(q.liftgate)delEntry.baseRate=Math.max(0,(q.rate||0)-75);
   if(rawPU&&q.pickupAddr){
     /* Quote has a real pickup location -> create the pickup leg too, so the
        driver gets a PU card at the correct address. */
@@ -4438,6 +4466,9 @@ else if(entry.stopType==="pickup"&&entry.manualPickup&&entry.customer){all=rebui
    deliveries from the board. Deliveries die only by an explicit delete of that
    exact stop. */
 tombstone([entry,...vanishedAutoPickups(before,all)]);
+/* Deleting the last stop of a day is a deliberate clear-to-empty — flag it so
+   the save guard permits the empty write instead of resurrecting the stop. */
+if(all.length===0)intentionalClearRef.current.add(dk);
 return{...p,[dk]:all};
 });
 if(entry.customer==="Emser Tile"&&DISTANCE_BONUS_STOPS.includes(entry.stop)){
@@ -4611,23 +4642,28 @@ const lgAdded=e&&e.liftgateApplied&&!e.isHourly?(e.liftgateFee||0):0;
 const newR=Math.max(0,typedTotal-lgAdded);
 const oldR=e?.baseRate||0;if(e&&oldR!==newR){writeAuditLog({action:"rate_change",customer:e.customer,stop:e.stop,driverId:e.driverId,details:"$"+oldR+" → $"+newR+" ("+dayKey+")"});}setLog(p=>({...p,[dayKey]:(p[dayKey]||[]).map(e=>e.id===eid?{...e,baseRate:newR}:e)}));};
 
-const[liftgateRequests,setLiftgateRequests]=useState([]);/* [{id,entryId,stop,driverId,driverName,time,status}] */
+const[liftgateRequests,setLiftgateRequests]=useState([]);/* [{id,entryId,stop,driverId,driverName,time,status}] — mirrored from Firestore */
+/* Dispatch watches the shared collection, so requests from a real driver's phone
+   (not just the dispatcher's own preview) actually show up in the approval queue. */
+useEffect(()=>{const unsub=subscribeLiftgateRequests(reqs=>setLiftgateRequests(reqs||[]));return unsub;},[]);
 const requestLiftgate=(entryId,stopName)=>{
 const entry=dl.find(e=>e.id===entryId);
 const drv=entry?drivers.find(d=>d.id===entry.driverId):null;
-const req={id:genId(),entryId,stop:stopName,driverId:entry?.driverId,driverName:drv?.name||"Driver",time:new Date().toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"}),status:"pending"};
-setLiftgateRequests(p=>[req,...p]);
+const req={id:genId(),entryId,stop:stopName,driverId:entry?.driverId||0,driverName:drv?.name||"Driver",time:new Date().toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"}),status:"pending"};
+submitLiftgateRequest(req).catch(e=>console.error("LG request:",e)); /* subscription echoes it into the queue */
 showToast("Liftgate request sent");
 };
 const approveLiftgate=(reqId)=>{
 const req=liftgateRequests.find(r=>r.id===reqId);
 if(!req)return;
-setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===req.entryId?{...e,liftgateFee:75,liftgateApplied:true}:e)}));
-setLiftgateRequests(p=>p.map(r=>r.id===reqId?{...r,status:"approved"}:r));
+/* Apply the $75 to whichever loaded day holds the entry — the request may have
+   come from a driver while the dispatcher is viewing a different day. */
+setLog(p=>{const next={...p};Object.keys(next).forEach(k=>{if((next[k]||[]).some(e=>e.id===req.entryId))next[k]=next[k].map(e=>e.id===req.entryId?{...e,liftgateFee:75,liftgateApplied:true}:e);});return next;});
+resolveLiftgateRequest(reqId).catch(()=>{});
 showToast("Liftgate +$75 applied to "+req.stop);
 };
 const denyLiftgate=(reqId)=>{
-setLiftgateRequests(p=>p.map(r=>r.id===reqId?{...r,status:"denied"}:r));
+resolveLiftgateRequest(reqId).catch(()=>{});
 showToast("Liftgate denied");
 };
 const manualLiftgate=(entryId)=>{
@@ -4668,7 +4704,11 @@ setLog(p=>{
   /* Keep the original's loadNum — forcing loadNum:1 silently relocated a stop
      that lived on Load 2+ into the Load 1 group and orphaned Load 2's pickup. */
   all[idx]={...orig,weight:w1,loadNum:orig.loadNum||1,wasSplit:true,note:(orig.note?orig.note+" | ":"")+"Split 1/2: "+w1+" lbs"};
-  const load2={...orig,id:genId(),weight:w2,loadNum:2,wasSplit:true,driverId:0,note:(orig.note?orig.note+" | ":"")+"Split 2/2: "+w2+" lbs",status:null,arrivedAt:null,departedAt:null,photos:[],signature:null};
+  /* One order = one charge: the whole rate/fuel/liftgate stays on load 1. The
+     split-off half is a no-charge continuation (a second truck for the same
+     order), so zero its money fields — otherwise computeDay sums both and
+     double-bills the delivery. */
+  const load2={...orig,id:genId(),weight:w2,loadNum:2,wasSplit:true,driverId:0,baseRate:0,fuelPct:0,liftgateApplied:false,liftgateFee:0,note:(orig.note?orig.note+" | ":"")+"Split 2/2: "+w2+" lbs (billed on load 1)",status:null,arrivedAt:null,departedAt:null,photos:[],signature:null};
   all.push(load2);
   if(orig.stopType==="delivery"&&orig.driverId>0){
     all=rebuildPickupsFor(all,orig.customer);
@@ -9980,6 +10020,7 @@ const[authenticated,setAuthenticated]=useState(false);
 const getPin=(phone)=>{const digits=(phone||"").replace(/\D/g,"");return digits.length>=4?digits.slice(-4):"0000";};
 const[sigStop,setSigStop]=useState(null);
 const[shipPlanInputs,setShipPlanInputs]=useState({});
+const[lgReqSent,setLgReqSent]=useState({}); /* entryId → true once a liftgate request was submitted, so the button can't be spammed */
 const[allDrivers,setAllDrivers]=useState(()=>lsGet(LS_DRIVERS,DEFAULT_DRIVERS));
 const[fbLoaded,setFbLoaded]=useState(false);
 const[driverNotifs,setDriverNotifs]=useState([]);
@@ -10501,7 +10542,7 @@ return(<button onClick={()=>{
 </div>}
 <div style={{display:"flex",gap:6,marginTop:10,flexWrap:"wrap"}}>
 {!arrived&&<button onClick={()=>{updateStatus(entry.id,"arrived");showToast("Arrived ✓");}} style={{flex:1,background:"#f59e0b",color:"#fff",border:"none",borderRadius:10,padding:"10px",cursor:"pointer",fontSize:13,fontWeight:600}}>Arrived</button>}
-{arrived&&!departed&&<button onClick={()=>{if(!canDepart)return;updateStatus(entry.id,"departed");showToast("Departed ✓");}} style={{flex:1,background:canDepart?"#16a34a":"#a8a29e",color:"#fff",border:"none",borderRadius:10,padding:"10px",cursor:canDepart?"pointer":"not-allowed",fontSize:13,fontWeight:600}}>{canDepart?"Departed":"Enter Ship Plan # First"}</button>}
+{arrived&&!departed&&<button onClick={()=>{if(!canDepart)return;const _sv=(shipPlanInputs[entry.id]||"").trim();if(_sv&&_sv!==entry.shipPlan)setShipPlanD(entry.id,_sv);updateStatus(entry.id,"departed");showToast("Departed ✓");}} style={{flex:1,background:canDepart?"#16a34a":"#a8a29e",color:"#fff",border:"none",borderRadius:10,padding:"10px",cursor:canDepart?"pointer":"not-allowed",fontSize:13,fontWeight:600}}>{canDepart?"Departed":"Enter Ship Plan # First"}</button>}
 {arrived&&(
 <div style={{width:"100%",marginTop:4}}>
 <div style={{display:"flex",gap:6,marginBottom:4}}>
@@ -10540,12 +10581,14 @@ onChange={e=>{if(e.target.files[0]){const r=new FileReader();r.onload=ev=>addPho
 <button onClick={()=>setSigStop(entry.id)} style={{background:"#f3e8f9",border:"1px solid #d8b4fe",borderRadius:8,padding:"8px 12px",cursor:"pointer",fontSize:12,fontWeight:600,color:"#7c3aed",flex:1}}>{"✍"} Sign</button>
 </div>
 
-{arrived&&!departed&&!entry.liftgateApplied&&<button onClick={()=>{
-sendNotificationToDriver(0,"🔄 LIFTGATE REQUEST from "+(driver?.name||"driver")+"\nStop: "+entry.stop+"\nApply $75 liftgate charge?","liftgate_request").catch(()=>{});
+{arrived&&!departed&&!entry.liftgateApplied&&!lgReqSent[entry.id]&&<button onClick={()=>{
+setLgReqSent(p=>({...p,[entry.id]:true}));
+submitLiftgateRequest({id:genId(),entryId:entry.id,stop:entry.stop,driverId:driverId,driverName:driver?.name||"Driver",time:new Date().toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"}),status:"pending"}).catch(()=>{setLgReqSent(p=>{const n={...p};delete n[entry.id];return n;});showToast("Couldn't send — try again");});
 showToast("Liftgate request sent to dispatch");
 }} style={{width:"100%",marginTop:6,background:"#fff7ed",border:"2px solid #fed7aa",borderRadius:8,padding:"8px 12px",cursor:"pointer",fontSize:12,fontWeight:700,color:"#ea580c",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
 🔄 Liftgate Required (+$75)
 </button>}
+{arrived&&!departed&&!entry.liftgateApplied&&lgReqSent[entry.id]&&<div style={{width:"100%",marginTop:6,background:"#fef3c7",border:"1px solid #fde68a",borderRadius:8,padding:"8px 12px",textAlign:"center",fontSize:11,fontWeight:600,color:"#92400e"}}>⏳ Liftgate request sent — awaiting dispatch</div>}
 {entry.liftgateApplied&&<div style={{width:"100%",marginTop:6,background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:8,padding:"8px 12px",textAlign:"center",fontSize:11,fontWeight:600,color:"#16a34a"}}>✓ Liftgate charge approved (+$75)</div>}
 </div>
 )}
