@@ -314,15 +314,25 @@ const saveManifestDay=async(wo,sd,entries,callerDriverId,deletedIds,allowEmpty)=
          in manifestLogic.js (buildMergedEntries) so the concurrency scenarios
          can't silently regress. */
       const deduped=buildMergedEntries(current?.entries||[],entries||[],{isDriver,callerDriverId,deletedIds});
-      /* Normalize photos / signature for write — bound size, drop undefined. */
+      /* Normalize photos / signature for write. Bound the TOTAL inline base64
+         across the whole doc (not just per-photo) to a budget under Firestore's
+         ~1MiB limit — two 700KB fallback photos each pass a per-photo cap yet
+         together blow the limit and make the day PERMANENTLY unsaveable (every
+         subsequent edit then lost). Base64 is only ever a Storage-upload
+         fallback, so past the budget it degrades to a placeholder rather than
+         sinking the save. Real Storage URLs (https) are tiny and never counted. */
+      let _b64Left=700000;
       const safe=deduped.map(e=>{
         const copy={...e};
         copy.photos=(e.photos||[]).map((p,i)=>{
           if(typeof p==="string"&&(p.startsWith("https://")||p.startsWith("photo_")))return p;
-          if(typeof p==="string"&&p.startsWith("data:")&&p.length<800000)return p;
+          if(typeof p==="string"&&p.startsWith("data:")&&p.length<800000&&_b64Left-p.length>=0){_b64Left-=p.length;return p;}
           return`photo_${e.id}_${i}`;
         });
-        if(e.signature&&e.signature.startsWith&&e.signature.startsWith("data:image")&&e.signature.length>800000){copy.signature="signed";}
+        if(e.signature&&e.signature.startsWith&&e.signature.startsWith("data:image")){
+          if(e.signature.length>800000||_b64Left-e.signature.length<0){copy.signature="signed";}
+          else{_b64Left-=e.signature.length;}
+        }
         Object.keys(copy).forEach(k=>{if(copy[k]===undefined)delete copy[k];});
         return copy;
       });
@@ -438,6 +448,18 @@ const subscribeNotifications=(driverId,cb)=>{
 const markNotificationRead=async(driverId,notifId)=>{
   if(!window._fbOps)return;
   await window._fbOps.update("notifications/"+String(driverId)+"/items/"+notifId,{read:true});
+};
+/* One summary "route changed" text per affected driver (not one per stop) — the
+   bulk-reassign / route-planner paths sent nothing, so a driver kept heading to
+   stops that had been pulled off their route. perDriver: {driverId:{added:[],removed:[]}} */
+const notifyRouteChanges=(perDriver)=>{
+  const fmtList=(arr)=>arr.slice(0,8).join("\n")+(arr.length>8?"\n…+"+(arr.length-8)+" more":"");
+  Object.entries(perDriver||{}).forEach(([didStr,c])=>{
+    const did=Number(didStr);
+    if(!did||did<=0)return;
+    if(c.added&&c.added.length)sendNotificationToDriver(did,"🔄 ROUTE CHANGED\n"+c.added.length+" stop"+(c.added.length>1?"s":"")+" added to your route:\n"+fmtList(c.added),"route_change").catch(()=>{});
+    if(c.removed&&c.removed.length)sendNotificationToDriver(did,"🔄 ROUTE CHANGED\n"+c.removed.length+" stop"+(c.removed.length>1?"s":"")+" removed from your route:\n"+fmtList(c.removed),"route_change").catch(()=>{});
+  });
 };
 /* Liftgate approval channel (driver → dispatch). The driver's request must reach
    the dispatcher's approval queue; a per-driver notification never did (nobody
@@ -691,7 +713,7 @@ const _fixImetcoAddr=(e)=>{
   }
   return e;
 };
-const APP_VERSION="3.15.3";
+const APP_VERSION="3.15.4";
 const LOGO_URI="data:image/jpeg;base64,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";
 const LOGO_WHITE="data:image/jpeg;base64,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";
 
@@ -714,9 +736,17 @@ return isD;
 function getDriverSlug(name){return name.toLowerCase().split(" ")[0].replace(/[^a-z0-9]/g,"");}
 function resolveDriverSlug(slug,driversArr){
   if(!slug)return null;
-  const found=driversArr.find(d=>getDriverSlug(d.name)===slug.toLowerCase());
-  if(found)return found.id;
-  return null;
+  const s=slug.toLowerCase();
+  /* New links carry the driver id as a "firstname-<id>" suffix so two drivers
+     who share a first name resolve to the RIGHT person (a plain first-name slug
+     returns the first match — the wrong "John" gets the other John's manifest
+     and saves stamps under his id). getDriverSlug strips all non-alphanumerics,
+     so a dash in the URL can only be our id suffix. */
+  const m=s.match(/-(\d+)$/);
+  if(m){const byId=driversArr.find(d=>d.id===Number(m[1]));if(byId)return byId.id;}
+  const base=s.replace(/-\d+$/,"");
+  const found=driversArr.find(d=>getDriverSlug(d.name)===base||getDriverSlug(d.name)===s);
+  return found?found.id:null;
 }
 
 const ADDR={
@@ -1007,6 +1037,12 @@ const compressPhoto=(dataUrl,quality,maxDim)=>new Promise((resolve,reject)=>{
    idle. */
 let _weekRef=null;
 function _weekRefNow(){if(_weekRef===null)_weekRef=new Date();return _weekRef;}
+/* Default week-offset + weekday the board opens on. Mon–Fri → that weekday of the
+   current week. Sat/Sun → Monday of the UPCOMING week (wo:1), because on a
+   weekend you're prepping the next work week, not reviewing the one that ended
+   (opening on Sunday used to silently land on the PAST Monday and save stops
+   into last week's docs). */
+function _defaultWoSd(){const d=_weekRefNow().getDay();return(d>=1&&d<=5)?{wo:0,sd:d-1}:{wo:1,sd:0};}
 function _weekDayRolled(){if(_weekRef===null)return false;const n=new Date();return _weekRef.getFullYear()!==n.getFullYear()||_weekRef.getMonth()!==n.getMonth()||_weekRef.getDate()!==n.getDate();}
 function getWeekDates(off=0){const now=_weekRefNow();const d=now.getDay();const mon=new Date(now);mon.setDate(now.getDate()-(d===0?6:d-1)+off*7);return DAYS.map((name,i)=>{const dt=new Date(mon);dt.setDate(mon.getDate()+i);return{name,date:dt.toLocaleDateString("en-US",{month:"short",day:"numeric"}),iso:dt.toISOString().slice(0,10)}});}
 function getFbKey(wo,dayIdx){const now=_weekRefNow();const d=now.getDay();const mon=new Date(now);mon.setDate(now.getDate()-(d===0?6:d-1)+wo*7+dayIdx);const y=mon.getFullYear();const m=String(mon.getMonth()+1).padStart(2,'0');const dd=String(mon.getDate()).padStart(2,'0');return y+'-'+m+'-'+dd;}
@@ -2752,8 +2788,8 @@ function lsSet(key,val){try{localStorage.setItem(key,JSON.stringify(val));}catch
 
 function DispatchApp(){
 const isDesktop=useIsDesktop();
-const[wo,setWo]=useState(0);
-const[sd,setSd]=useState(()=>{const d=_weekRefNow().getDay();return d>=1&&d<=5?d-1:0;});
+const[wo,setWo]=useState(()=>_defaultWoSd().wo);
+const[sd,setSd]=useState(()=>_defaultWoSd().sd);
 const[log,_rawSetLog]=useState({});
 const dirtyDaysRef=useRef(new Set());
 const saveCooldownRef=useRef(new Set());
@@ -4571,6 +4607,11 @@ const vanishedBulk=vanishedAutoPickups(p[dk]||[],all);
 if(vanishedBulk.length)tombstone(vanishedBulk);
 return{...p,[dk]:all};
 });
+/* Alert affected drivers — bulk moves previously sent nothing, so a driver kept
+   driving toward stops that were pulled off their route. */
+const _per={};
+eids.forEach(eid=>{const e=dl.find(x=>x.id===eid);if(!e||e.driverId===did||e.stopType==="pickup")return;const lbl=e.stop+(e.customer?" ("+e.customer+")":"");if(did>0)(_per[did]=_per[did]||{added:[],removed:[]}).added.push(lbl);if(e.driverId>0)(_per[e.driverId]=_per[e.driverId]||{added:[],removed:[]}).removed.push(lbl);});
+notifyRouteChanges(_per);
 };
 const assignInOrder=(eid,did,loadNum)=>{
 const entry=dl.find(e=>e.id===eid);
@@ -4599,6 +4640,7 @@ if(entry.driverId===did){
     return{...p,[dk]:all};
   });
   showToast(siblings.length>1?`Removed ${siblings.length} stops`:"Removed from route");
+  if(entry.driverId>0){const _rem=siblings.filter(s=>s.stopType!=="pickup").map(s=>s.stop+(s.customer?" ("+s.customer+")":""));if(_rem.length)notifyRouteChanges({[entry.driverId]:{added:[],removed:_rem}});}
   return;
 }
 writeAuditLog({action:"reassign",customer:entry.customer,stop:entry.stop,driverId:did,details:driverName(entry.driverId)+" → "+driverName(did)+(loadNum?" (Load "+loadNum+")":"")+(siblings.length>1?" ("+siblings.length+" stops)":"")});
@@ -4626,6 +4668,7 @@ setLog(p=>{
   return{...p,[dk]:all};
 });
 showToast(siblings.length>1?`${siblings.length} stops added to route`:"Stop #"+(dl.filter(e=>e.driverId===did).length+1)+" added"+(loadNum>1?" (Load "+loadNum+")":""));
+{const _lbls=siblings.filter(s=>s.stopType!=="pickup").map(s=>s.stop+(s.customer?" ("+s.customer+")":""));const _per={};if(did>0&&_lbls.length)_per[did]={added:_lbls,removed:[]};if(entry.driverId>0&&_lbls.length)_per[entry.driverId]={added:[],removed:_lbls};notifyRouteChanges(_per);}
 };
 const updateInstructions=(eid,text)=>{const e=dl.find(x=>x.id===eid);const oldT=e?.instructions||"";if(e&&oldT!==text){writeAuditLog({action:"instruction_change",customer:e.customer,stop:e.stop,driverId:e.driverId,details:(oldT?"was: "+(oldT.length>60?oldT.slice(0,60)+"…":oldT)+" | ":"")+"now: "+(text.length>60?text.slice(0,60)+"…":text)});}setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,instructions:text}:e)}));};
 const updateRate=(eid,rate)=>{const e=dl.find(x=>x.id===eid);const typedTotal=parseFloat(rate)||0;
@@ -5495,13 +5538,19 @@ const importBackup=(file)=>{
       setLog(prev=>{
         const merged={...prev};
         let count=0;
+        let skipped=0;
         Object.entries(data.manifests).forEach(([key,entries])=>{
+          /* Backup keys are RELATIVE to when the backup was taken. Only its
+             current week (0-0..0-4) re-bases cleanly onto today's week; its
+             other weeks would land old data on the wrong calendar dates, so
+             skip them rather than scatter/overwrite unrelated days. */
+          if(!/^0-[0-4]$/.test(key)){if(entries&&entries.length)skipped++;return;}
           if(entries&&entries.length>0&&(!merged[key]||merged[key].length===0)){
             merged[key]=entries;
             count++;
           }
         });
-        showToast(count>0?`Restored ${count} days from backup`:"No new data to restore");
+        showToast(count>0?`Restored ${count} day(s) onto this week`+(skipped?` — ${skipped} older day(s) skipped`:""):"No empty days to fill this week");
         return merged;
       });
       if(data.emserHours)setEmH(prev=>({...prev,...data.emserHours}));
@@ -5536,13 +5585,17 @@ const restoreAutoBackup=(snap)=>{
     setLog(prev=>{
       const merged={...prev};
       let count=0;
+      let skipped=0;
       Object.entries(manifests).forEach(([key,entries])=>{
+        /* Only the backup's current week (0-0..0-4) re-bases onto today; other
+           weeks would scatter onto wrong dates — skip them. */
+        if(!/^0-[0-4]$/.test(key)){if(entries&&entries.length)skipped++;return;}
         if(entries&&entries.length>0&&(!merged[key]||merged[key].length===0)){
           merged[key]=entries;
           count++;
         }
       });
-      showToast(count>0?`Restored ${count} days from auto-backup`:"No empty days to fill — no changes made");
+      showToast(count>0?`Restored ${count} day(s) onto this week`+(skipped?` — ${skipped} older day(s) skipped`:""):"No empty days to fill — no changes made");
       return merged;
     });
     setShowAutoBackups(false);
@@ -5840,7 +5893,7 @@ return(
 {cnt>0&&<span style={{position:"absolute",top:2,right:4,width:5,height:5,borderRadius:3,background:sd===i?"#fff":"#16a34a"}}/>}
 </button>);})}
 <button onClick={()=>setWo(w=>w+1)} style={{background:"transparent",border:"none",color:"#78716c",borderRadius:7,padding:"4px 10px",cursor:"pointer",fontSize:12}}>{"\u25B6"}</button>
-{wo!==0&&<button onClick={()=>{setWo(0);setSd(()=>{const d=_weekRefNow().getDay();return d>=1&&d<=5?d-1:0;});}} style={{background:"#16a34a",border:"none",borderRadius:7,padding:"4px 14px",cursor:"pointer",fontSize:11,fontWeight:600,color:"#fff",marginLeft:2}}>Today</button>}
+{wo!==0&&<button onClick={()=>{{const _dws=_defaultWoSd();setWo(_dws.wo);setSd(_dws.sd);}}} style={{background:"#16a34a",border:"none",borderRadius:7,padding:"4px 14px",cursor:"pointer",fontSize:11,fontWeight:600,color:"#fff",marginLeft:2}}>Today</button>}
 </div>
 </div>
 <div style={_s.flexC10}>
@@ -6048,6 +6101,8 @@ setLog(p=>{
   if(vanished.length)tombstone(vanished);
   return{...p,[dk]:all};
 });
+/* Alert drivers whose routes the planner changed (added/removed stops). */
+{const _afterOf={};Object.entries(rpOrders).forEach(([did,ids])=>ids.forEach(id=>{_afterOf[id]=Number(did);}));const _roster=new Set(drivers.map(d=>d.id));const _per={};dl.forEach(e=>{if(e.stopType==="pickup")return;let nd=_afterOf[e.id];if(nd===undefined)nd=(e.driverId===0||_roster.has(e.driverId))?0:e.driverId;if(nd===e.driverId)return;const lbl=e.stop+(e.customer?" ("+e.customer+")":"");if(nd>0)(_per[nd]=_per[nd]||{added:[],removed:[]}).added.push(lbl);if(e.driverId>0)(_per[e.driverId]=_per[e.driverId]||{added:[],removed:[]}).removed.push(lbl);});notifyRouteChanges(_per);}
 showToast("Routes applied");
 setView("manifest");
 setRpInited(false);
@@ -7586,7 +7641,7 @@ onAssignStop={mapActiveDrv?(stopId,drvId)=>{assignInOrder(stopId,mapActiveDrv,ma
 </div>:<>
 <div style={_s.f1}><div style={{fontSize:15,fontWeight:600}}>{d.name}{d.active===false&&<span style={{fontSize:9,marginLeft:6,padding:"1px 6px",borderRadius:4,background:"#f5f5f4",color:"#78716c",fontWeight:700,letterSpacing:"0.04em"}}>HIDDEN</span>}</div>{d.phone&&<div style={_s.sub11}>{d.phone}</div>}</div>
 <button onClick={()=>setDriverActive(d.id,d.active===false)} title={d.active===false?"Show this driver in the current fleet":"Hide from daily assignment UI (history preserved)"} style={{background:d.active===false?"#f5f5f4":"#dcfce7",border:"1px solid "+(d.active===false?"#d6d3d1":"#86efac"),borderRadius:999,padding:"3px 10px",cursor:"pointer",fontSize:10,fontWeight:700,color:d.active===false?"#78716c":"#166534",display:"flex",alignItems:"center",gap:4}}><span style={{width:8,height:8,borderRadius:999,background:d.active===false?"#a8a29e":"#16a34a"}}/>{d.active===false?"OFF":"ON"}</button>
-<button onClick={()=>{const slug=getDriverSlug(d.name);const url=`${window.location.origin}${window.location.pathname}#/driver/${slug}`;setShowLinkModal({name:d.name,url,phone:d.phone||""});}} style={{background:"#f0fdf4",border:"none",borderRadius:6,padding:"4px 8px",cursor:"pointer",fontSize:10,fontWeight:600,color:"#16a34a"}}>🔗 Link</button>
+<button onClick={()=>{const slug=getDriverSlug(d.name)+"-"+d.id;const url=`${window.location.origin}${window.location.pathname}#/driver/${slug}`;setShowLinkModal({name:d.name,url,phone:d.phone||""});}} style={{background:"#f0fdf4",border:"none",borderRadius:6,padding:"4px 8px",cursor:"pointer",fontSize:10,fontWeight:600,color:"#16a34a"}}>🔗 Link</button>
 <button onClick={()=>setDriverViewId(d.id)} style={{background:"#eff6ff",border:"none",borderRadius:6,padding:"4px 8px",cursor:"pointer",fontSize:10,fontWeight:600,color:"#2563eb"}}>View</button>
 <button onClick={()=>{setEditDrv(d.id);setEditNm(d.name);setEditPh(d.phone||"");}} style={{background:"#f5f5f4",border:"none",borderRadius:6,padding:"4px 10px",cursor:"pointer",fontSize:12}}>Edit</button>
 {drivers.length>1&&<button onClick={()=>rmDrv(d.id)} style={{background:"#fef2f2",border:"none",borderRadius:6,padding:"4px 10px",cursor:"pointer",fontSize:12,color:"#dc2626"}}>✕</button>}
@@ -8251,7 +8306,7 @@ return(
 <div style={_s.flexC6}>
 <span style={{fontSize:13,color:"#a8a29e",fontVariantNumeric:"tabular-nums"}}>{wo===0?"This Week":wo===-1?"Last Week":wo===1?"Next Week":`${wo>0?"+":""}${wo}w`}</span>
 <button onClick={()=>setShowDatePicker(!showDatePicker)} style={{background:showDatePicker?"#f5f5f4":"#44403c",border:"none",borderRadius:6,padding:"3px 8px",cursor:"pointer",fontSize:10,fontWeight:600,color:showDatePicker?"#1c1917":"#d6d3d1"}}>📅</button>
-{wo!==0&&<button onClick={()=>{setWo(0);setSd(()=>{const d=_weekRefNow().getDay();return d>=1&&d<=5?d-1:0;});}} style={{background:"#44403c",border:"none",borderRadius:6,padding:"3px 8px",cursor:"pointer",fontSize:10,fontWeight:600,color:"#d6d3d1"}}>Today</button>}
+{wo!==0&&<button onClick={()=>{{const _dws=_defaultWoSd();setWo(_dws.wo);setSd(_dws.sd);}}} style={{background:"#44403c",border:"none",borderRadius:6,padding:"3px 8px",cursor:"pointer",fontSize:10,fontWeight:600,color:"#d6d3d1"}}>Today</button>}
 </div>
 <button onClick={()=>setWo(w=>w+1)} style={NB}>▶</button>
 </div>
@@ -8344,7 +8399,7 @@ style={{marginTop:8,width:"100%",display:"flex",alignItems:"center",justifyConte
 </>}
 </div>
 {editDrv!==d.id&&<div style={{display:"flex",gap:6,paddingLeft:22}}>
-<button onClick={()=>{const slug=getDriverSlug(d.name);const url=`${window.location.origin}${window.location.pathname}#/driver/${slug}`;setShowLinkModal({name:d.name,url,phone:d.phone||""});}} style={{flex:1,background:"#f0fdf4",border:"none",borderRadius:6,padding:"6px 4px",cursor:"pointer",fontSize:11,fontWeight:600,color:"#16a34a"}}>🔗 Link</button>
+<button onClick={()=>{const slug=getDriverSlug(d.name)+"-"+d.id;const url=`${window.location.origin}${window.location.pathname}#/driver/${slug}`;setShowLinkModal({name:d.name,url,phone:d.phone||""});}} style={{flex:1,background:"#f0fdf4",border:"none",borderRadius:6,padding:"6px 4px",cursor:"pointer",fontSize:11,fontWeight:600,color:"#16a34a"}}>🔗 Link</button>
 <button onClick={()=>setDriverViewId(d.id)} style={{flex:1,background:"#eff6ff",border:"none",borderRadius:6,padding:"6px 4px",cursor:"pointer",fontSize:11,fontWeight:600,color:"#2563eb"}}>View</button>
 <button onClick={()=>{setEditDrv(d.id);setEditNm(d.name);setEditPh(d.phone||"");}} style={{flex:1,background:"#f5f5f4",border:"none",borderRadius:6,padding:"6px 4px",cursor:"pointer",fontSize:11,fontWeight:600}}>Edit</button>
 {drivers.length>1&&<button onClick={()=>rmDrv(d.id)} style={{background:"#fef2f2",border:"none",borderRadius:6,padding:"6px 12px",cursor:"pointer",fontSize:11,fontWeight:600,color:"#dc2626"}}>✕</button>}
@@ -10011,8 +10066,8 @@ style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,width:"
 );
 }
 function DriverPage({driverSlug}){
-const[wo,setWo]=useState(0);
-const[sd,setSd]=useState(()=>{const d=_weekRefNow().getDay();return d>=1&&d<=5?d-1:0;});
+const[wo,setWo]=useState(()=>_defaultWoSd().wo);
+const[sd,setSd]=useState(()=>_defaultWoSd().sd);
 const[log,setLog]=useState({});
 const[toast,setToast]=useState(null);
 const[pinEntry,setPinEntry]=useState("");
@@ -10041,7 +10096,7 @@ const entries=driverId?dl.filter(e=>e.driverId===driverId):[];
 useEffect(()=>{
   const unsubDrivers=subscribeDrivers((fbDrivers)=>{
     if(fbDrivers.length>0){
-      const stillExists=fbDrivers.find(d=>getDriverSlug(d.name)===driverSlug.toLowerCase());
+      const stillExists=fbDrivers.find(d=>d.id===resolveDriverSlug(driverSlug,fbDrivers));
       if(stillExists){
         setAllDrivers(fbDrivers);
       } else {
@@ -10074,7 +10129,12 @@ useEffect(()=>{
           return e;
         });
         const localEnts=prev[lk]||[];
-        if(Date.now()-drvSaveTime.current<3000)return;
+        /* Do NOT blanket-drop snapshots for 3s after a driver save — that also
+           discarded a dispatcher's concurrent add/reassign, which Firestore
+           never re-delivers, so the new stop stayed invisible. The merge below
+           is idempotent (only updates when the result differs from local) and
+           forward-only via _mergeEntryDriver, so the driver's own echo is a
+           no-op while a real remote change still comes through. */
         /* Map over FIREBASE entries: the dispatcher is the source of truth for
            the driver's stop ORDER and stop SET (a driver never adds or reorders
            stops), so every Firebase stop is carried through in Firebase order
