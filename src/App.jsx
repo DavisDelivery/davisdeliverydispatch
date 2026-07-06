@@ -1929,6 +1929,24 @@ return(
 );
 }
 
+/* Compact Arrived→Departed progress track + on-site timer for a stop card.
+   Renders only once a stop is arrived/departed (pending stops stay clean). A
+   stop on site 30 min+ with no departure gets a red "not departed" flag — the
+   case that used to hide among same-size timestamp chips. */
+function StopStatus({entry}){
+  const arrived=entry&&(entry.status==="arrived"||entry.status==="departed");
+  if(!arrived)return null;
+  const departed=entry.status==="departed";
+  const mins=_onSiteMins(entry);
+  const bead=(on,now)=>({width:15,height:15,borderRadius:8,display:"grid",placeItems:"center",fontSize:8,fontWeight:800,flexShrink:0,border:"2px solid "+(on?"#16a34a":now?"#d97706":"#e7e5e4"),background:on?"#16a34a":now?"#fff7ed":"#fff",color:on?"#fff":now?"#c2650a":"#a8a29e",lineHeight:1});
+  return(<div style={{display:"flex",alignItems:"center",gap:5,marginTop:4,flexWrap:"wrap"}}>
+    <span style={bead(true,false)}>{"\u2713"}</span>
+    <div style={{width:46,height:3,borderRadius:2,background:departed?"#16a34a":"repeating-linear-gradient(90deg,#f2cf9c,#f2cf9c 4px,transparent 4px,transparent 8px)"}}/>
+    <span style={bead(departed,!departed)}>{departed?"\u2713":"\u2022"}</span>
+    <span style={{fontSize:10,fontWeight:700,color:departed?"#16a34a":"#c2650a",fontVariantNumeric:"tabular-nums"}}>{departed?("Departed "+(entry.departedAt||"")):("On site"+(mins>=1?" "+mins+" min":(entry.arrivedAt?" \u00b7 "+entry.arrivedAt:"")))}</span>
+    {!departed&&mins>=30&&<span style={{fontSize:9.5,fontWeight:700,color:"#c4342a",background:"#fdeeec",border:"1px solid #f2c4bf",borderRadius:6,padding:"2px 7px"}}>{"\u23f1"} not departed</span>}
+  </div>);
+}
 function ManifestStop({entry,eIdx,total,drivers,onMove,onReassign,onRemove,onDelete,onUpdateInstructions,onShipPlan,onRefNum,onDueBy,onWeight,onLoadNum,onRate,maxLoad,onDragStart,onDragOver,onDrop,isDragOver,isDragging,onLiftgate,onRemoveLiftgate,onSplit,onToggleFuel,driverLoadCounts,onPhotoClick,onSetPickup}){
 const[expanded,setExpanded]=useState(false);const[instrText,setInstrText]=useState(entry.instructions||"");const[dueByInput,setDueByInput]=useState(entry.dueBy||"");const[dueType,setDueType]=useState(entry.dueBy?(entry.dueBy.startsWith("After")?"after":"by"):"by");const[lastHour,setLastHour]=useState(()=>{if(entry.dueBy){const m=entry.dueBy.match(/(\d+(?::\d+)?\s*[AP]M)/);return m?m[1].replace(/:\d+/,""):""}return "";});
 const[showAssign,setShowAssign]=useState(false);
@@ -1996,11 +2014,8 @@ style={{flex:1,minWidth:140,border:"1px solid #e7e5e4",borderRadius:6,padding:"3
   </div>);
 })()}
 
-{(entry.arrivedAt||entry.departedAt||entry.eta)&&!expanded&&<div style={{display:"flex",gap:4,flexWrap:"wrap",marginTop:4}}>
-{entry.arrivedAt&&<span style={{fontSize:9,fontWeight:700,color:"#16a34a",background:"#f0fdf4",padding:"2px 6px",borderRadius:4,border:"1px solid #bbf7d0"}}>📍 {entry.arrivedAt}</span>}
-{entry.departedAt&&<span style={{fontSize:9,fontWeight:700,color:"#16a34a",background:"#dcfce7",padding:"2px 6px",borderRadius:4,border:"1px solid #86efac"}}>✅ {entry.departedAt}</span>}
-{entry.eta&&<span style={{fontSize:9,fontWeight:700,color:"#2563eb",background:"#eff6ff",padding:"2px 6px",borderRadius:4,border:"1px solid #bfdbfe"}}>🚚 {fmtEta(entry.eta,entry.etaSetAt)}{entry.etaDest?" → "+entry.etaDest.split(" - ")[0]:""}</span>}
-</div>}
+{!expanded&&<StopStatus entry={entry}/>}
+{entry.eta&&!expanded&&<div style={{display:"flex",gap:4,flexWrap:"wrap",marginTop:4}}><span style={{fontSize:9,fontWeight:700,color:"#2563eb",background:"#eff6ff",padding:"2px 6px",borderRadius:4,border:"1px solid #bfdbfe"}}>🚚 {fmtEta(entry.eta,entry.etaSetAt)}{entry.etaDest?" → "+entry.etaDest.split(" - ")[0]:""}</span></div>}
 
 {(entry.photos?.length>0||entry.signature)&&!expanded&&<div style={{display:"flex",flexDirection:"column",gap:3,marginTop:3}}>
 <div style={{display:"flex",gap:4}}>
@@ -7289,6 +7304,7 @@ style={{background:isDrgOver?"#dcfce7":isDrgSrc?"#fef9c3":done?"#f0fdf4":onSite?
 </div>
 <div style={{fontSize:14,fontWeight:700,color:"#1c1917",marginTop:2}}>{entry.stop}</div>
 {addr&&<div style={{fontSize:11,color:"#57534e",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:1}}>{addr}</div>}
+<StopStatus entry={entry}/>
 <div style={{display:"flex",alignItems:"center",gap:6,marginTop:2,flexWrap:"wrap"}}>
 {entry.weight>0&&<span style={{fontSize:11,color:BRAND.main,fontWeight:700}}>{entry.weight.toLocaleString()} lbs{(entry.loadNum||1)>1?" (Load "+(entry.loadNum||1)+")":""}</span>}
 {(()=>{const isPU=entry.stopType==="pickup";const isManualPU=isPU&&entry.manualPickup;const pf=entry.pickupFrom;const cust=entry.customer;if(!cust&&!pf)return null;/* Label & display vary by stop type:
@@ -7381,6 +7397,7 @@ style={{background:isDrgOver?"#dcfce7":isDrgSrc?"#fef9c3":done?"#f0fdf4":onSite?
 </div>
 <div style={{fontSize:14,fontWeight:700,color:"#1c1917",marginTop:2}}>{entry.stop}</div>
 {addr&&<div style={{fontSize:11,color:"#57534e",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:1}}>{addr}</div>}
+<StopStatus entry={entry}/>
 <div style={{display:"flex",alignItems:"center",gap:6,marginTop:2,flexWrap:"wrap"}}>
 {entry.weight>0&&<span style={{fontSize:11,color:BRAND.main,fontWeight:700}}>{entry.weight.toLocaleString()} lbs</span>}
 {(()=>{const isPU=entry.stopType==="pickup";const isManualPU=isPU&&entry.manualPickup;const pf=entry.pickupFrom;const cust=entry.customer;if(!cust&&!pf)return null;/* Label & display vary by stop type:
