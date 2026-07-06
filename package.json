@@ -1,7 +1,7 @@
 {
   "name": "davis-delivery-dispatch",
   "private": true,
-  "version": "3.15.4-ui-triage",
+  "version": "3.15.7-ui-density",
   "scripts": {
     "dev": "vite",
     "build": "vite build",

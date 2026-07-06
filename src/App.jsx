@@ -1933,12 +1933,13 @@ return(
    Renders only once a stop is arrived/departed (pending stops stay clean). A
    stop on site 30 min+ with no departure gets a red "not departed" flag — the
    case that used to hide among same-size timestamp chips. */
-function StopStatus({entry}){
+function StopStatus({entry,compact}){
   const arrived=entry&&(entry.status==="arrived"||entry.status==="departed");
   if(!arrived)return null;
   const departed=entry.status==="departed";
   const mins=_onSiteMins(entry);
   const bead=(on,now)=>({width:15,height:15,borderRadius:8,display:"grid",placeItems:"center",fontSize:8,fontWeight:800,flexShrink:0,border:"2px solid "+(on?"#16a34a":now?"#d97706":"#e7e5e4"),background:on?"#16a34a":now?"#fff7ed":"#fff",color:on?"#fff":now?"#c2650a":"#a8a29e",lineHeight:1});
+  if(compact)return(<div style={{marginTop:2,fontSize:9.5,fontWeight:700,fontVariantNumeric:"tabular-nums",display:"flex",alignItems:"center",gap:5,color:departed?"#16a34a":"#c2650a"}}><span style={{width:6,height:6,borderRadius:4,flexShrink:0,background:departed?"#16a34a":"#d97706"}}/>{departed?("Departed "+(entry.departedAt||"")):("On site"+(mins>=1?" "+mins+"m":""))}{!departed&&mins>=30&&<span style={{color:"#c4342a"}}>{" \u23f1 30m+"}</span>}</div>);
   return(<div style={{display:"flex",alignItems:"center",gap:5,marginTop:4,flexWrap:"wrap"}}>
     <span style={bead(true,false)}>{"\u2713"}</span>
     <div style={{width:46,height:3,borderRadius:2,background:departed?"#16a34a":"repeating-linear-gradient(90deg,#f2cf9c,#f2cf9c 4px,transparent 4px,transparent 8px)"}}/>
@@ -1947,7 +1948,7 @@ function StopStatus({entry}){
     {!departed&&mins>=30&&<span style={{fontSize:9.5,fontWeight:700,color:"#c4342a",background:"#fdeeec",border:"1px solid #f2c4bf",borderRadius:6,padding:"2px 7px"}}>{"\u23f1"} not departed</span>}
   </div>);
 }
-function ManifestStop({entry,eIdx,total,drivers,onMove,onReassign,onRemove,onDelete,onUpdateInstructions,onShipPlan,onRefNum,onDueBy,onWeight,onLoadNum,onRate,maxLoad,onDragStart,onDragOver,onDrop,isDragOver,isDragging,onLiftgate,onRemoveLiftgate,onSplit,onToggleFuel,driverLoadCounts,onPhotoClick,onSetPickup}){
+function ManifestStop({entry,eIdx,total,drivers,onMove,onReassign,onRemove,onDelete,onUpdateInstructions,onShipPlan,onRefNum,onDueBy,onWeight,onLoadNum,onRate,maxLoad,onDragStart,onDragOver,onDrop,isDragOver,isDragging,onLiftgate,onRemoveLiftgate,onSplit,onToggleFuel,driverLoadCounts,onPhotoClick,onSetPickup,compact}){
 const[expanded,setExpanded]=useState(false);const[instrText,setInstrText]=useState(entry.instructions||"");const[dueByInput,setDueByInput]=useState(entry.dueBy||"");const[dueType,setDueType]=useState(entry.dueBy?(entry.dueBy.startsWith("After")?"after":"by"):"by");const[lastHour,setLastHour]=useState(()=>{if(entry.dueBy){const m=entry.dueBy.match(/(\d+(?::\d+)?\s*[AP]M)/);return m?m[1].replace(/:\d+/,""):""}return "";});
 const[showAssign,setShowAssign]=useState(false);
 const getInitials=(name)=>{const parts=name.split(" ");return parts.length>=2?(parts[0][0]+parts[1][0]).toUpperCase():name.slice(0,2).toUpperCase();};
@@ -1960,7 +1961,7 @@ const c=CC[entry.customer]||CC["One-Off Delivery"];const addr=entry.addr||getAdd
 return(
 <div data-drv={entry.driverId} data-idx={eIdx}>
 <div onDragOver={e=>{e.preventDefault();onDragOver();}} onDrop={onDrop}
-style={{display:"flex",alignItems:"center",gap:6,padding:"8px",marginBottom:expanded||isImetco||isCrossv?0:2,background:isDragOver?"#dcfce7":isDragging?"#fef9c3":hasDue?"#fef2f2":isPU?"#eff6ff":isP?"#fef3c7":"#fafaf9",border:isDragOver?"2px dashed #16a34a":`1px solid ${hasDue?"#fca5a5":isPU?"#bfdbfe":isP?"#fde68a":"#e7e5e4"}`,borderRadius:expanded||isImetco||isCrossv?"10px 10px 0 0":10,borderLeft:`4px solid ${isPU?"#2563eb":isP?"#f59e0b":c.accent}`,opacity:isDragging?0.5:1,transition:"background 0.15s,opacity 0.15s"}}>
+style={{display:"flex",alignItems:"center",gap:6,padding:compact?"5px 8px":"8px",marginBottom:expanded||isImetco||isCrossv?0:(compact?1:2),background:isDragOver?"#dcfce7":isDragging?"#fef9c3":hasDue?"#fef2f2":isPU?"#eff6ff":isP?"#fef3c7":"#fafaf9",border:isDragOver?"2px dashed #16a34a":`1px solid ${hasDue?"#fca5a5":isPU?"#bfdbfe":isP?"#fde68a":"#e7e5e4"}`,borderRadius:expanded||isImetco||isCrossv?"10px 10px 0 0":10,borderLeft:`4px solid ${isPU?"#2563eb":isP?"#f59e0b":c.accent}`,opacity:isDragging?0.5:1,transition:"background 0.15s,opacity 0.15s"}}>
 
 <div style={{display:"flex",flexDirection:"column",gap:1,flexShrink:0}}>
 <button draggable onDragStart={onDragStart} onClick={e=>{e.stopPropagation();onMove(-1);}} disabled={eIdx===0} style={{background:eIdx===0?"#f5f5f4":"#e7e5e4",border:"none",borderRadius:4,padding:"4px 6px",cursor:eIdx===0?"default":"pointer",fontSize:10,color:eIdx===0?"#d6d3d1":"#57534e",fontWeight:700,lineHeight:1}}>▲</button>
@@ -1977,8 +1978,8 @@ style={{display:"flex",alignItems:"center",gap:6,padding:"8px",marginBottom:expa
 {hasDue&&<span style={{fontSize:9,background:entry.dueBy.includes("-")?"#7c3aed":entry.dueBy.startsWith("After")?"#2563eb":"#dc2626",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700,display:"inline-flex",alignItems:"center",gap:2}}>{"\u23F0"} {entry.dueBy}</span>}
 {entry.pickupDueBy&&<span style={{fontSize:9,background:"#16a34a",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700,display:"inline-flex",alignItems:"center",gap:2}}>{"📦"} {entry.pickupDueBy}</span>}
 </div>
-<div style={{fontSize:14,fontWeight:700,color:"#1c1917",marginTop:2}}>{entry.stop}</div>
-{addr&&<div style={{fontSize:12,color:"#57534e",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{addr}</div>}
+<div style={{fontSize:compact?13:14,fontWeight:700,color:"#1c1917",marginTop:compact?0:2}}>{entry.stop}</div>
+{addr&&!compact&&<div style={{fontSize:12,color:"#57534e",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{addr}</div>}
 {entry.note&&<div style={{fontSize:10,color:"#a8a29e"}}>{entry.note}</div>}
 {hasI&&!expanded&&<div style={{fontSize:10,color:"#2563eb",marginTop:2}}>📋 {entry.instructions}</div>}
 {!expanded&&<div style={{display:"flex",gap:6,alignItems:"center",marginTop:4,flexWrap:"wrap"}} onClick={e=>e.stopPropagation()}>
@@ -2014,7 +2015,7 @@ style={{flex:1,minWidth:140,border:"1px solid #e7e5e4",borderRadius:6,padding:"3
   </div>);
 })()}
 
-{!expanded&&<StopStatus entry={entry}/>}
+{!expanded&&<StopStatus entry={entry} compact={compact}/>}
 {entry.eta&&!expanded&&<div style={{display:"flex",gap:4,flexWrap:"wrap",marginTop:4}}><span style={{fontSize:9,fontWeight:700,color:"#2563eb",background:"#eff6ff",padding:"2px 6px",borderRadius:4,border:"1px solid #bfdbfe"}}>🚚 {fmtEta(entry.eta,entry.etaSetAt)}{entry.etaDest?" → "+entry.etaDest.split(" - ")[0]:""}</span></div>}
 
 {(entry.photos?.length>0||entry.signature)&&!expanded&&<div style={{display:"flex",flexDirection:"column",gap:3,marginTop:3}}>
@@ -3138,6 +3139,8 @@ const[mapActiveLoad,setMapActiveLoad]=useState(1); /* which load number for clic
 const[driverLocs,setDriverLocs]=useState({}); /* {driverId: {lat,lng,updatedAt}} */
 const[gpsEnabled,setGpsEnabled]=useState(()=>{try{const s=localStorage.getItem("gpsEnabled");return s?JSON.parse(s):{1:true,2:true,3:true,4:true};}catch{return{1:true,2:true,3:true,4:true};}}); /* per-driver Motive GPS toggle */
 const toggleGps=(driverId)=>setGpsEnabled(prev=>{const next={...prev,[driverId]:!prev[driverId]};try{localStorage.setItem("gpsEnabled",JSON.stringify(next));}catch{}return next;});
+const[uiCompact,setUiCompact]=useState(()=>lsGet("dd_ui_compact",false)); /* density toggle: compact vs comfortable board */
+const toggleCompact=()=>setUiCompact(p=>{const n=!p;lsSet("dd_ui_compact",n);return n;});
 const[invoices,setInvoices]=useState([]);
 const[showInvoice,setShowInvoice]=useState(null); /* customer name to generate invoice for */
 
@@ -5857,7 +5860,7 @@ const allDriverEntries=drivers.map((drv,di)=>({drv,di,entries:drvEntries(drv.id)
    departed / amber on-site / grey pending) plus a stuck-stop line if any stop is
    on site 30 min+. Complements the existing capacity bars below it. */
 const renderDriverStatus=(de)=>{
-  const total=de.length; if(!total)return null;
+  const total=de.length; if(!total)return null; if(uiCompact)return null;
   const done=de.filter(e=>e.status==="departed").length;
   const stuck=de.filter(e=>e.stopType!=="pickup"&&_onSiteMins(e)>=30).sort((a,b)=>_onSiteMins(b)-_onSiteMins(a));
   return(<div style={{padding:"2px 4px 6px"}}>
@@ -7194,7 +7197,7 @@ return<div style={{fontSize:20,fontWeight:700,color:"#1c1917"}}>✍ {sig}</div>;
 <div style={{background:"#fff",borderRight:"1px solid #e7e5e4",overflowY:"auto",padding:"16px"}}>
 <div style={_s.flexBtwMb12}>
 <h2 style={{margin:0,fontSize:15,fontWeight:700}}>Manifests</h2>
-<button onClick={()=>{setView("add");setSelCust(null);setQuoteMode(null);}} style={{background:"#16a34a",border:"none",borderRadius:6,padding:"5px 14px",cursor:"pointer",fontSize:11,fontWeight:600,color:"#fff"}}>+ Add</button>
+<div style={{display:"flex",gap:6,alignItems:"center"}}><button onClick={toggleCompact} title="Compact density" style={{background:uiCompact?"#1e5b92":"#f5f5f4",color:uiCompact?"#fff":"#57534e",border:"1px solid "+(uiCompact?"#1e5b92":"#e7e5e4"),borderRadius:6,padding:"5px 10px",cursor:"pointer",fontSize:11,fontWeight:700,whiteSpace:"nowrap"}}>{uiCompact?"\u2611":"\u2610"} Compact</button><button onClick={()=>{setView("add");setSelCust(null);setQuoteMode(null);}} style={{background:"#16a34a",border:"none",borderRadius:6,padding:"5px 14px",cursor:"pointer",fontSize:11,fontWeight:600,color:"#fff"}}>+ Add</button></div>
 </div>
 
 {!editingNote?<div onClick={()=>{setEditingNote(true);setNoteText(dispNotes[emDk]||"");}} style={{background:dispNotes[emDk]?"#faf5ff":"#fafaf9",border:dispNotes[emDk]?"1px solid #d8b4fe":"1px dashed #d6d3d1",borderRadius:10,padding:"8px 12px",marginBottom:12,cursor:"pointer",minHeight:32,display:"flex",alignItems:"flex-start",gap:8}}>
@@ -7215,7 +7218,7 @@ style={{width:"100%",border:"1px solid #d8b4fe",borderRadius:8,padding:"8px 10px
 
 {renderTriageBar()}
 {allDriverEntries.map(({drv,di,entries:de})=>(
-<div key={drv.id} style={{marginBottom:12}}>
+<div key={drv.id} style={{marginBottom:uiCompact?6:12}}>
 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 12px",background:"#f5f5f4",borderRadius:"10px 10px 0 0",borderLeft:`3px solid ${DCOL[di]}`}}>
 <div style={_s.flexC8}>
 <div style={{width:24,height:24,borderRadius:8,background:DCOL[di],display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,color:"#fff",fontWeight:700}}>{drv.name.charAt(0)}</div>
@@ -7305,7 +7308,7 @@ return(<div key={entry.id}>
 <div draggable onDragStart={()=>setDragSrc({drvId:drv.id,idx:eIdx,id:entry.id})}
 onDragOver={ev=>{ev.preventDefault();setDragOver({drvId:drv.id,idx:eIdx});}}
 onDrop={()=>handleDrop(drv.id,eIdx)}
-style={{background:isDrgOver?"#dcfce7":isDrgSrc?"#fef9c3":done?"#f0fdf4":onSite?"#fffbeb":hasDue?"#fef2f2":isP?"#fef3c7":isPU?"#eff6ff":"#fff",border:isDrgOver?"2px dashed #16a34a":`1px solid ${done?"#bbf7d0":onSite?"#fde68a":hasDue?"#fca5a5":"#e7e5e4"}`,borderRadius:8,padding:"8px 10px",marginBottom:0,borderLeft:`3px solid ${isPU?"#2563eb":isP?"#f59e0b":c.accent}`,opacity:isDrgSrc?0.4:done?0.6:1,cursor:"grab",transition:"background 0.1s"}}>
+style={{background:isDrgOver?"#dcfce7":isDrgSrc?"#fef9c3":done?"#f0fdf4":onSite?"#fffbeb":hasDue?"#fef2f2":isP?"#fef3c7":isPU?"#eff6ff":"#fff",border:isDrgOver?"2px dashed #16a34a":`1px solid ${done?"#bbf7d0":onSite?"#fde68a":hasDue?"#fca5a5":"#e7e5e4"}`,borderRadius:8,padding:uiCompact?"4px 8px":"8px 10px",marginBottom:0,borderLeft:`3px solid ${isPU?"#2563eb":isP?"#f59e0b":c.accent}`,opacity:isDrgSrc?0.4:done?0.6:1,cursor:"grab",transition:"background 0.1s"}}>
 <div style={_s.flexBtw}>
 <div style={_s.flexC4Mb2W}>
 <span style={{fontSize:10,color:"#a8a29e",fontVariantNumeric:"tabular-nums"}}>{stopNum}.</span>
@@ -7320,9 +7323,9 @@ style={{background:isDrgOver?"#dcfce7":isDrgSrc?"#fef9c3":done?"#f0fdf4":onSite?
 </div>
 <InlineRate value={entry.baseRate+(entry.liftgateApplied&&!entry.isHourly?(entry.liftgateFee||75):0)} isHourly={entry.isHourly} onSave={r=>updateRate(entry.id,r)}/>
 </div>
-<div style={{fontSize:14,fontWeight:700,color:"#1c1917",marginTop:2}}>{entry.stop}</div>
-{addr&&<div style={{fontSize:11,color:"#57534e",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:1}}>{addr}</div>}
-<StopStatus entry={entry}/>
+<div style={{fontSize:uiCompact?13:14,fontWeight:700,color:"#1c1917",marginTop:uiCompact?0:2}}>{entry.stop}</div>
+{addr&&!uiCompact&&<div style={{fontSize:11,color:"#57534e",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:1}}>{addr}</div>}
+<StopStatus entry={entry} compact={uiCompact}/>
 <div style={{display:"flex",alignItems:"center",gap:6,marginTop:2,flexWrap:"wrap"}}>
 {entry.weight>0&&<span style={{fontSize:11,color:BRAND.main,fontWeight:700}}>{entry.weight.toLocaleString()} lbs{(entry.loadNum||1)>1?" (Load "+(entry.loadNum||1)+")":""}</span>}
 {(()=>{const isPU=entry.stopType==="pickup";const isManualPU=isPU&&entry.manualPickup;const pf=entry.pickupFrom;const cust=entry.customer;if(!cust&&!pf)return null;/* Label & display vary by stop type:
@@ -7402,7 +7405,7 @@ style={{background:isDrgOver?"#dcfce7":isDrgSrc?"#fef9c3":done?"#f0fdf4":onSite?
 </div>
 <div style={{background:"#fafaf9",border:"1px solid #e7e5e4",borderTop:"none",borderRadius:"0 0 10px 10px",padding:"6px 6px 2px"}}>
 {uaEntries.map(entry=>{const c=CC[entry.customer]||CC["One-Off Delivery"];const addr=entry.addr||getAddr(entry.stop);const hasInstr=entry.instructions?.trim();return(
-<div key={entry.id} style={{background:entry.priority?"#fef3c7":"#fff",border:`1px solid ${entry.priority?"#fde68a":"#e7e5e4"}`,borderRadius:8,padding:"8px 10px",marginBottom:4,borderLeft:`3px solid ${entry.stopType==="pickup"?"#2563eb":c.accent}`}}>
+<div key={entry.id} style={{background:entry.priority?"#fef3c7":"#fff",border:`1px solid ${entry.priority?"#fde68a":"#e7e5e4"}`,borderRadius:8,padding:uiCompact?"4px 8px":"8px 10px",marginBottom:4,borderLeft:`3px solid ${entry.stopType==="pickup"?"#2563eb":c.accent}`}}>
 <div style={_s.flexBtw}>
 <div style={_s.flexC4Mb2W}>
 {entry.stopType==="pickup"&&<span style={_s.tagBlue}>PU</span>}
@@ -7413,9 +7416,9 @@ style={{background:isDrgOver?"#dcfce7":isDrgSrc?"#fef9c3":done?"#f0fdf4":onSite?
 </div>
 <InlineRate value={entry.baseRate+(entry.liftgateApplied&&!entry.isHourly?(entry.liftgateFee||75):0)} isHourly={entry.isHourly} onSave={r=>updateRate(entry.id,r)}/>
 </div>
-<div style={{fontSize:14,fontWeight:700,color:"#1c1917",marginTop:2}}>{entry.stop}</div>
-{addr&&<div style={{fontSize:11,color:"#57534e",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:1}}>{addr}</div>}
-<StopStatus entry={entry}/>
+<div style={{fontSize:uiCompact?13:14,fontWeight:700,color:"#1c1917",marginTop:uiCompact?0:2}}>{entry.stop}</div>
+{addr&&!uiCompact&&<div style={{fontSize:11,color:"#57534e",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:1}}>{addr}</div>}
+<StopStatus entry={entry} compact={uiCompact}/>
 <div style={{display:"flex",alignItems:"center",gap:6,marginTop:2,flexWrap:"wrap"}}>
 {entry.weight>0&&<span style={{fontSize:11,color:BRAND.main,fontWeight:700}}>{entry.weight.toLocaleString()} lbs</span>}
 {(()=>{const isPU=entry.stopType==="pickup";const isManualPU=isPU&&entry.manualPickup;const pf=entry.pickupFrom;const cust=entry.customer;if(!cust&&!pf)return null;/* Label & display vary by stop type:
@@ -8636,7 +8639,7 @@ style={{alignSelf:"flex-end",background:notifyCustomMsg.trim()?"#1c1917":"#e7e5e
 {}
 {view==="manifest"&&<div
 onDragEnd={()=>{setDragSrc(null);setDragOver(null);}}>
-<div style={{padding:"16px 4px 8px"}}><h2 style={{margin:0,fontSize:16,fontWeight:600}}>Load Manifests — {wd[sd].name}</h2><p style={{margin:"4px 0 0",fontSize:12,color:"#78716c"}}>Use ▲▼ to reorder. Tap driver initials to reassign.</p></div>
+<div style={{padding:"16px 4px 8px",display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}><div><h2 style={{margin:0,fontSize:16,fontWeight:600}}>Load Manifests — {wd[sd].name}</h2><p style={{margin:"4px 0 0",fontSize:12,color:"#78716c"}}>Use ▲▼ to reorder. Tap driver initials to reassign.</p></div><button onClick={toggleCompact} title="Compact density" style={{flexShrink:0,background:uiCompact?"#1e5b92":"#f5f5f4",color:uiCompact?"#fff":"#57534e",border:"1px solid "+(uiCompact?"#1e5b92":"#e7e5e4"),borderRadius:6,padding:"6px 10px",cursor:"pointer",fontSize:11,fontWeight:700,whiteSpace:"nowrap"}}>{uiCompact?"\u2611":"\u2610"} Compact</button></div>
 {dispNotes[emDk]&&<div onClick={()=>{setView("daily");setEditingNote(true);setNoteText(dispNotes[emDk]);}} style={{background:"#faf5ff",border:"1px solid #d8b4fe",borderRadius:10,padding:"8px 12px",marginBottom:10,cursor:"pointer",display:"flex",alignItems:"flex-start",gap:6}}>
 <span style={{fontSize:12,flexShrink:0}}>📝</span>
 <div style={_s.f1}><div style={{fontSize:10,fontWeight:700,color:"#7c3aed",textTransform:"uppercase"}}>Day Notes</div><div style={{fontSize:12,color:"#57534e",whiteSpace:"pre-wrap",lineHeight:1.3}}>{dispNotes[emDk].length>120?dispNotes[emDk].slice(0,120)+"…":dispNotes[emDk]}</div></div>
@@ -8713,7 +8716,7 @@ return loadGroups.map(({loadNum:ln,stops:loadStops})=>(<div key={"mload-"+ln}>
 {loadStops.map((entry)=>{
 const eIdx=de.indexOf(entry);
 return(<div key={entry.id}>
-<ManifestStop entry={entry} eIdx={eIdx} total={de.length} drivers={drivers} onMove={dir=>moveInDriver(drv.id,entry.id,dir)} onReassign={did=>reassign(entry.id,did)} onRemove={()=>rmFromDriver(entry.id)} onDelete={()=>deleteDel(entry.id)} onUpdateInstructions={text=>updateInstructions(entry.id,text)} onShipPlan={val=>setShipPlan(entry.id,val)} onRefNum={val=>setRefNum(entry.id,val)} onToggleFuel={()=>toggleFuel(entry.id)} onDueBy={time=>setDueBy(entry.id,time)} onWeight={w=>setWeight(entry.id,w)} onLoadNum={n=>setLoadNum(entry.id,n)} onRate={r=>updateRate(entry.id,r)} onPhotoClick={setLightboxPhoto} onSetPickup={label=>setPickupFrom(entry.id,label)} maxLoad={getMaxLoad(drv.id)}
+<ManifestStop entry={entry} eIdx={eIdx} total={de.length} drivers={drivers} onMove={dir=>moveInDriver(drv.id,entry.id,dir)} onReassign={did=>reassign(entry.id,did)} onRemove={()=>rmFromDriver(entry.id)} onDelete={()=>deleteDel(entry.id)} onUpdateInstructions={text=>updateInstructions(entry.id,text)} onShipPlan={val=>setShipPlan(entry.id,val)} onRefNum={val=>setRefNum(entry.id,val)} onToggleFuel={()=>toggleFuel(entry.id)} onDueBy={time=>setDueBy(entry.id,time)} onWeight={w=>setWeight(entry.id,w)} onLoadNum={n=>setLoadNum(entry.id,n)} onRate={r=>updateRate(entry.id,r)} onPhotoClick={setLightboxPhoto} onSetPickup={label=>setPickupFrom(entry.id,label)} compact={uiCompact} maxLoad={getMaxLoad(drv.id)}
 onLiftgate={()=>{if(entry.isHourly){setEmH(p=>{const key=`${emDk}-emser`;const cur=p[key]||4;return{...p,[key]:cur+1};});setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===entry.id?{...e,liftgateApplied:true}:e)}));showToast("Liftgate +1 hr added");}else{manualLiftgate(entry.id);}}} onRemoveLiftgate={()=>removeLiftgate(entry.id)} onSplit={()=>setSplitEntry({id:entry.id,totalWeight:entry.weight||0,ratio:50,truck1Weight:Math.round((entry.weight||0)/2)})} driverLoadCounts={Object.fromEntries(drivers.map(d=>[d.id,getDriverLoadOptions(d.id)]))}
 isDragging={dragSrc?.drvId===drv.id&&dragSrc?.idx===eIdx} isDragOver={dragOver?.drvId===drv.id&&dragOver?.idx===eIdx} onDragStart={()=>setDragSrc({drvId:drv.id,idx:eIdx,id:entry.id})} onDragOver={()=>setDragOver({drvId:drv.id,idx:eIdx})} onDrop={()=>handleDrop(drv.id,eIdx)}/>
 {splitEntry?.id===entry.id&&<div style={{margin:"0 0 4px",background:"#eff6ff",border:"2px solid #2563eb",borderRadius:10,padding:12}}>
@@ -8733,7 +8736,7 @@ isDragging={dragSrc?.drvId===drv.id&&dragSrc?.idx===eIdx} isDragOver={dragOver?.
 onDragOver={e=>{e.preventDefault();if(!ua.length)setDragOver({drvId:0,idx:0});}}
 onDrop={()=>{if(dragSrc){handleDrop(0,ua.length);}}}
 style={{background:dragOver?.drvId===0?"#dcfce7":"#fff",border:dragOver?.drvId===0?"2px dashed #16a34a":"2px dashed #d6d3d1",borderRadius:14,padding:16,marginBottom:12,transition:"background 0.15s"}}><div style={{display:"flex",alignItems:"center",gap:8,marginBottom:ua.length?10:0}}><div style={{width:14,height:14,borderRadius:4,background:"#a8a29e"}}/><span style={{fontSize:15,fontWeight:700,color:"#78716c"}}>Unassigned</span><span style={{fontSize:12,color:"#a8a29e"}}>({ua.length})</span></div>
-{ua.map((entry,eIdx)=><div key={entry.id}><ManifestStop entry={entry} eIdx={eIdx} total={ua.length} drivers={drivers} onMove={dir=>moveInDriver(0,entry.id,dir)} onReassign={did=>reassign(entry.id,did)} onRemove={()=>deleteDel(entry.id)} onDelete={()=>deleteDel(entry.id)} onUpdateInstructions={text=>updateInstructions(entry.id,text)} onShipPlan={val=>setShipPlan(entry.id,val)} onRefNum={val=>setRefNum(entry.id,val)} onToggleFuel={()=>toggleFuel(entry.id)} onDueBy={time=>setDueBy(entry.id,time)} onWeight={w=>setWeight(entry.id,w)} onLoadNum={n=>setLoadNum(entry.id,n)} onRate={r=>updateRate(entry.id,r)} onPhotoClick={setLightboxPhoto} onSetPickup={label=>setPickupFrom(entry.id,label)} maxLoad={1}
+{ua.map((entry,eIdx)=><div key={entry.id}><ManifestStop entry={entry} eIdx={eIdx} total={ua.length} drivers={drivers} onMove={dir=>moveInDriver(0,entry.id,dir)} onReassign={did=>reassign(entry.id,did)} onRemove={()=>deleteDel(entry.id)} onDelete={()=>deleteDel(entry.id)} onUpdateInstructions={text=>updateInstructions(entry.id,text)} onShipPlan={val=>setShipPlan(entry.id,val)} onRefNum={val=>setRefNum(entry.id,val)} onToggleFuel={()=>toggleFuel(entry.id)} onDueBy={time=>setDueBy(entry.id,time)} onWeight={w=>setWeight(entry.id,w)} onLoadNum={n=>setLoadNum(entry.id,n)} onRate={r=>updateRate(entry.id,r)} onPhotoClick={setLightboxPhoto} onSetPickup={label=>setPickupFrom(entry.id,label)} compact={uiCompact} maxLoad={1}
 onLiftgate={()=>{if(entry.isHourly){setEmH(p=>{const key=`${emDk}-emser`;const cur=p[key]||4;return{...p,[key]:cur+1};});setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===entry.id?{...e,liftgateApplied:true}:e)}));showToast("Liftgate +1 hr added");}else{manualLiftgate(entry.id);}}} onRemoveLiftgate={()=>removeLiftgate(entry.id)} onSplit={()=>setSplitEntry({id:entry.id,totalWeight:entry.weight||0,ratio:50,truck1Weight:Math.round((entry.weight||0)/2)})} driverLoadCounts={Object.fromEntries(drivers.map(d=>[d.id,getDriverLoadOptions(d.id)]))}
 isDragging={dragSrc?.drvId===0&&dragSrc?.idx===eIdx} isDragOver={dragOver?.drvId===0&&dragOver?.idx===eIdx} onDragStart={()=>setDragSrc({drvId:0,idx:eIdx,id:entry.id})} onDragOver={()=>setDragOver({drvId:0,idx:eIdx})} onDrop={()=>handleDrop(0,eIdx)}/>
 {splitEntry?.id===entry.id&&<div style={{margin:"0 0 4px",background:"#eff6ff",border:"2px solid #2563eb",borderRadius:10,padding:12}}>
