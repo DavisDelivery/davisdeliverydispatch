@@ -5879,7 +5879,7 @@ const renderTriageBar=()=>{
   if(stuck)flags.push({key:"stuck",label:stuck>1?"stops on site 30 min+":"stop on site 30 min+",count:stuck,level:"crit"});
   let over=0;drivers.forEach(d=>{getDriverLoads(d.id).forEach(ln=>{if(getLoadWeight(d.id,ln)>getDriverCapacity(d.id))over++;});});
   if(over)flags.push({key:"over",label:over>1?"loads over capacity":"load over capacity",count:over,level:"warn"});
-  const noSP=dl.filter(e=>e.customer==="IMETCO"&&e.driverId>0&&!e.shipPlan).length;
+  const noSP=dl.filter(e=>e.customer==="IMETCO"&&e.stopType!=="pickup"&&e.driverId>0&&!e.shipPlan).length;
   if(noSP)flags.push({key:"sp",label:"IMETCO missing ship plan",count:noSP,level:"warn"});
   const un=dl.filter(e=>e.driverId===0&&(e.stopType!=="pickup"||e.manualPickup)).length;
   if(un)flags.push({key:"un",label:"unassigned",count:un,level:"info"});
