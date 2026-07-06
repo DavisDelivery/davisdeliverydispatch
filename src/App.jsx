@@ -5850,9 +5850,6 @@ onStatusUpdate={updateStatus} onPhotoUpload={addPhoto} onSignature={addSignature
 </div>
 );
 }
-if(isDesktop&&view!=="add"&&!selCust&&!quoteMode){
-const dkNote=dispNotes[emDk]||"";
-const allDriverEntries=drivers.map((drv,di)=>({drv,di,entries:drvEntries(drv.id)})).filter(({drv,entries})=>drv.active!==false||entries.length>0);
 /* Board triage strip — surfaces only what needs a decision: stops on site too
    long, over-capacity loads, IMETCO deliveries missing a ship plan, and the
    unassigned backlog. Read-only summary; returns null when the board is clean. */
@@ -5890,6 +5887,9 @@ const renderTriageBar=()=>{
     {flags.map(f=>{const cc=col[f.level];return(<span key={f.key} style={{display:"inline-flex",alignItems:"center",gap:7,fontSize:12,fontWeight:600,padding:"6px 10px",borderRadius:8,border:"1px solid "+cc.b,color:cc.c,background:cc.bg}}><b style={{fontWeight:800,fontVariantNumeric:"tabular-nums"}}>{f.count}</b> {f.label}</span>);})}
   </div>);
 };
+if(isDesktop&&view!=="add"&&!selCust&&!quoteMode){
+const dkNote=dispNotes[emDk]||"";
+const allDriverEntries=drivers.map((drv,di)=>({drv,di,entries:drvEntries(drv.id)})).filter(({drv,entries})=>drv.active!==false||entries.length>0);
 const uaEntries=dl.filter(e=>e.driverId===0);
 const custRevenue={};dl.forEach(e=>{if(!e.isHourly){if(!custRevenue[e.customer])custRevenue[e.customer]=0;custRevenue[e.customer]+=e.baseRate;}});
 if(dl.some(e=>e.isHourly)){const{totalMins:_crMins}=getShiftSummary(emDk);const _crLG=dl.filter(e=>e.isHourly&&e.liftgateApplied&&!DISTANCE_BONUS_STOPS.includes(e.stop)).length;const _crDist=dl.filter(e=>e.isHourly&&DISTANCE_BONUS_STOPS.includes(e.stop)).length;const _crHrs=_crMins>0?Math.round((_crMins+(_crLG+_crDist)*60)/15)*15/60:(emH[`${emDk}-emser`]||4);custRevenue["Emser Tile"]=(custRevenue["Emser Tile"]||0)+102.50*_crHrs;}
