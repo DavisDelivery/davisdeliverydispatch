@@ -55,6 +55,34 @@ export const dedupeAutoPickups=(entries)=>{
   return changed?out:entries;
 };
 
+/* Collapse a GHOST duplicate delivery: the same order present both ASSIGNED
+   (driverId>0) and UNASSIGNED (driverId 0). entrySig keys on driverId, so a
+   reassign race — dispatcher moves a stop to a driver while a stale Firebase
+   snapshot still has it unassigned — reads as two different stops; the merge's
+   delivery safety-net then re-appends the unassigned copy, and computeDay bills
+   both (inflating the day total and the fuel surcharge). Drop the driverId-0
+   copy ONLY when an assigned delivery with the same (customer, stop, loadNum,
+   baseRate) exists. Deliberately narrow so it can never remove:
+     - two distinct routed orders (both assigned)     -> different driverId path, kept
+     - a genuine lone unassigned order (no assigned twin) -> kept
+     - a split's load-2 half (driverId 0, baseRate 0)  -> baseRate differs from the
+       full assigned stop, and it lives on its own loadNum -> kept
+   Pickups and manual pickups are never touched. */
+export const dedupeGhostDeliveries=(entries)=>{
+  if(!Array.isArray(entries))return entries;
+  const key=(e)=>[e.customer||"",e.stop||"",e.loadNum||1,e.baseRate||0].join("|");
+  const assigned=new Set();
+  entries.forEach(e=>{if(e&&e.stopType==="delivery"&&e.driverId>0)assigned.add(key(e));});
+  if(!assigned.size)return entries;
+  let changed=false;
+  const out=entries.filter(e=>{
+    if(!e||e.stopType!=="delivery"||e.driverId||e.wasSplit)return true; /* keep non-deliveries, assigned, split halves */
+    if(assigned.has(key(e))){changed=true;return false;}                 /* unassigned ghost of an assigned stop → drop */
+    return true;
+  });
+  return changed?out:entries;
+};
+
 /* Reap ORPHANED auto-pickups. An auto-pickup is DERIVED data — it exists only
    because rebuildPickupsFor generated it from ≥1 same-customer delivery on the
    same (driver, load). Several mutation paths historically removed deliveries
@@ -363,5 +391,5 @@ export const buildMergedEntries=(fbEntriesRaw,localEntriesRaw,{isDriver=false,ca
   /* Orphan reap LAST, after the delivery safety-net re-append, so a rescued
      delivery keeps its pickup. Self-heals any orphan already persisted in
      Firebase: the merge drops it, and the transaction write makes that stick. */
-  return reapOrphanAutoPickups(dedupeAutoPickups(merged),multiSource?{multiSource,normLoc}:undefined);
+  return reapOrphanAutoPickups(dedupeGhostDeliveries(dedupeAutoPickups(merged)),multiSource?{multiSource,normLoc}:undefined);
 };
