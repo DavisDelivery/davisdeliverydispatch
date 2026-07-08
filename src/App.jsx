@@ -313,7 +313,7 @@ const saveManifestDay=async(wo,sd,entries,callerDriverId,deletedIds,allowEmpty)=
          resurrections, and collapse duplicate auto-pickups. Pure + unit-tested
          in manifestLogic.js (buildMergedEntries) so the concurrency scenarios
          can't silently regress. */
-      const deduped=buildMergedEntries(current?.entries||[],entries||[],{isDriver,callerDriverId,deletedIds});
+      const deduped=buildMergedEntries(current?.entries||[],entries||[],{isDriver,callerDriverId,deletedIds,multiSource:_reapOpts.multiSource,normLoc:_reapOpts.normLoc});
       /* Normalize photos / signature for write. Bound the TOTAL inline base64
          across the whole doc (not just per-photo) to a budget under Firestore's
          ~1MiB limit — two 700KB fallback photos each pass a per-photo cap yet
@@ -970,6 +970,11 @@ const _normLoc=(v)=>{
   const parts=v.split(/\s+[-—]\s+/);
   return parts[parts.length-1].trim().toLowerCase();
 };
+/* Dock-aware orphan-pickup reaping: multi-source suppliers (MULTI_PICKUP) can
+   carry one auto-pickup per dock on a (driver,load), so the reaper must match a
+   pickup to a delivery at its OWN dock, not just same-customer. Passed to
+   reapOrphanAutoPickups / buildMergedEntries at every ingest + save. */
+const _reapOpts={multiSource:(c)=>!!MULTI_PICKUP[c],normLoc:_normLoc};
 /* Given an entry, work out what pickup text to show and whether the location
    is still ambiguous (a multi-location customer with no specific location
    picked). Returns {text, ambiguous}. */
@@ -3670,7 +3675,7 @@ useEffect(()=>{
       let changed=false;
       Object.entries(fbData).forEach(([fbKey,payload])=>{
         const dayIdx=payload.dayIdx;
-        const entries=reapOrphanAutoPickups(dedupeAutoPickups(dedupeIds((payload.entries||[]).map(sanitizeEntry).filter(Boolean)))).map(_e0=>{
+        const entries=reapOrphanAutoPickups(dedupeAutoPickups(dedupeIds((payload.entries||[]).map(sanitizeEntry).filter(Boolean))),_reapOpts).map(_e0=>{
           const e=_fixImetcoAddr(_e0);
           if(e.customer&&!e.isHourly&&e.stopType!=="pickup"){
             const cd=CUSTOMERS[e.customer];
@@ -3748,7 +3753,7 @@ useEffect(()=>{
       let changed=false;
       Object.entries(fbData).forEach(([fbKey,payload])=>{
         const dayIdx=payload.dayIdx;
-        const entries=reapOrphanAutoPickups(dedupeAutoPickups(dedupeIds((payload.entries||[]).map(sanitizeEntry).filter(Boolean)))).map(_e0=>{
+        const entries=reapOrphanAutoPickups(dedupeAutoPickups(dedupeIds((payload.entries||[]).map(sanitizeEntry).filter(Boolean))),_reapOpts).map(_e0=>{
           const e=_fixImetcoAddr(_e0);
           if(e.customer&&!e.isHourly&&e.stopType!=="pickup"){
             const cd=CUSTOMERS[e.customer];
@@ -5278,11 +5283,17 @@ const _computeLiveLoadOrderNote=(pickupEntry,driverEntries)=>{
   return "Load order: "+names.join(", ");
 };
 const drvEntries=did=>{
-  const entries=dl.filter(e=>e.driverId===did);
+  /* Display-time safety net: drop orphaned auto-pickups (dock-aware) before the
+     next Firestore round-trip reaps them from storage, so a pickup card can
+     never show without its delivery. */
+  const entries=reapOrphanAutoPickups(dl.filter(e=>e.driverId===did),_reapOpts);
   return entries.map(e=>{
     if(e.stopType!=="pickup"||e.manualPickup)return e;
     const live=_computeLiveLoadOrderNote(e,entries);
-    return live?{...e,note:live}:e;
+    if(live)return {...e,note:live};
+    /* Kept auto-pickup with no live match (e.g. ambiguous-dock delivery) — clear
+       any stale "Load order:" note so it can't name a delivery that isn't here. */
+    return (typeof e.note==="string"&&e.note.startsWith("Load order:"))?{...e,note:null}:e;
   });
 };
 /* Find the array index to splice-insert a new entry so that it lands at the
@@ -10183,7 +10194,7 @@ useEffect(()=>{
       Object.entries(fbData).forEach(([fbKey,payload])=>{
         const dayIdx=payload.dayIdx;
         const lk=`${wo}-${dayIdx}`;
-        const fbEnts=reapOrphanAutoPickups(dedupeAutoPickups(dedupeIds((payload.entries||[]).map(sanitizeEntry).filter(Boolean)))).map(_e0=>{
+        const fbEnts=reapOrphanAutoPickups(dedupeAutoPickups(dedupeIds((payload.entries||[]).map(sanitizeEntry).filter(Boolean))),_reapOpts).map(_e0=>{
           const e=_fixImetcoAddr(_e0);
           if(e.customer&&!e.isHourly&&e.stopType!=="pickup"){
             const cd=CUSTOMERS[e.customer];

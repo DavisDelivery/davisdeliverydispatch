@@ -66,18 +66,44 @@ export const dedupeAutoPickups=(entries)=>{
    Manual pickups and deliveries are never touched. Safe to run at every
    merge/ingest: rebuildPickupsFor only ever creates pickups where matching
    deliveries exist, so a legitimate pickup can never be reaped. */
-export const reapOrphanAutoPickups=(entries)=>{
+/* opts (optional): { multiSource(customer)->bool, normLoc(str)->str }. Supplied
+   by App.jsx from MULTI_PICKUP/_normLoc. Multi-source suppliers (Emser,
+   Traditions) ship from >1 dock, so a single (customer,driver,load) can carry
+   one auto-pickup PER dock — and the location-blind key above kept an orphaned
+   dock pickup alive as long as ANY same-customer delivery remained on the load
+   (the "pickup card with no delivery" bug). When opts are given we match a
+   multi-source pickup to a delivery at its OWN dock; a delivery whose dock can't
+   be resolved is treated as covering every dock so messy data never over-reaps.
+   With no opts the behavior is exactly the old location-blind reap (back-compat). */
+export const reapOrphanAutoPickups=(entries,opts)=>{
   if(!Array.isArray(entries))return entries;
-  const delKeys=new Set();
+  const multiSource=opts&&typeof opts.multiSource==="function"?opts.multiSource:()=>false;
+  const normLoc=opts&&typeof opts.normLoc==="function"?opts.normLoc:(s)=>String(s||"").trim().toLowerCase();
+  const gkey=(c,d,l)=>[c||"",d||0,l||1].join("|");
+  /* Per (customer,driver,load): does a delivery exist, and — for multi-source —
+     at which docks (wild = a delivery whose dock is unknown, covering all). */
+  const groups=new Map();
   entries.forEach(e=>{
-    if(e&&e.stopType==="delivery"&&e.driverId>0)delKeys.add([e.customer||"",e.driverId,e.loadNum||1].join("|"));
+    if(!e||e.stopType!=="delivery"||!(e.driverId>0))return;
+    const k=gkey(e.customer,e.driverId,e.loadNum);
+    let g=groups.get(k);
+    if(!g){g={docks:new Set(),wild:false};groups.set(k,g);}
+    if(multiSource(e.customer)){
+      const loc=normLoc(e.pickupFrom);
+      if(loc)g.docks.add(loc); else g.wild=true;
+    }
   });
   let changed=false;
   const out=entries.filter(e=>{
     if(!e||e.stopType!=="pickup"||e.manualPickup)return true;
-    if(delKeys.has([e.customer||"",e.driverId||0,e.loadNum||1].join("|")))return true;
-    changed=true;
-    return false;
+    const g=groups.get(gkey(e.customer,e.driverId,e.loadNum));
+    if(!g){changed=true;return false;}            /* no delivery on the load → orphan */
+    if(!multiSource(e.customer))return true;       /* single-source → group presence is enough */
+    if(g.wild)return true;                          /* an ambiguous delivery covers every dock */
+    const puLoc=normLoc(e.pickupFrom)||normLoc(e.stop);
+    if(!puLoc)return true;                          /* pickup dock unknown → keep (conservative) */
+    if(g.docks.has(puLoc))return true;              /* a delivery at this pickup's dock exists */
+    changed=true;return false;                      /* multi-source orphan: no delivery at its dock */
   });
   return changed?out:entries;
 };
@@ -280,7 +306,7 @@ export const orderByIds=(items,orderedIds)=>{
      - collapse duplicate auto-pickups.
    Pure: same inputs → same output, no I/O. This is the surface the concurrency
    test suite locks down. */
-export const buildMergedEntries=(fbEntriesRaw,localEntriesRaw,{isDriver=false,callerDriverId=0,deletedIds=null}={})=>{
+export const buildMergedEntries=(fbEntriesRaw,localEntriesRaw,{isDriver=false,callerDriverId=0,deletedIds=null,multiSource=null,normLoc=null}={})=>{
   const fbEntries=dedupeIds(fbEntriesRaw||[]);
   const localEntries=dedupeIds(localEntriesRaw||[]);
   const fbById={};
@@ -337,5 +363,5 @@ export const buildMergedEntries=(fbEntriesRaw,localEntriesRaw,{isDriver=false,ca
   /* Orphan reap LAST, after the delivery safety-net re-append, so a rescued
      delivery keeps its pickup. Self-heals any orphan already persisted in
      Firebase: the merge drops it, and the transaction write makes that stick. */
-  return reapOrphanAutoPickups(dedupeAutoPickups(merged));
+  return reapOrphanAutoPickups(dedupeAutoPickups(merged),multiSource?{multiSource,normLoc}:undefined);
 };

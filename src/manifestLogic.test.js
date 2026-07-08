@@ -520,3 +520,73 @@ describe("reapOrphanAutoPickups — auto-pickups are derived data (orphan self-h
     expect(out.some((e) => e.id === "PU1")).toBe(true);
   });
 });
+
+/* ====================================================================== */
+/* Multi-source auto-pickup dock orphans — the "pickup card with no delivery"
+   production bug. Emser/Traditions ship from >1 dock, so one (customer,driver,
+   load) can carry a pickup PER dock. The old reaper keyed on (customer,driver,
+   load) only, so a still-present delivery at ANOTHER dock kept an orphaned
+   pickup alive at a dock whose delivery was moved/deleted. These exercise the
+   location-aware reaper across the real data shapes. */
+describe("reapOrphanAutoPickups — multi-source dock matching (pickup-without-delivery bug)", () => {
+  // Mirrors App.jsx: MULTI_PICKUP membership + _normLoc.
+  const MS = {
+    multiSource: (c) => c === "Emser Tile" || c === "Traditions in Tile",
+    normLoc: (v) => {
+      if (!v || typeof v !== "string") return "";
+      const p = v.split(/\s+[-—]\s+/);
+      return p[p.length - 1].trim().toLowerCase();
+    },
+  };
+  // The screenshot: Trevor (5) Load 2 has a Norcross pickup whose delivery
+  // (American Flooring Services) is gone, plus a Roswell pickup+delivery still live.
+  const norcrossPU = pu({ id: "puN", customer: "Emser Tile", stop: "Emser - Norcross", pickupFrom: "Emser - Norcross", driverId: 5, loadNum: 2 });
+  const roswellPU  = pu({ id: "puR", customer: "Emser Tile", stop: "Emser - Roswell",  pickupFrom: "Emser - Roswell",  driverId: 5, loadNum: 2 });
+  const roswellDel = del({ id: "dR", customer: "Emser Tile", stop: "American Flooring Services", pickupFrom: "Emser - Roswell", driverId: 5, loadNum: 2 });
+
+  it("reaps the orphaned dock pickup while a delivery at another dock survives", () => {
+    const out = reapOrphanAutoPickups([norcrossPU, roswellPU, roswellDel], MS);
+    expect(out.find((e) => e.id === "puN")).toBeUndefined(); // orphan Norcross pickup gone
+    expect(out.find((e) => e.id === "puR")).toBeTruthy();     // legit Roswell pickup kept
+    expect(out.find((e) => e.id === "dR")).toBeTruthy();      // delivery untouched
+  });
+
+  it("keeps a multi-source pickup that has a matching same-dock delivery", () => {
+    const del2 = del({ id: "dN", customer: "Emser Tile", stop: "Britts", pickupFrom: "Emser - Norcross", driverId: 5, loadNum: 2 });
+    expect(reapOrphanAutoPickups([norcrossPU, del2], MS).some((e) => e.id === "puN")).toBe(true);
+  });
+
+  it("still reaps a fully orphaned pickup (no delivery on the load at all)", () => {
+    const out = reapOrphanAutoPickups([norcrossPU, del({ id: "x", customer: "Other", driverId: 5, loadNum: 2 })], MS);
+    expect(out.find((e) => e.id === "puN")).toBeUndefined();
+  });
+
+  it("does NOT over-reap: an ambiguous multi-source delivery (no pickupFrom) covers every dock", () => {
+    const ambiguous = del({ id: "dAmb", customer: "Emser Tile", stop: "Somewhere", driverId: 5, loadNum: 2 }); // dock unknown
+    expect(reapOrphanAutoPickups([norcrossPU, ambiguous], MS).some((e) => e.id === "puN")).toBe(true);
+  });
+
+  it("does NOT over-reap single-source pickups whose delivery has no pickupFrom", () => {
+    const p = pu({ id: "pMM", customer: "MM Systems", stop: "MM Systems - Pendergrass", pickupFrom: "MM Systems - Pendergrass", driverId: 5, loadNum: 1 });
+    const d = del({ id: "dMM", customer: "MM Systems", stop: "EcoClean", driverId: 5, loadNum: 1 }); // single-source, no pickupFrom
+    expect(reapOrphanAutoPickups([p, d], MS).some((e) => e.id === "pMM")).toBe(true);
+  });
+
+  it("never reaps a manual pickup, even multi-source with no delivery", () => {
+    const man = pu({ id: "pm", customer: "Emser Tile", stop: "Emser - Norcross", pickupFrom: "Emser - Norcross", driverId: 5, loadNum: 2, manualPickup: true });
+    expect(reapOrphanAutoPickups([man], MS).some((e) => e.id === "pm")).toBe(true);
+  });
+
+  it("is backward-compatible: with no opts it stays location-blind (documents the requirement)", () => {
+    const out = reapOrphanAutoPickups([norcrossPU, roswellPU, roswellDel]); // no opts
+    expect(out.find((e) => e.id === "puN")).toBeTruthy(); // old behavior: kept
+  });
+
+  it("self-heals through the save merge when opts are threaded (buildMergedEntries)", () => {
+    const all = [norcrossPU, roswellPU, roswellDel];
+    const out = buildMergedEntries(all, all, { isDriver: false, callerDriverId: 0, multiSource: MS.multiSource, normLoc: MS.normLoc });
+    expect(out.find((e) => e.id === "puN")).toBeUndefined(); // orphan dropped by the merge
+    expect(out.find((e) => e.id === "puR")).toBeTruthy();
+    expect(out.find((e) => e.id === "dR")).toBeTruthy();
+  });
+});
