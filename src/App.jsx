@@ -5283,10 +5283,12 @@ const _computeLiveLoadOrderNote=(pickupEntry,driverEntries)=>{
   return "Load order: "+names.join(", ");
 };
 const drvEntries=did=>{
-  /* Display-time safety net: drop orphaned auto-pickups (dock-aware) before the
-     next Firestore round-trip reaps them from storage, so a pickup card can
-     never show without its delivery. */
-  const entries=reapOrphanAutoPickups(dl.filter(e=>e.driverId===did),_reapOpts);
+  /* Display-time safety net: collapse duplicate auto-pickups and drop orphaned
+     ones (dock-aware) before the next Firestore round-trip heals storage, so a
+     driver can never see the same pickup twice or a pickup with no delivery.
+     dedupeAutoPickups keys on (customer, stop, driverId, loadNum); reap needs the
+     deduped set so a survivor is matched to its deliveries. */
+  const entries=reapOrphanAutoPickups(dedupeAutoPickups(dl.filter(e=>e.driverId===did)),_reapOpts);
   return entries.map(e=>{
     if(e.stopType!=="pickup"||e.manualPickup)return e;
     const live=_computeLiveLoadOrderNote(e,entries);
