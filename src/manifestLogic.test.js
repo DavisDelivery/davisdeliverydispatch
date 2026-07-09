@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   dedupeIds,
   dedupeAutoPickups,
+  dedupeGhostDeliveries,
   reapOrphanAutoPickups,
   sanitizeEntry,
   _mergeEntryDispatcher,
@@ -588,5 +589,60 @@ describe("reapOrphanAutoPickups — multi-source dock matching (pickup-without-d
     expect(out.find((e) => e.id === "puN")).toBeUndefined(); // orphan dropped by the merge
     expect(out.find((e) => e.id === "puR")).toBeTruthy();
     expect(out.find((e) => e.id === "dR")).toBeTruthy();
+  });
+});
+
+/* ====================================================================== */
+/* Ghost duplicate deliveries — the "one EcoClean but weekly shows two" bug.
+   A reassign race leaves the same order present both assigned and unassigned;
+   entrySig keys on driverId so the merge never reconciles them and computeDay
+   double-bills. dedupeGhostDeliveries drops the unassigned twin — narrowly, so
+   it can't remove distinct orders or split halves. */
+describe("dedupeGhostDeliveries — collapse the unassigned twin of an assigned delivery", () => {
+  it("drops a driverId-0 delivery when an assigned copy (same customer/stop/load/rate) exists", () => {
+    const assigned = del({ id: "A", customer: "MM Systems", stop: "EcoClean", driverId: 5, loadNum: 1, baseRate: 225 });
+    const ghost    = del({ id: "B", customer: "MM Systems", stop: "EcoClean", driverId: 0, loadNum: 1, baseRate: 225 });
+    const out = dedupeGhostDeliveries([assigned, ghost]);
+    expect(out.map((e) => e.id)).toEqual(["A"]); // Trevor's kept, ghost gone
+  });
+
+  it("keeps two DISTINCT routed orders (both assigned) — never collapses assigned copies", () => {
+    const a = del({ id: "A", customer: "MM Systems", stop: "EcoClean", driverId: 5, loadNum: 1, baseRate: 225 });
+    const b = del({ id: "B", customer: "MM Systems", stop: "EcoClean", driverId: 7, loadNum: 1, baseRate: 225 });
+    expect(dedupeGhostDeliveries([a, b]).map((e) => e.id).sort()).toEqual(["A", "B"]);
+  });
+
+  it("keeps a genuine lone unassigned order (no assigned twin)", () => {
+    const lone = del({ id: "A", customer: "MM Systems", stop: "EcoClean", driverId: 0, loadNum: 1, baseRate: 225 });
+    expect(dedupeGhostDeliveries([lone]).map((e) => e.id)).toEqual(["A"]);
+  });
+
+  it("keeps a split's load-2 half (driverId 0, baseRate 0, wasSplit) alongside the full assigned stop", () => {
+    const full = del({ id: "A", customer: "MM Systems", stop: "EcoClean", driverId: 5, loadNum: 1, baseRate: 225 });
+    const half = del({ id: "B", customer: "MM Systems", stop: "EcoClean", driverId: 0, loadNum: 2, baseRate: 0, wasSplit: true });
+    expect(dedupeGhostDeliveries([full, half]).map((e) => e.id).sort()).toEqual(["A", "B"]);
+  });
+
+  it("keeps an unassigned order at a DIFFERENT rate (a distinct order, not a ghost)", () => {
+    const assigned = del({ id: "A", customer: "MM Systems", stop: "EcoClean", driverId: 5, loadNum: 1, baseRate: 225 });
+    const other    = del({ id: "B", customer: "MM Systems", stop: "EcoClean", driverId: 0, loadNum: 1, baseRate: 180 });
+    expect(dedupeGhostDeliveries([assigned, other]).map((e) => e.id).sort()).toEqual(["A", "B"]);
+  });
+
+  it("never touches pickups or manual pickups", () => {
+    const p = pu({ id: "P", customer: "MM Systems", stop: "MM Systems - Pendergrass", driverId: 0 });
+    const d = del({ id: "A", customer: "MM Systems", stop: "MM Systems - Pendergrass", driverId: 5, baseRate: 225 });
+    expect(dedupeGhostDeliveries([p, d]).some((e) => e.id === "P")).toBe(true);
+  });
+
+  it("reconciles the reassign race through the save merge (buildMergedEntries)", () => {
+    // Dispatcher reassigned EcoClean unassigned -> Trevor locally; a stale FB
+    // snapshot still has it unassigned under a diverged id. Old merge kept both.
+    const localAssigned = del({ id: "X", customer: "MM Systems", stop: "EcoClean", driverId: 5, loadNum: 1, baseRate: 225 });
+    const fbStale       = del({ id: "Y", customer: "MM Systems", stop: "EcoClean", driverId: 0, loadNum: 1, baseRate: 225 });
+    const out = buildMergedEntries([fbStale], [localAssigned], { isDriver: false, callerDriverId: 0 });
+    const ecoCleans = out.filter((e) => e.stop === "EcoClean");
+    expect(ecoCleans).toHaveLength(1);       // not two
+    expect(ecoCleans[0].driverId).toBe(5);   // the assigned one won
   });
 });
