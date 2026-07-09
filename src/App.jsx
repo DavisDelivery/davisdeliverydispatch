@@ -971,7 +971,7 @@ const MULTI_PICKUP=(()=>{
    for null/empty. */
 const _normLoc=(v)=>{
   if(!v||typeof v!=="string")return"";
-  const parts=v.split(/\s+[-—]\s+/);
+  const parts=v.split(/\s+[-–—]\s+/);/* hyphen, en-dash, em-dash — the same dock ships in all three */
   return parts[parts.length-1].trim().toLowerCase();
 };
 /* Dock-aware orphan-pickup reaping: multi-source suppliers (MULTI_PICKUP) can
@@ -3693,7 +3693,7 @@ useEffect(()=>{
       let changed=false;
       Object.entries(fbData).forEach(([fbKey,payload])=>{
         const dayIdx=payload.dayIdx;
-        const entries=reapOrphanAutoPickups(dedupeDeliveries(dedupeGhostDeliveries(dedupeAutoPickups(dedupeIds((payload.entries||[]).map(sanitizeEntry).filter(Boolean))))),_reapOpts).map(_e0=>{
+        const entries=reapOrphanAutoPickups(dedupeDeliveries(dedupeGhostDeliveries(dedupeAutoPickups(dedupeIds((payload.entries||[]).map(sanitizeEntry).filter(Boolean)),_reapOpts))),_reapOpts).map(_e0=>{
           const e=_fixImetcoAddr(_e0);
           if(e.customer&&!e.isHourly&&e.stopType!=="pickup"){
             const cd=CUSTOMERS[e.customer];
@@ -3771,7 +3771,7 @@ useEffect(()=>{
       let changed=false;
       Object.entries(fbData).forEach(([fbKey,payload])=>{
         const dayIdx=payload.dayIdx;
-        const entries=reapOrphanAutoPickups(dedupeDeliveries(dedupeGhostDeliveries(dedupeAutoPickups(dedupeIds((payload.entries||[]).map(sanitizeEntry).filter(Boolean))))),_reapOpts).map(_e0=>{
+        const entries=reapOrphanAutoPickups(dedupeDeliveries(dedupeGhostDeliveries(dedupeAutoPickups(dedupeIds((payload.entries||[]).map(sanitizeEntry).filter(Boolean)),_reapOpts))),_reapOpts).map(_e0=>{
           const e=_fixImetcoAddr(_e0);
           if(e.customer&&!e.isHourly&&e.stopType!=="pickup"){
             const cd=CUSTOMERS[e.customer];
@@ -4495,7 +4495,10 @@ let placed=false;
 const priorPU=removedPUs.find(p=>p.driverId===dId&&p.stop===puSrc.label);
 if(priorPU&&Object.prototype.hasOwnProperty.call(_puAnchorById,priorPU.id)){
   const anchorId=_puAnchorById[priorPU.id];
-  if(anchorId===null){all.push(puEntry);placed=true;} /* was at end */
+  if(anchorId===null){/* pickup was at the array end — but an auto-pickup must
+    precede its own deliveries; leave it unplaced so the delivery-based fallback
+    below inserts it before its first delivery, instead of re-pinning it to the
+    bottom forever (the desktop RouteBuilder-Apply "pickup at bottom" bug). */}
   else{
     const ai=all.findIndex(e=>e.id===anchorId);
     if(ai>=0){all.splice(ai,0,puEntry);placed=true;}
@@ -5306,7 +5309,7 @@ const drvEntries=did=>{
      driver can never see the same pickup twice or a pickup with no delivery.
      dedupeAutoPickups keys on (customer, stop, driverId, loadNum); reap needs the
      deduped set so a survivor is matched to its deliveries. */
-  const entries=reapOrphanAutoPickups(dedupeDeliveries(dedupeAutoPickups(dl.filter(e=>e.driverId===did))),_reapOpts);
+  const entries=reapOrphanAutoPickups(dedupeDeliveries(dedupeAutoPickups(dl.filter(e=>e.driverId===did),_reapOpts)),_reapOpts);
   return entries.map(e=>{
     if(e.stopType!=="pickup"||e.manualPickup)return e;
     const live=_computeLiveLoadOrderNote(e,entries);
@@ -5362,7 +5365,7 @@ showToast("Moved to "+targetName);
 }
 setDragSrc(null);setDragOver(null);
 };
-const reorderDriver=(drvId,orderedIds)=>{setLog(p=>{const all=[...(p[dk]||[])];const drvEntries2=all.filter(e=>e.driverId===drvId);const rest=all.filter(e=>e.driverId!==drvId);return{...p,[dk]:[...rest,...orderByIds(drvEntries2,orderedIds)]};});showToast("Routes applied");};
+const reorderDriver=(drvId,orderedIds)=>{setLog(p=>{let all=[...(p[dk]||[])];const drvEntries2=all.filter(e=>e.driverId===drvId);const rest=all.filter(e=>e.driverId!==drvId);all=[...rest,...orderByIds(drvEntries2,orderedIds)];/* orderByIds strands unlisted entries (auto-pickups) at the end when the caller passes a delivery-only id list (desktop RouteBuilder Apply); rebuild each affected customer's auto-pickups so they land before their first delivery. */const custs=new Set(drvEntries2.filter(e=>e.stopType==="delivery").map(e=>e.customer));custs.forEach(c=>{all=rebuildPickupsFor(all,c);});return{...p,[dk]:all};});showToast("Routes applied");};
 const getCustColor=cust=>CC[cust]||CC["One-Off Delivery"];
 
 const jumpToDate=dateStr=>{const target=new Date(dateStr+"T12:00:00");const now=_weekRefNow();const tD=target.getDay();const tM=new Date(target);tM.setDate(target.getDate()-(tD===0?6:tD-1));const nD=now.getDay();const nM=new Date(now);nM.setDate(now.getDate()-(nD===0?6:nD-1));tM.setHours(0,0,0,0);nM.setHours(0,0,0,0);const diff=Math.round((tM-nM)/(7*24*60*60*1000));const dayIdx=tD===0?6:tD-1;setWo(diff);setSd(Math.min(Math.max(dayIdx,0),4));setShowDatePicker(false);setView("manifest");};
@@ -10189,7 +10192,7 @@ const showToast=useCallback(m=>{setToast(m);setTimeout(()=>setToast(null),2000);
 const drvSaveTime=useRef(0);
 const driverId=resolveDriverSlug(driverSlug,allDrivers);
 const driver=driverId?allDrivers.find(d=>d.id===driverId):null;
-const entries=driverId?dl.filter(e=>e.driverId===driverId):[];
+const entries=driverId?reapOrphanAutoPickups(dedupeDeliveries(dedupeAutoPickups(dl.filter(e=>e.driverId===driverId),_reapOpts)),_reapOpts):[];/* Self-heal on the driver's own phone too: the dispatcher board dedupes/reaps auto-pickups AND collapses duplicate deliveries via drvEntries, but the driver app renders its own dl — without this it showed duplicate/orphaned pickups and the duplicate-delivery (BEC-on-Trevor) rows. */
 useEffect(()=>{
   const unsubDrivers=subscribeDrivers((fbDrivers)=>{
     if(fbDrivers.length>0){
@@ -10214,7 +10217,7 @@ useEffect(()=>{
       Object.entries(fbData).forEach(([fbKey,payload])=>{
         const dayIdx=payload.dayIdx;
         const lk=`${wo}-${dayIdx}`;
-        const fbEnts=reapOrphanAutoPickups(dedupeDeliveries(dedupeGhostDeliveries(dedupeAutoPickups(dedupeIds((payload.entries||[]).map(sanitizeEntry).filter(Boolean))))),_reapOpts).map(_e0=>{
+        const fbEnts=reapOrphanAutoPickups(dedupeDeliveries(dedupeGhostDeliveries(dedupeAutoPickups(dedupeIds((payload.entries||[]).map(sanitizeEntry).filter(Boolean)),_reapOpts))),_reapOpts).map(_e0=>{
           const e=_fixImetcoAddr(_e0);
           if(e.customer&&!e.isHourly&&e.stopType!=="pickup"){
             const cd=CUSTOMERS[e.customer];

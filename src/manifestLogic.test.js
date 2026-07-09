@@ -536,7 +536,7 @@ describe("reapOrphanAutoPickups — multi-source dock matching (pickup-without-d
     multiSource: (c) => c === "Emser Tile" || c === "Traditions in Tile",
     normLoc: (v) => {
       if (!v || typeof v !== "string") return "";
-      const p = v.split(/\s+[-—]\s+/);
+      const p = v.split(/\s+[-–—]\s+/);
       return p[p.length - 1].trim().toLowerCase();
     },
   };
@@ -760,5 +760,50 @@ describe("_mergeEntryDispatcher — last-writer-wins on dispatcher fields (Phase
     expect(out.departedAt).toBe("8:02 AM");
     expect(out.photos).toContain("https://x/pod.jpg");
     expect(out.signature).toBe("Jane");
+  });
+});
+
+/* ====================================================================== */
+/* Dash-drift duplicate pickups — the "same pickup card 3× on one load" bug.
+   The same dock is stored under drifting dash formats; dedupeAutoPickups must
+   key on the normalized dock, not the raw stop string. */
+describe("dedupeAutoPickups — normalized-dock key collapses dash-drift duplicates", () => {
+  const NL = { normLoc: (v) => {
+    if (!v || typeof v !== "string") return "";
+    const p = v.split(/\s+[-–—]\s+/);
+    return p[p.length - 1].trim().toLowerCase();
+  } };
+  it("collapses the same dock stored under 3 different dash formats", () => {
+    const a = pu({ id: "a", customer: "Emser Tile", stop: "Emser - Norcross",       driverId: 5, loadNum: 1 });
+    const b = pu({ id: "b", customer: "Emser Tile", stop: "Emser – Norcross",   driverId: 5, loadNum: 1 }); // en-dash
+    const c = pu({ id: "c", customer: "Emser Tile", stop: "Emser Tile — Norcross", driverId: 5, loadNum: 1 }); // em-dash + prefix
+    const out = dedupeAutoPickups([a, b, c], NL);
+    const pickups = out.filter((e) => e.stopType === "pickup");
+    expect(pickups).toHaveLength(1); // one dock, one card
+  });
+  it("keeps genuinely different docks for the same customer (Norcross vs Roswell)", () => {
+    const nor = pu({ id: "n", customer: "Emser Tile", stop: "Emser - Norcross", driverId: 5, loadNum: 1 });
+    const ros = pu({ id: "r", customer: "Emser Tile", stop: "Emser - Roswell",  driverId: 5, loadNum: 1 });
+    expect(dedupeAutoPickups([nor, ros], NL).filter((e) => e.stopType === "pickup")).toHaveLength(2);
+  });
+  it("prefers pickupFrom over stop when resolving the dock", () => {
+    const a = pu({ id: "a", customer: "Emser Tile", stop: "Emser - Norcross", pickupFrom: "Norcross", driverId: 5, loadNum: 1 });
+    const b = pu({ id: "b", customer: "Emser Tile", stop: "legacy label",      pickupFrom: "Emser - Norcross", driverId: 5, loadNum: 1 });
+    expect(dedupeAutoPickups([a, b], NL).filter((e) => e.stopType === "pickup")).toHaveLength(1);
+  });
+  it("still keeps distinct loads apart (load 1 vs load 2 same dock)", () => {
+    const l1 = pu({ id: "1", customer: "Emser Tile", stop: "Emser - Norcross", driverId: 5, loadNum: 1 });
+    const l2 = pu({ id: "2", customer: "Emser Tile", stop: "Emser - Norcross", driverId: 5, loadNum: 2 });
+    expect(dedupeAutoPickups([l1, l2], NL).filter((e) => e.stopType === "pickup")).toHaveLength(2);
+  });
+  it("still drops driver-0 auto-pickups and never touches manual pickups/deliveries", () => {
+    const out = dedupeAutoPickups([
+      del({ id: "d", customer: "Emser Tile" }),
+      pu({ id: "u", customer: "Emser Tile", stop: "Emser - Norcross", driverId: 0, loadNum: 1 }),
+      pu({ id: "m", customer: "Emser Tile", stop: "Emser – Norcross", driverId: 5, loadNum: 1, manualPickup: true }),
+    ], NL);
+    expect(out.some((e) => e.id === "d")).toBe(true);  // delivery kept
+    expect(out.some((e) => e.id === "u")).toBe(false); // driver-0 dropped
+    expect(out.some((e) => e.id === "m")).toBe(true);  // manual kept
   });
 });
