@@ -13,6 +13,9 @@ import {
   makeTombFilter,
   vanishedAutoPickups,
   orderByIds,
+  reconcileDriverRoster,
+  applyDriverRemap,
+  normDriverName,
 } from "./manifestLogic.js";
 
 /* Test helpers ---------------------------------------------------------- */
@@ -805,5 +808,99 @@ describe("dedupeAutoPickups — normalized-dock key collapses dash-drift duplica
     expect(out.some((e) => e.id === "d")).toBe(true);  // delivery kept
     expect(out.some((e) => e.id === "u")).toBe(false); // driver-0 dropped
     expect(out.some((e) => e.id === "m")).toBe(true);  // manual kept
+  });
+});
+
+/* ====================================================================== */
+/* Driver-roster reconciliation — the same driver must be ONE id everywhere,
+   and a day's entries must follow their driver when its id changes
+   ("I plan on Brent, my dispatcher doesn't see it"). */
+describe("normDriverName", () => {
+  it("normalizes case, surrounding and inner whitespace", () => {
+    expect(normDriverName("  Brent   Dixon ")).toBe("brent dixon");
+    expect(normDriverName("BRENT DIXON")).toBe(normDriverName("brent dixon"));
+  });
+  it("is safe for null/undefined/non-strings", () => {
+    expect(normDriverName(null)).toBe("");
+    expect(normDriverName(undefined)).toBe("");
+    expect(normDriverName(42)).toBe("42");
+  });
+});
+
+describe("reconcileDriverRoster — one id per driver, deterministic across devices", () => {
+  it("collapses two ids for the same name to the smallest id and remaps the rest", () => {
+    const old = [{ id: 2, name: "Brent Dixon" }];
+    const incoming = [{ id: 2, name: "Brent Dixon" }, { id: 1720000000001, name: "Brent Dixon" }];
+    const { drivers, remap } = reconcileDriverRoster(old, incoming);
+    expect(drivers).toHaveLength(1);
+    expect(drivers[0].id).toBe(2);                 // seed id wins
+    expect(remap[1720000000001]).toBe(2);          // the Date.now() twin remaps to it
+  });
+
+  it("remaps a client whose driver's id changed under it (wholesale-replace clobber)", () => {
+    // My roster had Brent@2; the incoming (FB) roster now only has Brent@999.
+    const old = [{ id: 2, name: "Brent Dixon" }];
+    const incoming = [{ id: 999, name: "Brent Dixon" }];
+    const { drivers, remap } = reconcileDriverRoster(old, incoming);
+    expect(drivers[0].id).toBe(999);               // follow the shared FB roster
+    expect(remap[2]).toBe(999);                     // my entries on @2 follow to @999
+  });
+
+  it("two devices that see the SAME incoming roster pick the SAME canonical id", () => {
+    const incoming = [{ id: 900, name: "Brent" }, { id: 100, name: "Brent" }];
+    const a = reconcileDriverRoster([{ id: 900, name: "Brent" }], incoming);
+    const b = reconcileDriverRoster([{ id: 100, name: "Brent" }], incoming);
+    expect(a.drivers[0].id).toBe(b.drivers[0].id); // both -> 100
+    expect(a.drivers[0].id).toBe(100);
+    expect(a.remap[900]).toBe(100);
+    expect(b.remap[900]).toBe(100);
+  });
+
+  it("steady state (rosters already match) produces NO remap and no churn", () => {
+    const roster = [{ id: 1, name: "Trevor" }, { id: 2, name: "Brent" }];
+    const { drivers, remap } = reconcileDriverRoster(roster, roster);
+    expect(Object.keys(remap)).toHaveLength(0);
+    expect(drivers).toHaveLength(2);
+  });
+
+  it("is deletion-safe: a name removed from the incoming roster is NOT remapped or resurrected", () => {
+    const old = [{ id: 2, name: "Brent" }, { id: 5, name: "Carl" }];
+    const incoming = [{ id: 2, name: "Brent" }]; // Carl was deleted
+    const { drivers, remap } = reconcileDriverRoster(old, incoming);
+    expect(drivers.some((d) => normDriverName(d.name) === "carl")).toBe(false);
+    expect(remap[5]).toBeUndefined(); // Carl's entries are left as-is (genuine deletion)
+  });
+
+  it("never merges two genuinely different names", () => {
+    const roster = [{ id: 1, name: "Trevor" }, { id: 2, name: "Trevarr" }];
+    const { drivers, remap } = reconcileDriverRoster(roster, roster);
+    expect(drivers).toHaveLength(2);
+    expect(Object.keys(remap)).toHaveLength(0);
+  });
+
+  it("tolerates junk incoming (null / missing id / blank name)", () => {
+    const { drivers, remap } = reconcileDriverRoster([], [null, { name: "x" }, { id: 3, name: "  " }, { id: 4, name: "Al" }]);
+    expect(drivers).toHaveLength(1);
+    expect(drivers[0].id).toBe(4);
+    expect(Object.keys(remap)).toHaveLength(0);
+  });
+});
+
+describe("applyDriverRemap — entries follow their driver", () => {
+  it("repoints driverId per the remap and preserves everything else", () => {
+    const entries = [del({ id: "a", driverId: 2 }), del({ id: "b", driverId: 999 }), del({ id: "c", driverId: 3 })];
+    const out = applyDriverRemap(entries, { 999: 2 });
+    expect(out.find((e) => e.id === "b").driverId).toBe(2);
+    expect(out.find((e) => e.id === "a").driverId).toBe(2); // untouched
+    expect(out.find((e) => e.id === "c").driverId).toBe(3); // untouched
+  });
+  it("returns the SAME array reference when nothing matches (no needless save)", () => {
+    const entries = [del({ id: "a", driverId: 2 })];
+    expect(applyDriverRemap(entries, { 999: 2 })).toBe(entries);
+    expect(applyDriverRemap(entries, {})).toBe(entries);
+  });
+  it("leaves unassigned (driverId 0) entries alone", () => {
+    const entries = [del({ id: "a", driverId: 0 })];
+    expect(applyDriverRemap(entries, { 999: 2 })).toBe(entries);
   });
 });

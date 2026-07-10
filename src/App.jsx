@@ -61,7 +61,7 @@ greenBtn:{background:"#16a34a",color:"#fff",border:"none",borderRadius:8,padding
 inputMb4:{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"7px 10px",fontSize:12,outline:"none",marginBottom:4},
 };
 import { useState, useCallback, useEffect, useRef, Fragment, Component } from "react";
-import { dedupeIds, dedupeAutoPickups, dedupeGhostDeliveries, dedupeDeliveries, reapOrphanAutoPickups, sanitizeEntry, _mergeEntryDriver, _mergeEntryDispatcher, buildMergedEntries, entrySig, makeTombFilter, vanishedAutoPickups, orderByIds } from "./manifestLogic.js";
+import { dedupeIds, dedupeAutoPickups, dedupeGhostDeliveries, dedupeDeliveries, reapOrphanAutoPickups, sanitizeEntry, _mergeEntryDriver, _mergeEntryDispatcher, buildMergedEntries, entrySig, makeTombFilter, vanishedAutoPickups, orderByIds, reconcileDriverRoster, applyDriverRemap, normDriverName } from "./manifestLogic.js";
 
 const _SplitUI=({splitEntry,setSplitEntry})=>{const tw=splitEntry.totalWeight||0;const t1w=splitEntry.truck1Weight!==undefined?splitEntry.truck1Weight:Math.round(tw*(splitEntry.ratio/100));const t2w=tw-t1w;return(<><div style={_s.flexG6Mb6}><div style={_s.f1}><label style={_s.labelSm}>Total</label><input type="number" inputMode="numeric" value={tw||""} onChange={e=>{const newTw=parseInt(e.target.value)||0;setSplitEntry(p=>({...p,totalWeight:newTw,truck1Weight:Math.min(p.truck1Weight||Math.round(newTw/2),newTw)}));}} style={_s.splitTotal}/></div><div style={_s.f1}><label style={_s.labelBlue}>Truck 1</label><input type="number" inputMode="numeric" value={splitEntry.truck1Weight!==undefined?splitEntry.truck1Weight:""} onChange={e=>{const v=e.target.value;setSplitEntry(p=>({...p,truck1Weight:v===""?0:parseInt(v)||0}));}} style={_s.splitInput}/></div><div style={_s.f1}><label style={_s.labelGray}>Truck 2</label><div style={_s.splitT2}>{t2w.toLocaleString()}</div></div></div><input type="range" min={0} max={tw} step={100} value={t1w} onChange={e=>{const v=parseInt(e.target.value)||0;setSplitEntry(p=>({...p,truck1Weight:v}));}} style={_s.slider}/></>);};
 
@@ -2983,6 +2983,7 @@ d.forEach(drv=>{const key=(drv.name||"").toLowerCase().trim();if(!seen.has(key))
 const merged=deduped.map(drv=>{const def=DEFAULT_DRIVERS.find(dd=>dd.id===drv.id||dd.name===drv.name);if(def&&!drv.phone&&def.phone)return{...drv,phone:def.phone};return drv;});
 return merged;
 });
+const driversRef=useRef([]);driversRef.current=drivers; /* always the CURRENT roster, for the FB-subscription closure's reconcile */
 const[showDM,setShowDM]=useState(false);
 const[showLinkModal,setShowLinkModal]=useState(null); /* {name, url, phone} */
 const[showAutoBackups,setShowAutoBackups]=useState(false);
@@ -3481,7 +3482,24 @@ useEffect(()=>{
         name:typeof drv.name==="string"?drv.name:String(drv.name||"Unknown"),
         phone:typeof drv.phone==="string"?drv.phone:"",
       }));
-      setDrivers(clean);
+      /* Reconcile driver identity: collapse same-name drivers to one canonical id
+         and, when this client's copy of a driver got a different id (a wholesale
+         roster replace, or a re-add elsewhere), remap this day's entries so the
+         orders FOLLOW the driver instead of stranding under a column that no
+         longer exists. The setLog stamps updatedAt on the moved entries, so the
+         corrected assignment wins the save-merge and propagates to everyone. */
+      const{drivers:reconciled,remap}=reconcileDriverRoster(driversRef.current,clean);
+      if(Object.keys(remap).length){
+        setLog(prev=>{
+          let out=prev;
+          Object.keys(prev).forEach(k=>{
+            const re=applyDriverRemap(prev[k],remap);
+            if(re!==prev[k]){if(out===prev)out={...prev};out[k]=re;}
+          });
+          return out;
+        });
+      }
+      setDrivers(reconciled);
     }
   });
   const unsubBackupStatus=subscribeBackupStatus(s=>setBackupStatus(s));
@@ -5208,7 +5226,7 @@ const histFiltered=histAll.filter(e=>{
   return(!q||e.stop.toLowerCase().includes(q)||e.customer.toLowerCase().includes(q)||(e.addr||"").toLowerCase().includes(q))&&(!histCustFilter||e.customer===histCustFilter)&&(!histDrvFilter||e.driverId===Number(histDrvFilter));
 });
 
-const addDrvr=()=>{if(!newDN.trim())return;driverChangeSource.current="local";driverSaveInFlight.current=true;setDrivers(p=>[...p,{id:Date.now(),name:newDN.trim(),phone:newDP.trim(),active:true}]);setNewDN("");setNewDP("");};
+const addDrvr=()=>{if(!newDN.trim())return;const nk=normDriverName(newDN);const dup=drivers.find(d=>normDriverName(d.name)===nk);if(dup){/* never mint a second id for a driver who already exists — that split is exactly what stranded orders under a phantom column across dispatchers */showToast(dup.name+" is already on the roster");setNewDN("");setNewDP("");return;}driverChangeSource.current="local";driverSaveInFlight.current=true;setDrivers(p=>[...p,{id:Date.now(),name:newDN.trim(),phone:newDP.trim(),active:true}]);setNewDN("");setNewDP("");};
 const saveDrv=id=>{if(!editNm.trim())return;driverChangeSource.current="local";driverSaveInFlight.current=true;setDrivers(p=>p.map(d=>d.id===id?{...d,name:editNm.trim(),phone:editPh.trim()}:d));setEditDrv(null);};
 const rmDrv=id=>{
   if(drivers.length<=1)return;
