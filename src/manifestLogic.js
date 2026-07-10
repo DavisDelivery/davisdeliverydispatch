@@ -83,6 +83,76 @@ export const dedupeGhostDeliveries=(entries)=>{
   return changed?out:entries;
 };
 
+/* Collapse DUPLICATE DELIVERIES — the same order rendered as 2+ rows under
+   different ids. Root cause (verified): split/rebuild mint fresh ids for one
+   logical order, and re-entering the full weight/rate makes the copies overlap;
+   nothing then collapses two ASSIGNED deliveries that share their identity. This
+   is the general collapse the model was missing.
+
+   Two deliveries are the SAME order (and collapse) iff they match on
+   (customer, stop, addr, driverId, loadNum, weight, baseRate) — same order, same
+   driver+load, same weight AND rate. That key is deliberately strict:
+   - loadNum in the key means an IN-PROGRESS split (halves on Load 1 vs Load 2)
+     is never collapsed — only copies that have drifted onto the SAME load are;
+   - weight+rate in the key means two genuinely-different orders (different weight
+     or rate) are never merged;
+   - a differing non-empty refNum or shipPlan is an explicit "these are distinct
+     orders" signal and vetoes the collapse for that group.
+   The survivor is the copy with the most driver progress, then the lowest id
+   (deterministic across devices). It INHERITS every driver-stamp from the whole
+   group (status forward-only, arrived/departed, signature, shipPlan, and the
+   union of real photos) so no POD, timestamp, or rate is ever lost. */
+export const dedupeDeliveries=(entries)=>{
+  if(!Array.isArray(entries))return entries;
+  const RANK={departed:3,arrived:2,pending:1};
+  const rank=(e)=>RANK[e&&e.status]||0;
+  const key=(e)=>[e.customer||"",e.stop||"",e.addr||"",e.driverId||0,e.loadNum||1,e.weight||0,e.baseRate||0].join("|");
+  const groups=new Map();
+  entries.forEach(e=>{
+    if(!e||e.stopType!=="delivery")return;
+    const k=key(e);
+    if(!groups.has(k))groups.set(k,[]);
+    groups.get(k).push(e);
+  });
+  const drop=new Set();     /* ids removed */
+  const survPatch=new Map(); /* survivor id -> merged entry */
+  groups.forEach(list=>{
+    if(list.length<2)return;
+    /* explicit distinct-order signals veto the merge */
+    const refs=new Set(list.map(e=>String(e.refNum||"").trim()).filter(Boolean));
+    const sps=new Set(list.map(e=>String(e.shipPlan||"").trim()).filter(Boolean));
+    if(refs.size>1||sps.size>1)return;
+    /* Collapse only with a real duplication SIGNAL, never merge two distinct
+       line items: a shared non-zero weight (distinct shipments have distinct
+       measured weights, so an exact match means one physical order) OR a split
+       lineage. Two identical UNWEIGHTED deliveries could be two real orders, so
+       they are left alone. (weight is in the group key, so it's shared here.) */
+    const sharedWeight=Number(list[0].weight)||0;
+    if(sharedWeight<=0&&!list.some(e=>e.wasSplit))return;
+    const survivor=list.slice().sort((a,b)=>rank(b)-rank(a)||String(a.id).localeCompare(String(b.id)))[0];
+    const merged={...survivor};
+    const photos=[];const seenP=new Set();
+    const addPhotos=(arr)=>{(arr||[]).forEach(p=>{const isReal=typeof p==="string"&&(p.startsWith("https://")||p.startsWith("data:"));if(isReal&&!seenP.has(p)){seenP.add(p);photos.push(p);}});};
+    addPhotos(survivor.photos);
+    list.forEach(e=>{
+      if((RANK[e.status]||0)>(RANK[merged.status]||0))merged.status=e.status;
+      if(!merged.arrivedAt&&e.arrivedAt)merged.arrivedAt=e.arrivedAt;
+      if(!merged.departedAt&&e.departedAt)merged.departedAt=e.departedAt;
+      if((!merged.signature||merged.signature==="signed")&&e.signature)merged.signature=e.signature;
+      if(!merged.shipPlan&&e.shipPlan)merged.shipPlan=e.shipPlan;
+      if(!merged.eta&&e.eta){merged.eta=e.eta;merged.etaDest=e.etaDest;merged.etaSetAt=e.etaSetAt;}
+      if(!merged.pickupDueBy&&e.pickupDueBy)merged.pickupDueBy=e.pickupDueBy;
+      if(!merged.dueBy&&e.dueBy)merged.dueBy=e.dueBy;
+      if(e.id!==survivor.id)addPhotos(e.photos);
+    });
+    if(photos.length)merged.photos=photos;
+    survPatch.set(survivor.id,merged);
+    list.forEach(e=>{if(e.id!==survivor.id)drop.add(e.id);});
+  });
+  if(!drop.size)return entries;
+  return entries.filter(e=>!(e&&drop.has(e.id))).map(e=>(e&&survPatch.has(e.id))?survPatch.get(e.id):e);
+};
+
 /* Reap ORPHANED auto-pickups. An auto-pickup is DERIVED data — it exists only
    because rebuildPickupsFor generated it from ≥1 same-customer delivery on the
    same (driver, load). Several mutation paths historically removed deliveries
@@ -391,5 +461,5 @@ export const buildMergedEntries=(fbEntriesRaw,localEntriesRaw,{isDriver=false,ca
   /* Orphan reap LAST, after the delivery safety-net re-append, so a rescued
      delivery keeps its pickup. Self-heals any orphan already persisted in
      Firebase: the merge drops it, and the transaction write makes that stick. */
-  return reapOrphanAutoPickups(dedupeGhostDeliveries(dedupeAutoPickups(merged)),multiSource?{multiSource,normLoc}:undefined);
+  return reapOrphanAutoPickups(dedupeDeliveries(dedupeGhostDeliveries(dedupeAutoPickups(merged))),multiSource?{multiSource,normLoc}:undefined);
 };
