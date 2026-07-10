@@ -719,3 +719,46 @@ describe("dedupeDeliveries — collapse duplicate deliveries (Phase 1)", () => {
     expect(out.filter(e => e.stop === "BEC - Alpharetta")).toHaveLength(1);
   });
 });
+
+/* ====================================================================== */
+/* _mergeEntryDispatcher — last-writer-wins so reassigns propagate between
+   dispatchers ("I plan on Brent, she doesn't see it"). */
+describe("_mergeEntryDispatcher — last-writer-wins on dispatcher fields (Phase 1)", () => {
+  it("a reassign made on ANOTHER dispatcher (newer updatedAt) propagates", () => {
+    const local = del({ id: "x", driverId: 0, updatedAt: 1000 });      // my stale copy: unassigned
+    const fb    = del({ id: "x", driverId: 2, updatedAt: 2000 });      // her newer edit: assigned to Brent
+    expect(_mergeEntryDispatcher(local, fb).driverId).toBe(2);          // I now see Brent
+  });
+
+  it("a stale FB echo does NOT revert my just-made local assignment", () => {
+    const local = del({ id: "x", driverId: 2, updatedAt: 2000 });      // I just assigned to Brent
+    const fb    = del({ id: "x", driverId: 0, updatedAt: 1000 });      // stale echo still unassigned
+    expect(_mergeEntryDispatcher(local, fb).driverId).toBe(2);          // preserved
+  });
+
+  it("a tie (no timestamps) keeps LOCAL — backward compatible", () => {
+    const local = del({ id: "x", driverId: 2 });
+    const fb    = del({ id: "x", driverId: 0 });
+    expect(_mergeEntryDispatcher(local, fb).driverId).toBe(2);
+  });
+
+  it("newer remote rate/loadNum win too", () => {
+    const local = del({ id: "x", baseRate: 175, loadNum: 1, updatedAt: 1000 });
+    const fb    = del({ id: "x", baseRate: 250, loadNum: 2, updatedAt: 2000 });
+    const out = _mergeEntryDispatcher(local, fb);
+    expect(out.baseRate).toBe(250);
+    expect(out.loadNum).toBe(2);
+  });
+
+  it("driver progress is NEVER lost even when the remote dispatcher edit wins", () => {
+    // Her newer reassign wins the driver field, but my copy has the POD — keep both.
+    const local = del({ id: "x", driverId: 2, updatedAt: 1000, status: "departed", departedAt: "8:02 AM", photos: ["https://x/pod.jpg"], signature: "Jane" });
+    const fb    = del({ id: "x", driverId: 3, updatedAt: 2000, status: "pending" });
+    const out = _mergeEntryDispatcher(local, fb);
+    expect(out.driverId).toBe(3);                 // newer dispatcher edit wins the assignment
+    expect(out.status).toBe("departed");           // driver progress preserved (forward-only)
+    expect(out.departedAt).toBe("8:02 AM");
+    expect(out.photos).toContain("https://x/pod.jpg");
+    expect(out.signature).toBe("Jane");
+  });
+});

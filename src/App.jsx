@@ -167,6 +167,10 @@ const DAYNAMES_FB=["Mon","Tue","Wed","Thu","Fri"];
    Strings compare exactly, never lose precision, and the counter
    guarantees uniqueness even within a single tick. */
 let _idSeq=0;
+/* True when two entries are identical in CONTENT (ignoring updatedAt itself),
+   so setLog only re-stamps updatedAt on entries a dispatcher actually changed —
+   the per-entry edit clock that powers last-writer-wins in _mergeEntryDispatcher. */
+const _sameEntryContent=(a,b)=>{try{return JSON.stringify({...a,updatedAt:0})===JSON.stringify({...b,updatedAt:0});}catch(e){return false;}};
 const genId=()=>{
   _idSeq=(_idSeq+1)%1000000;
   const t=Date.now().toString(36);
@@ -2869,12 +2873,26 @@ logRef.current=log;
 const setLog=useCallback((updater)=>{
   _rawSetLog(prev=>{
     const next=typeof updater==="function"?updater(prev):updater;
+    let out=next;
     Object.keys(next).forEach(k=>{
       if(JSON.stringify(next[k])!==JSON.stringify(prev[k]||[])){
         dirtyDaysRef.current.add(k);
+        /* Stamp updatedAt on entries whose CONTENT changed (or are new) so
+           _mergeEntryDispatcher can resolve dispatcher-field conflicts by
+           last-writer-wins. Only user edits flow through setLog; the Firebase
+           subscription uses _rawSetLog, so a remote edit keeps ITS updatedAt. */
+        const prevById={};(prev[k]||[]).forEach(e=>{if(e&&e.id)prevById[e.id]=e;});
+        const nowTs=Date.now();
+        const stamped=(next[k]||[]).map(e=>{
+          if(!e||!e.id)return e;
+          const pe=prevById[e.id];
+          return (pe&&_sameEntryContent(pe,e))?e:{...e,updatedAt:nowTs};
+        });
+        if(out===next)out={...next};
+        out[k]=stamped;
       }
     });
-    return next;
+    return out;
   });
 },[]);
 useEffect(()=>{

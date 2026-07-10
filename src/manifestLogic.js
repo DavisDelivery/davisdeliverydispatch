@@ -238,15 +238,28 @@ export const _mergeEntryDriver=(localE,fbE)=>{
 };
 
 export const _mergeEntryDispatcher=(localE,fbE)=>{
-  /* Caller is dispatcher. Local wins on dispatcher fields (rate, instructions,
-     addr, order, etc.), FB wins on driver-stamped fields. Forward-only for
-     status and never-clobber for timestamps. */
-  const out={...localE};
+  /* Dispatcher-field conflict resolution is LAST-WRITER-WINS by `updatedAt` — a
+     per-entry edit timestamp stamped whenever a dispatcher changes the entry.
+     This is what makes a reassignment/rate/order edit made on ONE dispatcher's
+     screen actually appear on ANOTHER's. The old code kept LOCAL dispatcher
+     fields unconditionally, so a remote reassign looked stale and never
+     propagated ("I plan on Brent, she doesn't see it").
+
+     A tie (neither side stamped, or equal) keeps LOCAL — this preserves the
+     prior behavior AND the "a stale FB echo must not revert my just-made local
+     assignment" guarantee: the local edit is the newer one, so it wins.
+
+     Driver-stamped fields (status / arrived / departed / photos / signature /
+     shipPlan / eta) always merge FORWARD from BOTH sides regardless of who wins
+     the dispatcher fields, so a driver's progress is never lost to a dispatcher
+     edit. */
+  const lt=Number(localE.updatedAt)||0, ft=Number(fbE.updatedAt)||0;
+  const out={...(ft>lt?fbE:localE)}; /* newer editor wins dispatcher fields; tie → local */
   const localRank=STATUS_RANK[localE.status]??0;
   const fbRank=STATUS_RANK[fbE.status]??0;
-  if(fbRank>localRank)out.status=fbE.status;
-  if(!localE.arrivedAt&&fbE.arrivedAt)out.arrivedAt=fbE.arrivedAt;
-  if(!localE.departedAt&&fbE.departedAt)out.departedAt=fbE.departedAt;
+  out.status = fbRank>localRank ? fbE.status : localE.status;
+  out.arrivedAt = localE.arrivedAt || fbE.arrivedAt || null;
+  out.departedAt = localE.departedAt || fbE.departedAt || null;
   const lp=localE.photos||[],fp=fbE.photos||[];
   const seen=new Set();
   const merged=[];
@@ -255,9 +268,11 @@ export const _mergeEntryDispatcher=(localE,fbE)=>{
   lp.forEach(p=>{if(real(p)&&!seen.has(p)){seen.add(p);merged.push(p);}});
   if(!fp.some(real)){lp.forEach(p=>{if(!real(p)&&!seen.has(p)){seen.add(p);merged.push(p);}});}
   out.photos=merged;
-  if(fbE.signature&&(!localE.signature||localE.signature==="signed"))out.signature=fbE.signature;
-  if(fbE.shipPlan&&!localE.shipPlan)out.shipPlan=fbE.shipPlan;
-  if(fbE.eta&&!localE.eta){out.eta=fbE.eta;out.etaDest=fbE.etaDest;out.etaSetAt=fbE.etaSetAt;}
+  out.signature = (localE.signature&&localE.signature!=="signed") ? localE.signature : (fbE.signature||localE.signature||null);
+  out.shipPlan = localE.shipPlan || fbE.shipPlan || null;
+  if(localE.eta){out.eta=localE.eta;out.etaDest=localE.etaDest;out.etaSetAt=localE.etaSetAt;}
+  else if(fbE.eta){out.eta=fbE.eta;out.etaDest=fbE.etaDest;out.etaSetAt=fbE.etaSetAt;}
+  const mt=Math.max(lt,ft); if(mt)out.updatedAt=mt; /* carry the winning edit's stamp forward */
   return out;
 };
 
