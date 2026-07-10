@@ -61,7 +61,7 @@ greenBtn:{background:"#16a34a",color:"#fff",border:"none",borderRadius:8,padding
 inputMb4:{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"7px 10px",fontSize:12,outline:"none",marginBottom:4},
 };
 import { useState, useCallback, useEffect, useRef, Fragment, Component } from "react";
-import { dedupeIds, dedupeAutoPickups, dedupeGhostDeliveries, reapOrphanAutoPickups, sanitizeEntry, _mergeEntryDriver, _mergeEntryDispatcher, buildMergedEntries, entrySig, makeTombFilter, vanishedAutoPickups, orderByIds } from "./manifestLogic.js";
+import { dedupeIds, dedupeAutoPickups, dedupeGhostDeliveries, dedupeDeliveries, reapOrphanAutoPickups, sanitizeEntry, _mergeEntryDriver, _mergeEntryDispatcher, buildMergedEntries, entrySig, makeTombFilter, vanishedAutoPickups, orderByIds } from "./manifestLogic.js";
 
 const _SplitUI=({splitEntry,setSplitEntry})=>{const tw=splitEntry.totalWeight||0;const t1w=splitEntry.truck1Weight!==undefined?splitEntry.truck1Weight:Math.round(tw*(splitEntry.ratio/100));const t2w=tw-t1w;return(<><div style={_s.flexG6Mb6}><div style={_s.f1}><label style={_s.labelSm}>Total</label><input type="number" inputMode="numeric" value={tw||""} onChange={e=>{const newTw=parseInt(e.target.value)||0;setSplitEntry(p=>({...p,totalWeight:newTw,truck1Weight:Math.min(p.truck1Weight||Math.round(newTw/2),newTw)}));}} style={_s.splitTotal}/></div><div style={_s.f1}><label style={_s.labelBlue}>Truck 1</label><input type="number" inputMode="numeric" value={splitEntry.truck1Weight!==undefined?splitEntry.truck1Weight:""} onChange={e=>{const v=e.target.value;setSplitEntry(p=>({...p,truck1Weight:v===""?0:parseInt(v)||0}));}} style={_s.splitInput}/></div><div style={_s.f1}><label style={_s.labelGray}>Truck 2</label><div style={_s.splitT2}>{t2w.toLocaleString()}</div></div></div><input type="range" min={0} max={tw} step={100} value={t1w} onChange={e=>{const v=parseInt(e.target.value)||0;setSplitEntry(p=>({...p,truck1Weight:v}));}} style={_s.slider}/></>);};
 
@@ -3675,7 +3675,7 @@ useEffect(()=>{
       let changed=false;
       Object.entries(fbData).forEach(([fbKey,payload])=>{
         const dayIdx=payload.dayIdx;
-        const entries=reapOrphanAutoPickups(dedupeGhostDeliveries(dedupeAutoPickups(dedupeIds((payload.entries||[]).map(sanitizeEntry).filter(Boolean)))),_reapOpts).map(_e0=>{
+        const entries=reapOrphanAutoPickups(dedupeDeliveries(dedupeGhostDeliveries(dedupeAutoPickups(dedupeIds((payload.entries||[]).map(sanitizeEntry).filter(Boolean))))),_reapOpts).map(_e0=>{
           const e=_fixImetcoAddr(_e0);
           if(e.customer&&!e.isHourly&&e.stopType!=="pickup"){
             const cd=CUSTOMERS[e.customer];
@@ -3753,7 +3753,7 @@ useEffect(()=>{
       let changed=false;
       Object.entries(fbData).forEach(([fbKey,payload])=>{
         const dayIdx=payload.dayIdx;
-        const entries=reapOrphanAutoPickups(dedupeGhostDeliveries(dedupeAutoPickups(dedupeIds((payload.entries||[]).map(sanitizeEntry).filter(Boolean)))),_reapOpts).map(_e0=>{
+        const entries=reapOrphanAutoPickups(dedupeDeliveries(dedupeGhostDeliveries(dedupeAutoPickups(dedupeIds((payload.entries||[]).map(sanitizeEntry).filter(Boolean))))),_reapOpts).map(_e0=>{
           const e=_fixImetcoAddr(_e0);
           if(e.customer&&!e.isHourly&&e.stopType!=="pickup"){
             const cd=CUSTOMERS[e.customer];
@@ -5288,7 +5288,7 @@ const drvEntries=did=>{
      driver can never see the same pickup twice or a pickup with no delivery.
      dedupeAutoPickups keys on (customer, stop, driverId, loadNum); reap needs the
      deduped set so a survivor is matched to its deliveries. */
-  const entries=reapOrphanAutoPickups(dedupeAutoPickups(dl.filter(e=>e.driverId===did)),_reapOpts);
+  const entries=reapOrphanAutoPickups(dedupeDeliveries(dedupeAutoPickups(dl.filter(e=>e.driverId===did))),_reapOpts);
   return entries.map(e=>{
     if(e.stopType!=="pickup"||e.manualPickup)return e;
     const live=_computeLiveLoadOrderNote(e,entries);
@@ -10196,7 +10196,7 @@ useEffect(()=>{
       Object.entries(fbData).forEach(([fbKey,payload])=>{
         const dayIdx=payload.dayIdx;
         const lk=`${wo}-${dayIdx}`;
-        const fbEnts=reapOrphanAutoPickups(dedupeGhostDeliveries(dedupeAutoPickups(dedupeIds((payload.entries||[]).map(sanitizeEntry).filter(Boolean)))),_reapOpts).map(_e0=>{
+        const fbEnts=reapOrphanAutoPickups(dedupeDeliveries(dedupeGhostDeliveries(dedupeAutoPickups(dedupeIds((payload.entries||[]).map(sanitizeEntry).filter(Boolean))))),_reapOpts).map(_e0=>{
           const e=_fixImetcoAddr(_e0);
           if(e.customer&&!e.isHourly&&e.stopType!=="pickup"){
             const cd=CUSTOMERS[e.customer];

@@ -3,6 +3,7 @@ import {
   dedupeIds,
   dedupeAutoPickups,
   dedupeGhostDeliveries,
+  dedupeDeliveries,
   reapOrphanAutoPickups,
   sanitizeEntry,
   _mergeEntryDispatcher,
@@ -644,5 +645,77 @@ describe("dedupeGhostDeliveries — collapse the unassigned twin of an assigned 
     const ecoCleans = out.filter((e) => e.stop === "EcoClean");
     expect(ecoCleans).toHaveLength(1);       // not two
     expect(ecoCleans[0].driverId).toBe(5);   // the assigned one won
+  });
+});
+
+/* ====================================================================== */
+/* dedupeDeliveries — collapse the same order shown as two rows (the BEC
+   duplicate / split-churn / delete-resurrection family). */
+describe("dedupeDeliveries — collapse duplicate deliveries (Phase 1)", () => {
+  const bec = (o = {}) => del({ customer: "BEC", stop: "BEC - Alpharetta", addr: "1000 Union Center Dr", driverId: 2, loadNum: 2, weight: 8753, baseRate: 175, ...o });
+
+  it("collapses the exact production case (same order, one copy diverged on pickupDueBy)", () => {
+    const a = bec({ id: "A" });
+    const b = bec({ id: "B", pickupDueBy: "After 9:30 AM" }); // diverged copy
+    const out = dedupeDeliveries([a, b]);
+    expect(out).toHaveLength(1);
+    expect(out[0].pickupDueBy).toBe("After 9:30 AM"); // the diverged field is preserved on the survivor
+  });
+
+  it("collapses two re-weighted split halves that drifted onto the SAME load", () => {
+    const a = bec({ id: "A", wasSplit: true });
+    const b = bec({ id: "B", wasSplit: true });
+    expect(dedupeDeliveries([a, b])).toHaveLength(1);
+  });
+
+  it("NEVER collapses an in-progress split (halves on Load 1 vs Load 2)", () => {
+    const l1 = bec({ id: "A", loadNum: 1, weight: 5000, baseRate: 175, wasSplit: true });
+    const l2 = bec({ id: "B", loadNum: 2, weight: 3753, baseRate: 0, wasSplit: true });
+    expect(dedupeDeliveries([l1, l2])).toHaveLength(2);
+  });
+
+  it("NEVER merges two genuinely-distinct orders (different weight or rate)", () => {
+    expect(dedupeDeliveries([bec({ id: "A", weight: 8753 }), bec({ id: "B", weight: 4000 })])).toHaveLength(2);
+    expect(dedupeDeliveries([bec({ id: "A", baseRate: 175 }), bec({ id: "B", baseRate: 250 })])).toHaveLength(2);
+  });
+
+  it("respects an explicit distinct-order signal (different non-empty refNum)", () => {
+    expect(dedupeDeliveries([bec({ id: "A", refNum: "PO-1" }), bec({ id: "B", refNum: "PO-2" })])).toHaveLength(2);
+  });
+
+  it("preserves the POD: survivor inherits a departed stamp + photo from the dropped copy", () => {
+    const pending = bec({ id: "A", status: "pending" });
+    const done = bec({ id: "B", status: "departed", departedAt: "8:02 AM", photos: ["https://x/pod.jpg"], signature: "John" });
+    const out = dedupeDeliveries([pending, done]);
+    expect(out).toHaveLength(1);
+    expect(out[0].status).toBe("departed");
+    expect(out[0].departedAt).toBe("8:02 AM");
+    expect(out[0].photos).toContain("https://x/pod.jpg");
+    expect(out[0].signature).toBe("John");
+  });
+
+  it("SAFETY: leaves two identical UNWEIGHTED deliveries alone (could be two real line items)", () => {
+    const a = bec({ id: "A", weight: 0 });
+    const b = bec({ id: "B", weight: 0 });
+    expect(dedupeDeliveries([a, b])).toHaveLength(2); // no weight signal, no split lineage -> not merged
+  });
+
+  it("collapses unweighted copies when they carry a split lineage", () => {
+    const a = bec({ id: "A", weight: 0, wasSplit: true });
+    const b = bec({ id: "B", weight: 0, wasSplit: true });
+    expect(dedupeDeliveries([a, b])).toHaveLength(1);
+  });
+
+  it("leaves pickups and non-duplicates alone", () => {
+    const d = bec({ id: "A" });
+    const p = pu({ id: "P", customer: "Emser Tile", stop: "Emser - Norcross", driverId: 2 });
+    expect(dedupeDeliveries([d, p]).map(e => e.id).sort()).toEqual(["A", "P"]);
+  });
+
+  it("persists the collapse through the save merge (buildMergedEntries) — kills the sticky duplicate", () => {
+    const a = bec({ id: "A" });
+    const b = bec({ id: "B", pickupDueBy: "After 9:30 AM" });
+    const out = buildMergedEntries([a, b], [a, b], { isDriver: false, callerDriverId: 0 });
+    expect(out.filter(e => e.stop === "BEC - Alpharetta")).toHaveLength(1);
   });
 });
