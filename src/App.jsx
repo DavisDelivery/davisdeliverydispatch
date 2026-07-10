@@ -1644,7 +1644,7 @@ const isImetcoReturn=(e)=>e.customer==="IMETCO"&&(e.stop.includes("to IMETCO")||
 const needsShipPlan=(e)=>e.customer==="IMETCO";
 return(
 <div style={{fontFamily:"'DM Sans',system-ui,sans-serif",background:"#f5f5f4",color:"#1c1917",minHeight:"100vh",maxWidth:480,margin:"0 auto"}}>
-<div style={{background:BRAND.dark,color:"#fff",padding:"16px 20px"}}>
+<div style={{background:BRAND.dark,color:"#fff",padding:"calc(16px + env(safe-area-inset-top,0px)) 20px"}}>
 <img src={LOGO_WHITE} alt="Davis Delivery" style={{height:26,objectFit:"contain",marginBottom:2,display:"block"}}/>
 <p style={{margin:"2px 0 0",fontSize:11,color:"#93c5fd",letterSpacing:"0.08em"}}>DRIVER MANIFEST</p>
 </div>
@@ -1984,7 +1984,7 @@ style={{display:"flex",alignItems:"center",gap:6,padding:compact?"5px 8px":"8px"
 {entry.pickupDueBy&&<span style={{fontSize:9,background:"#16a34a",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700,display:"inline-flex",alignItems:"center",gap:2}}>{"📦"} {entry.pickupDueBy}</span>}
 </div>
 <div style={{fontSize:compact?13:14,fontWeight:700,color:"#1c1917",marginTop:compact?0:2}}>{entry.stop}</div>
-{addr&&!compact&&<div style={{fontSize:12,color:"#57534e",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{addr}</div>}
+{addr&&!compact&&<div style={{fontSize:12,color:"#57534e",wordBreak:"break-word",lineHeight:1.3}}>{addr}</div>}
 {entry.note&&<div style={{fontSize:10,color:"#a8a29e"}}>{entry.note}</div>}
 {hasI&&!expanded&&<div style={{fontSize:10,color:"#2563eb",marginTop:2}}>📋 {entry.instructions}</div>}
 {!expanded&&<div style={{display:"flex",gap:6,alignItems:"center",marginTop:4,flexWrap:"wrap"}} onClick={e=>e.stopPropagation()}>
@@ -8360,8 +8360,8 @@ return(
 </div>
 </div>}
 
-<div style={{background:BRAND.dark,color:"#fff",padding:"16px 20px 12px"}}>
-<div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+<div style={{background:BRAND.dark,color:"#fff",padding:"calc(16px + env(safe-area-inset-top,0px)) 20px 12px"}}>
+<div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,flexWrap:"wrap",rowGap:8}}>
 <div style={_s.flexC6}>
 <a href={window.location.pathname} onClick={e=>{e.preventDefault();setView("manifest");setSelCust(null);setQuoteMode(null);window.history.replaceState(null,"",window.location.pathname);window.scrollTo(0,0);}} style={{cursor:"pointer"}}><img src={LOGO_WHITE} alt="Davis Delivery" style={{height:28,objectFit:"contain"}}/></a>
 <div>
@@ -8370,7 +8370,7 @@ return(
 </div>
 
 </div>
-<div style={{display:"flex",gap:8,alignItems:"center"}}>
+<div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",justifyContent:"flex-end"}}>
 <button onClick={()=>{setShowMsgPanel(true);setMsgChannel(null);markMsgsRead(null);}} style={{background:"#292524",border:"1px solid #44403c",color:"#d6d3d1",borderRadius:8,padding:"6px 10px",cursor:"pointer",fontSize:12,fontWeight:600,position:"relative"}}>{"💬"}{getTotalUnread()>0&&<span style={{position:"absolute",top:-4,right:-4,background:"#dc2626",color:"#fff",fontSize:9,fontWeight:700,padding:"1px 5px",borderRadius:8,minWidth:14,textAlign:"center"}}>{getTotalUnread()}</span>}</button>
 <button onClick={openTextInbox} style={{background:"#292524",border:"1px solid #44403c",color:"#d6d3d1",borderRadius:8,padding:"6px 10px",cursor:"pointer",fontSize:13,fontWeight:600}}>{"✉️"}</button>
 <button onClick={()=>setShowChat(true)} style={{background:"#d97706",border:"none",color:"#fff",borderRadius:8,padding:"6px 10px",cursor:"pointer",fontSize:12,fontWeight:600}}>AI</button>
@@ -10479,7 +10479,7 @@ return(
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet"/>
 {toast&&<div style={{position:"fixed",top:20,left:"50%",transform:"translateX(-50%)",background:"#16a34a",color:"#fff",padding:"10px 24px",borderRadius:12,fontWeight:600,fontSize:14,zIndex:999,boxShadow:"0 8px 32px rgba(22,163,74,0.3)",animation:"slideDown 0.3s ease"}}>✓ {toast}</div>}
 
-<div style={{background:BRAND.dark,color:"#fff",padding:"16px 20px"}}>
+<div style={{background:BRAND.dark,color:"#fff",padding:"calc(16px + env(safe-area-inset-top,0px)) 20px"}}>
 <div style={_s.flexBtw}>
 <div>
 <h1 style={{margin:0}}><img src={LOGO_WHITE} alt="Davis Delivery" style={{height:26,objectFit:"contain"}}/></h1>
