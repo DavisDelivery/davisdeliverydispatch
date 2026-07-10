@@ -433,6 +433,73 @@ export const makeTombFilter=(deletedIds)=>{
   };
 };
 
+/* ── Durable tombstones (delete propagation) ─────────────────────────────────
+   The in-memory tombstones above live 90s on ONE device — long enough to keep a
+   Firestore echo from resurrecting a just-deleted stop locally, but invisible to
+   every other device. The confirmed failure: A deletes X and saves; B's local
+   still holds X; B's next save re-appends X → resurrected for everyone.
+
+   Fix: the day document carries its own tombstone list — `deleted:[{id,sig,at}]`
+   — written by the save transaction and honored by every device's merge and
+   receive path. `at` is the delete's edit-clock: an entry whose updatedAt is
+   NEWER than the tombstone survives (someone kept working on the stop after the
+   delete — last writer wins, consistent with _mergeEntryDispatcher), while a
+   stale copy (older or no updatedAt) is suppressed. A re-added stop always has a
+   fresh id, so it can never be caught by the old id's tombstone. */
+export const DOC_TOMBSTONE_TTL=48*3600*1000; /* long enough to outlive any stale tab holding the day */
+
+/* Normalize any of the app's tombstone shapes (the activeTombstones array/Map,
+   a doc's deleted list, bare ids) to [{id,sig,at}]. `now` stamps entries that
+   carry no time of their own. */
+export const tombListFrom=(deleted,now)=>{
+  const at0=Number(now)||0;
+  const out=[];
+  const add=(id,sig,at)=>{if(id!=null)out.push({id:String(id),sig:sig==null?"":String(sig),at:Number(at)||at0});};
+  if(deleted instanceof Map)deleted.forEach((v,id)=>{if(v&&typeof v==="object")add(id,v.sig,v.at);else add(id,v);});
+  else if(deleted instanceof Set)deleted.forEach(id=>add(id,""));
+  else if(Array.isArray(deleted))deleted.forEach(d=>{if(d&&typeof d==="object")add(d.id,d.sig,d.at);else add(d,"");});
+  return out;
+};
+
+/* Merge the day doc's tombstones with the caller's fresh local ones: one entry
+   per (id, sig) keeping the NEWEST at, pruned to the TTL. Pure and idempotent —
+   the transaction can re-run it on retry and every device computes the same. */
+export const mergeTombstones=(fbDeleted,localDeleted,now,ttl)=>{
+  const nowTs=Number(now)||0;
+  const horizon=nowTs-(Number(ttl)||DOC_TOMBSTONE_TTL);
+  const byKey=new Map();
+  tombListFrom(fbDeleted,nowTs).concat(tombListFrom(localDeleted,nowTs)).forEach(t=>{
+    if(t.at<=horizon)return;
+    const k=t.id+"|"+t.sig;
+    const cur=byKey.get(k);
+    if(!cur||t.at>cur.at)byKey.set(k,t);
+  });
+  return[...byKey.values()];
+};
+
+/* Edit-clock-aware tombstone matcher over a doc's deleted list. Suppresses an
+   entry iff its id matches, its signature matches (empty sig = id-only), AND the
+   delete is not older than the entry's own last edit. */
+export const makeDocTombFilter=(deleted)=>{
+  const list=tombListFrom(deleted,0);
+  const byId=new Map();
+  list.forEach(t=>{
+    if(!byId.has(t.id))byId.set(t.id,[]);
+    byId.get(t.id).push(t);
+  });
+  return{
+    size:byId.size,
+    has(e){
+      if(!e||e.id==null)return false;
+      const ts=byId.get(String(e.id));
+      if(!ts)return false;
+      const edited=Number(e.updatedAt)||0;
+      const sig=entrySig(e);
+      return ts.some(t=>(t.sig===""||t.sig===sig)&&t.at>=edited);
+    },
+  };
+};
+
 /* Auto-pickups removed as a SIDE EFFECT of a local mutation (rebuildPickupsFor),
    for the caller to tombstone. ONLY non-manual pickups are eligible: a delivery
    must NEVER be tombstoned by a vanished/diff heuristic, because tombstoning a
@@ -482,9 +549,15 @@ export const orderByIds=(items,orderedIds)=>{
      - collapse duplicate auto-pickups.
    Pure: same inputs → same output, no I/O. This is the surface the concurrency
    test suite locks down. */
-export const buildMergedEntries=(fbEntriesRaw,localEntriesRaw,{isDriver=false,callerDriverId=0,deletedIds=null,multiSource=null,normLoc=null}={})=>{
+export const buildMergedEntries=(fbEntriesRaw,localEntriesRaw,{isDriver=false,callerDriverId=0,deletedIds=null,docTombstones=null,multiSource=null,normLoc=null}={})=>{
   const fbEntries=dedupeIds(fbEntriesRaw||[]);
   const localEntries=dedupeIds(localEntriesRaw||[]);
+  /* Durable tombstones from the day doc (merged with the caller's fresh local
+     deletes by saveManifestDay). Unlike the in-memory `deletedIds` — which only
+     guards the FB-side appends — these ALSO drop the caller's own LOCAL copy of
+     a stop another dispatcher deleted, killing the "B's stale copy resurrects
+     A's delete" loop. Edit-clock-aware: an entry edited AFTER the delete wins. */
+  const docTomb=makeDocTombFilter(docTombstones);
   const fbById={};
   fbEntries.forEach(e=>{if(e&&e.id)fbById[e.id]=e;});
   const localById={};
@@ -508,6 +581,7 @@ export const buildMergedEntries=(fbEntriesRaw,localEntriesRaw,{isDriver=false,ca
   };
   const merged=localEntries.map(localE=>{
     if(!localE||!localE.id)return localE;
+    if(docTomb.has(localE))return null; /* another dispatcher deleted this stop — drop our stale copy */
     const fbE=resolveFb(localE);
     if(isDriver){
       if(localE.driverId!==callerDriverId){if(fbE){usedFbIds.add(fbE.id);return fbE;}return null;}
@@ -522,7 +596,7 @@ export const buildMergedEntries=(fbEntriesRaw,localEntriesRaw,{isDriver=false,ca
   }).filter(Boolean);
   const tomb=makeTombFilter(deletedIds);
   fbEntries.forEach(fbE=>{
-    if(fbE&&fbE.id&&!localById[fbE.id]&&!usedFbIds.has(fbE.id)&&!tomb.has(fbE))merged.push(fbE);
+    if(fbE&&fbE.id&&!localById[fbE.id]&&!usedFbIds.has(fbE.id)&&!tomb.has(fbE)&&!docTomb.has(fbE))merged.push(fbE);
   });
   /* SAFETY NET — a delivery that exists in Firebase must never silently vanish.
      The only legitimate removal of a delivery is an explicit, signature-matched
@@ -533,7 +607,7 @@ export const buildMergedEntries=(fbEntriesRaw,localEntriesRaw,{isDriver=false,ca
   fbEntries.forEach(fbE=>{
     if(!fbE||fbE.id==null||fbE.stopType!=="delivery")return;
     if(outIds.has(fbE.id)||usedFbIds.has(fbE.id))return;
-    if(tomb.has(fbE))return; /* explicitly deleted — stays gone */
+    if(tomb.has(fbE)||docTomb.has(fbE))return; /* explicitly deleted — stays gone */
     merged.push(fbE);
   });
   /* Orphan reap LAST, after the delivery safety-net re-append, so a rescued

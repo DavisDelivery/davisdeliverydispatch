@@ -61,7 +61,7 @@ greenBtn:{background:"#16a34a",color:"#fff",border:"none",borderRadius:8,padding
 inputMb4:{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"7px 10px",fontSize:12,outline:"none",marginBottom:4},
 };
 import { useState, useCallback, useEffect, useRef, Fragment, Component } from "react";
-import { dedupeIds, dedupeAutoPickups, dedupeGhostDeliveries, dedupeDeliveries, reapOrphanAutoPickups, sanitizeEntry, _mergeEntryDriver, _mergeEntryDispatcher, buildMergedEntries, entrySig, makeTombFilter, vanishedAutoPickups, orderByIds, reconcileDriverRoster, applyDriverRemap, normDriverName } from "./manifestLogic.js";
+import { dedupeIds, dedupeAutoPickups, dedupeGhostDeliveries, dedupeDeliveries, reapOrphanAutoPickups, sanitizeEntry, _mergeEntryDriver, _mergeEntryDispatcher, buildMergedEntries, entrySig, makeTombFilter, makeDocTombFilter, mergeTombstones, vanishedAutoPickups, orderByIds, reconcileDriverRoster, applyDriverRemap, normDriverName } from "./manifestLogic.js";
 import { diffOrderDocs, orderDocId, ordersParity } from "./ordersStore.js";
 
 const _SplitUI=({splitEntry,setSplitEntry})=>{const tw=splitEntry.totalWeight||0;const t1w=splitEntry.truck1Weight!==undefined?splitEntry.truck1Weight:Math.round(tw*(splitEntry.ratio/100));const t2w=tw-t1w;return(<><div style={_s.flexG6Mb6}><div style={_s.f1}><label style={_s.labelSm}>Total</label><input type="number" inputMode="numeric" value={tw||""} onChange={e=>{const newTw=parseInt(e.target.value)||0;setSplitEntry(p=>({...p,totalWeight:newTw,truck1Weight:Math.min(p.truck1Weight||Math.round(newTw/2),newTw)}));}} style={_s.splitTotal}/></div><div style={_s.f1}><label style={_s.labelBlue}>Truck 1</label><input type="number" inputMode="numeric" value={splitEntry.truck1Weight!==undefined?splitEntry.truck1Weight:""} onChange={e=>{const v=e.target.value;setSplitEntry(p=>({...p,truck1Weight:v===""?0:parseInt(v)||0}));}} style={_s.splitInput}/></div><div style={_s.f1}><label style={_s.labelGray}>Truck 2</label><div style={_s.splitT2}>{t2w.toLocaleString()}</div></div></div><input type="range" min={0} max={tw} step={100} value={t1w} onChange={e=>{const v=parseInt(e.target.value)||0;setSplitEntry(p=>({...p,truck1Weight:v}));}} style={_s.slider}/></>);};
@@ -314,11 +314,17 @@ const saveManifestDay=async(wo,sd,entries,callerDriverId,deletedIds,allowEmpty)=
          would make fbById/localById silently drop one of the pair and the
          merge would behave unpredictably. dedupeIds is deterministic so the
          transaction stays consistent across retries and across devices. */
+      /* Durable tombstones: fold the caller's fresh local deletes into the
+         day doc's `deleted` list (newest-at per stop, TTL-pruned) so EVERY
+         device's merge and receive path honors the delete — not just the 90s
+         in-memory record on the device that clicked it. This is what stops
+         "I deleted it and it came back off my dispatcher's stale copy." */
+      const docTombs=mergeTombstones(current?.deleted,deletedIds,Date.now());
       /* Merge FB + local with per-ownership rules, drop tombstoned FB-only
          resurrections, and collapse duplicate auto-pickups. Pure + unit-tested
          in manifestLogic.js (buildMergedEntries) so the concurrency scenarios
          can't silently regress. */
-      const deduped=buildMergedEntries(current?.entries||[],entries||[],{isDriver,callerDriverId,deletedIds,multiSource:_reapOpts.multiSource,normLoc:_reapOpts.normLoc});
+      const deduped=buildMergedEntries(current?.entries||[],entries||[],{isDriver,callerDriverId,deletedIds,docTombstones:docTombs,multiSource:_reapOpts.multiSource,normLoc:_reapOpts.normLoc});
       /* Normalize photos / signature for write. Bound the TOTAL inline base64
          across the whole doc (not just per-photo) to a budget under Firestore's
          ~1MiB limit — two 700KB fallback photos each pass a per-photo cap yet
@@ -342,7 +348,7 @@ const saveManifestDay=async(wo,sd,entries,callerDriverId,deletedIds,allowEmpty)=
         return copy;
       });
       autoBackup("save-"+fbKey,{key:fbKey,entries:safe});
-      return{entries:safe,updatedAt:Date.now()};
+      return{entries:safe,deleted:docTombs,updatedAt:Date.now()};
     });
     console.log("[SAVE] ✓ OK manifests/"+fbKey,"entries:",result?.entries?.length);
     /* Phase 2 shadow: mirror the MERGED result (what actually landed in the
@@ -366,7 +372,7 @@ const subscribeManifests=(wo,cb)=>{
       const fbKey=getFbKey(wo,i);
       const dayAbbr=DAYNAMES_FB[i];
       unsubs.push(window._fbOps.onDoc("manifests/"+fbKey,(data,exists)=>{
-        cb({[fbKey]:{entries:exists?(data.entries||[]):[],dayIdx:i}});
+        cb({[fbKey]:{entries:exists?(data.entries||[]):[],deleted:exists?(data.deleted||[]):[],dayIdx:i}});
       },(err)=>{
         console.error("[SUB-ERR] manifests/"+fbKey,err.code||err.message);
       }));
@@ -2900,21 +2906,25 @@ const tombstonesRef=useRef(new Map());
    the SAME stop, never a different one that merely shares a (possibly synthetic /
    collided) id. Bare ids are still accepted (legacy id-only match). */
 const tombstone=(items)=>{
-  const exp=Date.now()+90000;
+  const at=Date.now(); /* the delete's edit-clock — carried into the day doc's durable tombstones */
+  const exp=at+90000;
   (Array.isArray(items)?items:[items]).forEach(it=>{
     if(it==null)return;
-    if(typeof it==="object"){if(it.id!=null)tombstonesRef.current.set(it.id,{exp,sig:entrySig(it)});}
-    else tombstonesRef.current.set(it,{exp,sig:""}); /* bare id → id-only (legacy) */
+    if(typeof it==="object"){if(it.id!=null)tombstonesRef.current.set(it.id,{exp,at,sig:entrySig(it)});}
+    else tombstonesRef.current.set(it,{exp,at,sig:""}); /* bare id → id-only (legacy) */
   });
 };
-/* Live tombstones as a Map<id, signature> ("" = id-only). Consumed by
-   makeTombFilter on both the subscription filter and the save merge. */
+/* Live tombstones as [{id, sig, at}] ("" sig = id-only). Consumed by
+   makeTombFilter (receive filter + save merge — ignores `at`) and by
+   mergeTombstones (durable doc tombstones — keeps `at` so delete-vs-edit
+   resolves by last-writer-wins at the moment of the actual click). */
 const activeTombstones=()=>{
   const now=Date.now();
-  const live=new Map();
+  const live=[];
   tombstonesRef.current.forEach((v,id)=>{
     const exp=typeof v==="object"?v.exp:v; /* tolerate any legacy number value */
-    if(exp>now)live.set(id,typeof v==="object"?v.sig:""); else tombstonesRef.current.delete(id);
+    if(exp>now)live.push({id,sig:typeof v==="object"?v.sig:"",at:typeof v==="object"&&v.at?v.at:exp-90000});
+    else tombstonesRef.current.delete(id);
   });
   return live;
 };
@@ -3790,7 +3800,13 @@ useEffect(()=>{
            this, a deleted stop reappears the moment a subscription event
            arrives, and the next save persists the resurrection. */
         const tombSet=makeTombFilter(activeTombstones());
-        const fbFiltered=tombSet.size?entries.filter(e=>!tombSet.has(e)):entries;
+        /* Durable tombstones carried IN the day doc — another dispatcher's
+           delete. Filter the incoming FB entries AND (below) our own local
+           copy, so the delete propagates here instead of resurrecting off our
+           stale state on the next save. Edit-clock-aware: a stop we edited
+           AFTER the delete survives (last writer wins). */
+        const docTomb=makeDocTombFilter(payload.deleted);
+        const fbFiltered=(tombSet.size||docTomb.size)?entries.filter(e=>!tombSet.has(e)&&!docTomb.has(e)):entries;
         /* Even when the day is dirty (Chad just edited) or in save-cooldown,
            we MUST still pull driver-stamped fields from Firebase. The driver's
            phone is the only source of truth for status/arrivedAt/departedAt/
@@ -3827,6 +3843,7 @@ useEffect(()=>{
           localEnts.forEach(localE=>{
             if(!localE||!localE.id)return;
             if(tombSet.has(localE))return;
+            if(docTomb.has(localE))return; /* deleted by another dispatcher — drop our copy */
             const fbE=fbById[localE.id];
             out.push(fbE?_mergeEntryDispatcher(localE,fbE):localE);
           });
@@ -3877,7 +3894,13 @@ useEffect(()=>{
            bug. Sharing the current-week merge means neither subscription can
            clobber unsynced local entries. */
         const tombSet=makeTombFilter(activeTombstones());
-        const fbFiltered=tombSet.size?entries.filter(e=>!tombSet.has(e)):entries;
+        /* Durable tombstones carried IN the day doc — another dispatcher's
+           delete. Filter the incoming FB entries AND (below) our own local
+           copy, so the delete propagates here instead of resurrecting off our
+           stale state on the next save. Edit-clock-aware: a stop we edited
+           AFTER the delete survives (last writer wins). */
+        const docTomb=makeDocTombFilter(payload.deleted);
+        const fbFiltered=(tombSet.size||docTomb.size)?entries.filter(e=>!tombSet.has(e)&&!docTomb.has(e)):entries;
         const dirtyOrCooldown=dirtyDaysRef.current.has(lk)||saveCooldownRef.current.has(lk);
         const localEnts=prev[lk]||[];
         let finalEntries=fbFiltered;
@@ -3890,6 +3913,7 @@ useEffect(()=>{
           localEnts.forEach(localE=>{
             if(!localE||!localE.id)return;
             if(tombSet.has(localE))return;
+            if(docTomb.has(localE))return; /* deleted by another dispatcher — drop our copy */
             const fbE=fbById[localE.id];
             out.push(fbE?_mergeEntryDispatcher(localE,fbE):localE);
           });

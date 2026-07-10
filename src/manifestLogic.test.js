@@ -16,6 +16,10 @@ import {
   reconcileDriverRoster,
   applyDriverRemap,
   normDriverName,
+  tombListFrom,
+  mergeTombstones,
+  makeDocTombFilter,
+  DOC_TOMBSTONE_TTL,
 } from "./manifestLogic.js";
 
 /* Test helpers ---------------------------------------------------------- */
@@ -902,5 +906,87 @@ describe("applyDriverRemap — entries follow their driver", () => {
   it("leaves unassigned (driverId 0) entries alone", () => {
     const entries = [del({ id: "a", driverId: 0 })];
     expect(applyDriverRemap(entries, { 999: 2 })).toBe(entries);
+  });
+});
+
+/* ====================================================================== */
+/* Durable tombstones — deletes propagate to every device instead of being
+   resurrected by another dispatcher's stale local copy. */
+describe("tombListFrom / mergeTombstones", () => {
+  it("normalizes Map / Set / arrays / bare ids to {id,sig,at}", () => {
+    expect(tombListFrom(new Set(["x"]), 5)).toEqual([{ id: "x", sig: "", at: 5 }]);
+    expect(tombListFrom([{ id: 1, sig: "s", at: 9 }], 5)).toEqual([{ id: "1", sig: "s", at: 9 }]);
+    expect(tombListFrom(["y"], 7)).toEqual([{ id: "y", sig: "", at: 7 }]);
+    expect(tombListFrom(null, 7)).toEqual([]);
+  });
+  it("merges doc + local keeping the newest at per (id,sig)", () => {
+    const out = mergeTombstones([{ id: "x", sig: "s", at: 100 }], [{ id: "x", sig: "s", at: 200 }, { id: "y", sig: "", at: 150 }], 1000);
+    const x = out.find((t) => t.id === "x");
+    expect(x.at).toBe(200);
+    expect(out).toHaveLength(2);
+  });
+  it("prunes tombstones older than the TTL (list can never grow forever)", () => {
+    const now = DOC_TOMBSTONE_TTL + 1000000;
+    const out = mergeTombstones([{ id: "old", sig: "", at: 1 }], [{ id: "fresh", sig: "", at: now - 5 }], now);
+    expect(out.map((t) => t.id)).toEqual(["fresh"]);
+  });
+  it("is idempotent (transaction retries compute the same list)", () => {
+    const fb = [{ id: "x", sig: "s", at: 100 }];
+    const once = mergeTombstones(fb, [], 1000);
+    expect(mergeTombstones(once, [], 1000)).toEqual(once);
+  });
+});
+
+describe("makeDocTombFilter — edit-clock-aware suppression", () => {
+  const X = () => del({ id: "x", customer: "BEC", stop: "BEC - Alpharetta", driverId: 2, loadNum: 2 });
+  it("suppresses a stale copy (no updatedAt, or older than the delete)", () => {
+    const f = makeDocTombFilter([{ id: "x", sig: entrySig(X()), at: 2000 }]);
+    expect(f.has(X())).toBe(true);
+    expect(f.has({ ...X(), updatedAt: 1000 })).toBe(true);
+  });
+  it("an entry edited AFTER the delete survives (last writer wins)", () => {
+    const f = makeDocTombFilter([{ id: "x", sig: entrySig(X()), at: 2000 }]);
+    expect(f.has({ ...X(), updatedAt: 3000 })).toBe(false);
+  });
+  it("a signature mismatch is NOT suppressed (a reassigned/changed stop is a different thing)", () => {
+    const f = makeDocTombFilter([{ id: "x", sig: entrySig(X()), at: 2000 }]);
+    expect(f.has({ ...X(), driverId: 7 })).toBe(false);
+  });
+  it("a re-added stop (fresh id, same content) is never caught by the old tombstone", () => {
+    const f = makeDocTombFilter([{ id: "x", sig: entrySig(X()), at: 2000 }]);
+    expect(f.has({ ...X(), id: "brand-new" })).toBe(false);
+  });
+});
+
+describe("buildMergedEntries + docTombstones — the resurrection kill", () => {
+  const X = (o = {}) => del({ id: "x", customer: "BEC", stop: "BEC - Alpharetta", driverId: 2, loadNum: 2, updatedAt: 1000, ...o });
+  const tombX = () => [{ id: "x", sig: entrySig(X()), at: 2000 }];
+
+  it("B's stale LOCAL copy of a stop A deleted is dropped (was: resurrected on B's save)", () => {
+    // FB no longer has X (A's delete landed); B's local still does.
+    const out = buildMergedEntries([], [X()], { isDriver: false, callerDriverId: 0, docTombstones: tombX() });
+    expect(out.some((e) => e.id === "x")).toBe(false);
+  });
+
+  it("a stale FB copy (third device re-added it) is dropped from append AND the safety net", () => {
+    const out = buildMergedEntries([X()], [], { isDriver: false, callerDriverId: 0, docTombstones: tombX() });
+    expect(out.some((e) => e.id === "x")).toBe(false);
+  });
+
+  it("delete-vs-edit: a copy edited AFTER the delete survives", () => {
+    const edited = X({ updatedAt: 3000, baseRate: 250 });
+    const out = buildMergedEntries([], [edited], { isDriver: false, callerDriverId: 0, docTombstones: tombX() });
+    expect(out.some((e) => e.id === "x" && e.baseRate === 250)).toBe(true);
+  });
+
+  it("a re-added stop under a fresh id is untouched by the tombstone", () => {
+    const readd = X({ id: "fresh-id" });
+    const out = buildMergedEntries([], [readd], { isDriver: false, callerDriverId: 0, docTombstones: tombX() });
+    expect(out.some((e) => e.id === "fresh-id")).toBe(true);
+  });
+
+  it("without docTombstones behavior is unchanged (stale local copy is preserved)", () => {
+    const out = buildMergedEntries([], [X()], { isDriver: false, callerDriverId: 0 });
+    expect(out.some((e) => e.id === "x")).toBe(true);
   });
 });
