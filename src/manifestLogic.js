@@ -40,14 +40,23 @@ export const dedupeIds=(entries)=>{
    identified by (customer, stop, driverId, loadNum). Keeps the FIRST occurrence
    of each identity, drops unassigned (driverId 0) auto-pickups, and never
    touches deliveries or manual pickups. */
-export const dedupeAutoPickups=(entries)=>{
+export const dedupeAutoPickups=(entries,opts)=>{
   if(!Array.isArray(entries))return entries;
+  /* Key on the NORMALIZED dock, not the raw stop string. The same physical
+     pickup dock is stored under drifting formats across the dataset ("Emser -
+     Norcross", "Emser – Norcross", "Emser Tile — Norcross"), so a raw-string key
+     let 2-3 copies of the same dock survive as "distinct" — the duplicate
+     pickup-card bug. normLoc collapses them, matching how reapOrphanAutoPickups,
+     rebuildPickupsFor and the load-order note already key. With no opts it falls
+     back to a lowercased raw string (back-compatible with existing callers). */
+  const normLoc=opts&&typeof opts.normLoc==="function"?opts.normLoc:(s)=>String(s||"").trim().toLowerCase();
+  const dock=(e)=>normLoc(e.pickupFrom)||normLoc(e.stop);
   const seen=new Set();
   let changed=false;
   const out=entries.filter(e=>{
     if(!e||e.stopType!=="pickup"||e.manualPickup)return true;
     if(!e.driverId||e.driverId===0){changed=true;return false;}
-    const key=[e.customer||"",e.stop||"",e.driverId,e.loadNum||1].join("|");
+    const key=[e.customer||"",dock(e),e.driverId,e.loadNum||1].join("|");
     if(seen.has(key)){changed=true;return false;}
     seen.add(key);
     return true;
@@ -476,5 +485,5 @@ export const buildMergedEntries=(fbEntriesRaw,localEntriesRaw,{isDriver=false,ca
   /* Orphan reap LAST, after the delivery safety-net re-append, so a rescued
      delivery keeps its pickup. Self-heals any orphan already persisted in
      Firebase: the merge drops it, and the transaction write makes that stick. */
-  return reapOrphanAutoPickups(dedupeDeliveries(dedupeGhostDeliveries(dedupeAutoPickups(merged))),multiSource?{multiSource,normLoc}:undefined);
+  return reapOrphanAutoPickups(dedupeDeliveries(dedupeGhostDeliveries(dedupeAutoPickups(merged,normLoc?{normLoc}:undefined))),multiSource?{multiSource,normLoc}:undefined);
 };
