@@ -62,6 +62,7 @@ inputMb4:{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"7px 10
 };
 import { useState, useCallback, useEffect, useRef, Fragment, Component } from "react";
 import { dedupeIds, dedupeAutoPickups, dedupeGhostDeliveries, dedupeDeliveries, reapOrphanAutoPickups, sanitizeEntry, _mergeEntryDriver, _mergeEntryDispatcher, buildMergedEntries, entrySig, makeTombFilter, vanishedAutoPickups, orderByIds, reconcileDriverRoster, applyDriverRemap, normDriverName } from "./manifestLogic.js";
+import { diffOrderDocs, orderDocId, ordersParity } from "./ordersStore.js";
 
 const _SplitUI=({splitEntry,setSplitEntry})=>{const tw=splitEntry.totalWeight||0;const t1w=splitEntry.truck1Weight!==undefined?splitEntry.truck1Weight:Math.round(tw*(splitEntry.ratio/100));const t2w=tw-t1w;return(<><div style={_s.flexG6Mb6}><div style={_s.f1}><label style={_s.labelSm}>Total</label><input type="number" inputMode="numeric" value={tw||""} onChange={e=>{const newTw=parseInt(e.target.value)||0;setSplitEntry(p=>({...p,totalWeight:newTw,truck1Weight:Math.min(p.truck1Weight||Math.round(newTw/2),newTw)}));}} style={_s.splitTotal}/></div><div style={_s.f1}><label style={_s.labelBlue}>Truck 1</label><input type="number" inputMode="numeric" value={splitEntry.truck1Weight!==undefined?splitEntry.truck1Weight:""} onChange={e=>{const v=e.target.value;setSplitEntry(p=>({...p,truck1Weight:v===""?0:parseInt(v)||0}));}} style={_s.splitInput}/></div><div style={_s.f1}><label style={_s.labelGray}>Truck 2</label><div style={_s.splitT2}>{t2w.toLocaleString()}</div></div></div><input type="range" min={0} max={tw} step={100} value={t1w} onChange={e=>{const v=parseInt(e.target.value)||0;setSplitEntry(p=>({...p,truck1Weight:v}));}} style={_s.slider}/></>);};
 
@@ -344,6 +345,12 @@ const saveManifestDay=async(wo,sd,entries,callerDriverId,deletedIds,allowEmpty)=
       return{entries:safe,updatedAt:Date.now()};
     });
     console.log("[SAVE] ✓ OK manifests/"+fbKey,"entries:",result?.entries?.length);
+    /* Phase 2 shadow: mirror the MERGED result (what actually landed in the
+       array doc) into the per-order store. Fire-and-forget — a shadow failure
+       must never fail or delay the real save. */
+    if(ordersV2Mode()!=="off"&&result&&Array.isArray(result.entries)){
+      syncOrdersShadow(fbKey,result.entries).catch(e=>console.warn("[ORDERS-V2] shadow sync failed (array save unaffected):",e&&(e.code||e.message||e)));
+    }
     return result;
   }catch(e){
     console.error("[SAVE] ✗ FAILED manifests/"+fbKey,e.code||"",e.message||e);
@@ -367,6 +374,61 @@ const subscribeManifests=(wo,cb)=>{
   });
   return()=>{cancelled=true;unsubs.forEach(u=>u());};
 };
+
+/* ── Phase 2 shadow store (docs/SYNC_REDESIGN.md §4) ─────────────────────────
+   One Firestore document per order: orders/{YYYY-MM-DD}/items/{orderId}.
+   Staged behind the dd_orders_v2 flag so it ships dark:
+     off    (default) — nothing runs; production behavior unchanged
+     shadow           — every array-doc save ALSO diff-writes the per-order
+                        docs (fire-and-forget; can never fail the real save),
+                        and a live parity check reports drift in the console
+   The read cutover (board assembled from order docs) is the next increment,
+   flipped only after shadow parity holds on the live board. */
+const ORDERS_V2_LS="dd_orders_v2";
+const ordersV2Mode=()=>{try{const v=localStorage.getItem(ORDERS_V2_LS);return v==="shadow"?v:"off";}catch(e){return"off";}};
+const _ordersPath=(fbKey)=>"orders/"+fbKey+"/items";
+/* Live view of each day's order docs, fed by the subscription below. The diff
+   in syncOrdersShadow runs against this; when a day hasn't streamed yet the
+   diff basis is empty, so the sync degrades to an idempotent full seed (that IS
+   the migration) and issues no deletes (it can't know what's stale). */
+const _ordersCache={};
+const syncOrdersShadow=async(fbKey,entries)=>{
+  if(!window._fbOps)return;
+  const cached=_ordersCache[fbKey];
+  const{sets,deletes,skipped}=diffOrderDocs(cached?cached.docs:[],entries||[],fbKey);
+  if(!sets.length&&!deletes.length)return;
+  await Promise.all([
+    ...sets.map(d=>window._fbOps.write(_ordersPath(fbKey)+"/"+orderDocId(d.id),d)),
+    ...(cached?deletes:[]).map(id=>window._fbOps.remove(_ordersPath(fbKey)+"/"+orderDocId(id))),
+  ]);
+  console.log("[ORDERS-V2] shadow "+fbKey+": wrote "+sets.length+", deleted "+(cached?deletes.length:0)+(skipped?", skipped "+skipped:""));
+};
+const subscribeOrdersShadow=(wo,cb)=>{
+  const unsubs=[];
+  let cancelled=false;
+  _whenFB(()=>{
+    if(cancelled)return;
+    for(let i=0;i<5;i++){
+      const fbKey=getFbKey(wo,i);
+      unsubs.push(window._fbOps.onCol(_ordersPath(fbKey),(docs)=>{
+        _ordersCache[fbKey]={docs};
+        cb(fbKey,i,docs);
+      },(err)=>{
+        console.error("[ORDERS-V2 SUB-ERR]",fbKey,err&&(err.code||err.message));
+      }));
+    }
+  });
+  return()=>{cancelled=true;unsubs.forEach(u=>u());};
+};
+/* Console switch for staged verification on a real device:
+   _ddOrdersV2.enable() / .disable() / .mode() */
+if(typeof window!=="undefined"){
+  window._ddOrdersV2={
+    mode:ordersV2Mode,
+    enable:()=>{try{localStorage.setItem(ORDERS_V2_LS,"shadow");}catch(e){}location.reload();},
+    disable:()=>{try{localStorage.removeItem(ORDERS_V2_LS);}catch(e){}location.reload();},
+  };
+}
 
 const saveDrivers=async(drvList)=>{
   if(!window._fbOps)return;
@@ -3846,7 +3908,17 @@ useEffect(()=>{
       return changed?updated:prev;
     });
   });
-  return()=>{unsubManifests();unsubPrevWeek();};
+  /* Phase 2 shadow: stream each visible day's order docs (feeds the diff cache
+     in syncOrdersShadow) and report parity against the board. A mismatch while
+     an edit is mid-debounce is expected and transient; a persistent one means
+     the dual-write missed something and would show here before any cutover. */
+  const unsubOrders=ordersV2Mode()==="off"?null:subscribeOrdersShadow(wo,(fbKey,dayIdx,docs)=>{
+    const ents=logRef.current[`${wo}-${dayIdx}`]||[];
+    const p=ordersParity(docs,ents);
+    if(p.inSync)console.log("[ORDERS-V2] parity ✓ "+fbKey+" ("+p.docCount+" orders)");
+    else console.warn("[ORDERS-V2] parity drift "+fbKey,{missing:p.missing,extra:p.extra,differing:p.differing});
+  });
+  return()=>{unsubManifests();unsubPrevWeek();if(unsubOrders)unsubOrders();};
 },[wo]);
 /* Day-rollover re-anchor. _weekRefNow() freezes the week/day reference at mount
    so the Firebase-doc <-> local-key mapping can never slide mid-session. Once

@@ -114,6 +114,15 @@ Stable IDs are the foundation of the new model, so we build that first — it's 
 - **Parallel run:** behind a flag, migrate a day's array into per-order docs (one-time, idempotent, per week), read from the new store, keep the old day-array in sync until we're confident, then cut over and retire the array docs. The nightly Firebase→Drive backup is the safety net.
 - *Tests:* two dispatchers reassign the same order → converges; 100-order day → independent writes, no merge; delete propagates.
 
+#### Phase 2 status
+- **Layout (as built):** `orders/{YYYY-MM-DD}/items/{orderId}` — a day-scoped subcollection instead of a top-level collection + `where(date==)` query. Same properties (one doc per order, stable id, per-doc writes, real deletes, one shared stream per day), but it works with the app's existing Firebase adapter (`onCol`) and needs no composite index. `_date` and `_seq` (ordering within the day) are storage-only fields stripped on read.
+- **Shipped — shadow mode** (`src/ordersStore.js` + wiring in `App.jsx`, staged behind the `dd_orders_v2` localStorage flag, default **off**):
+  - Every array-doc save also **diff-writes** the per-order docs — only orders whose content or position changed produce a write; removed orders become real `deleteDoc`s. The first sync against an empty day seeds every order — that *is* the idempotent migration.
+  - The dispatcher board streams each visible day's order docs and runs a **live parity check** (same set of orders, same content, order-insensitive) against the array board, logging drift to the console.
+  - The shadow sync mirrors the **merged transaction result** (what actually landed in the array doc), is fire-and-forget, and can never fail or delay the real save.
+  - Enable on a device from the console: `_ddOrdersV2.enable()` (and `.disable()` / `.mode()`).
+- **Next increment — read cutover ("on" mode):** assemble the board from the order docs (per `orderDocsToEntries`), turn reassign/edit/delete into direct per-doc writes, derive auto-pickups at render. Flip only after shadow parity holds clean on the live board for a stretch of real dispatching.
+
 ### Phase 3 — Conflict polish (optional, incremental)
 - `serverTimestamp` + `updatedBy` on writes; a `version` guard for the few critical same-field cases; optional presence ("Trevor is editing this stop").
 
