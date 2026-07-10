@@ -215,6 +215,60 @@ export const reapOrphanAutoPickups=(entries,opts)=>{
   return changed?out:entries;
 };
 
+/* ── Driver-roster reconciliation ────────────────────────────────────────────
+   The same physical driver must resolve to ONE id on every device. Two failure
+   modes broke that: (a) addDrvr minted id:Date.now(), so two dispatchers who
+   each add "Brent" get DIFFERENT ids; (b) the config/drivers doc is replaced
+   wholesale on receive, so a same-name driver's id can silently change under a
+   client's feet. Either way, orders assigned to a driver on one screen render
+   under NO column on another ("I plan on Brent, she doesn't see it"). These
+   pure helpers give every device the SAME id for a given driver and let a day's
+   entries follow their driver when its id changes. */
+
+/* Canonical name key — trim, collapse inner whitespace, lowercase. */
+export const normDriverName=(name)=>String(name==null?"":name).trim().replace(/\s+/g," ").toLowerCase();
+
+/* Reconcile the roster a client currently holds (oldDrivers) against the roster
+   it is about to adopt (incoming). Returns:
+     - drivers: incoming collapsed to ONE entry per name, each stamped with the
+       canonical id (the SMALLEST id for that name — seed ids 1-4 beat Date.now()
+       ids, and "smallest" is identical on every device because config/drivers is
+       a single last-writer-wins document, so all clients converge on it);
+     - remap: { [oldId]: canonicalId } for every id — whether a duplicate in
+       `incoming` or the client's own current id — that resolves to a name whose
+       canonical id differs. Apply it to that day's entries so assignments follow
+       the driver.
+   Deliberately conservative and deletion-safe: a name present in `oldDrivers`
+   but ABSENT from `incoming` was really deleted — it gets no canonical and no
+   remap, so its entries are left exactly as they are (a genuine removal is not
+   resurrected or re-pointed). */
+export const reconcileDriverRoster=(oldDrivers,incoming)=>{
+  const inList=(Array.isArray(incoming)?incoming:[]).filter(d=>d&&d.id!=null&&normDriverName(d.name));
+  const canon=new Map();
+  inList.forEach(d=>{const k=normDriverName(d.name);const cur=canon.get(k);if(cur==null||d.id<cur)canon.set(k,d.id);});
+  const drivers=[];const placed=new Set();
+  inList.forEach(d=>{const k=normDriverName(d.name);if(placed.has(k))return;placed.add(k);const cid=canon.get(k);drivers.push(d.id===cid?d:{...d,id:cid});});
+  const remap={};
+  inList.forEach(d=>{const cid=canon.get(normDriverName(d.name));if(cid!=null&&d.id!==cid)remap[d.id]=cid;});
+  (Array.isArray(oldDrivers)?oldDrivers:[]).forEach(d=>{if(!d||d.id==null)return;const k=normDriverName(d.name);if(!k)return;const cid=canon.get(k);if(cid!=null&&d.id!==cid)remap[d.id]=cid;});
+  return {drivers,remap};
+};
+
+/* Apply a driverId remap ({oldId:newId}) to a day's entries. Returns the SAME
+   array reference when nothing changed, so callers can skip a needless state
+   update / save. Object keys are strings; a numeric driverId coerces to match. */
+export const applyDriverRemap=(entries,remap)=>{
+  if(!Array.isArray(entries)||!remap||!Object.keys(remap).length)return entries;
+  let changed=false;
+  const out=entries.map(e=>{
+    if(e&&e.driverId!=null&&Object.prototype.hasOwnProperty.call(remap,e.driverId)){
+      changed=true;return{...e,driverId:remap[e.driverId]};
+    }
+    return e;
+  });
+  return changed?out:entries;
+};
+
 /* Status only ever advances (null → arrived → departed), never backward. */
 export const STATUS_RANK={null:0,undefined:0,"":0,"arrived":1,"departed":2};
 export const DRIVER_OWNED_FIELDS=["status","arrivedAt","departedAt","photos","signature","shipPlan","eta","etaDest","etaSetAt"];
