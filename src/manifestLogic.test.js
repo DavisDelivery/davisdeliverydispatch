@@ -20,6 +20,7 @@ import {
   mergeTombstones,
   makeDocTombFilter,
   DOC_TOMBSTONE_TTL,
+  manualPickupCoversDock,
 } from "./manifestLogic.js";
 
 /* Test helpers ---------------------------------------------------------- */
@@ -988,5 +989,40 @@ describe("buildMergedEntries + docTombstones — the resurrection kill", () => {
   it("without docTombstones behavior is unchanged (stale local copy is preserved)", () => {
     const out = buildMergedEntries([], [X()], { isDriver: false, callerDriverId: 0 });
     expect(out.some((e) => e.id === "x")).toBe(true);
+  });
+});
+
+/* ====================================================================== */
+/* Manual-pickup dock coverage — a manual pickup only suppresses the auto
+   dock card when it is actually AT that dock (the "DCO Smyrna manual pickup
+   erased Trevor's Emser - Norcross card" bug). */
+describe("manualPickupCoversDock", () => {
+  const NL = (v) => {
+    if (!v || typeof v !== "string") return "";
+    const p = v.split(/\s+[-–—]\s+/);
+    return p[p.length - 1].trim().toLowerCase();
+  };
+  const SRC = "Emser - Norcross";
+  const mpu = (o = {}) => ({ id: "m", customer: "Emser Tile", stopType: "pickup", manualPickup: true, driverId: 1, loadNum: 1, ...o });
+
+  it("the production case: a return pickup at a store does NOT suppress the dock card", () => {
+    expect(manualPickupCoversDock(mpu({ stop: "DCO Smyrna" }), "Norcross", SRC, NL)).toBe(false);
+  });
+  it("a manually-added dock card DOES suppress (stop equals the source label, any dash format)", () => {
+    expect(manualPickupCoversDock(mpu({ stop: "Emser - Norcross" }), "Norcross", SRC, NL)).toBe(true);
+    expect(manualPickupCoversDock(mpu({ stop: "Emser – Norcross" }), "Norcross", SRC, NL)).toBe(true); // en-dash → supplier+dock heuristic
+  });
+  it("pickupFrom decides when present: same dock covers, other dock does not", () => {
+    expect(manualPickupCoversDock(mpu({ stop: "anything", pickupFrom: "Norcross" }), "Norcross", SRC, NL)).toBe(true);
+    expect(manualPickupCoversDock(mpu({ stop: "anything", pickupFrom: "Emser - Norcross" }), "Norcross", SRC, NL)).toBe(true);
+    expect(manualPickupCoversDock(mpu({ stop: "anything", pickupFrom: "Roswell" }), "Norcross", SRC, NL)).toBe(false);
+  });
+  it("a hand-typed supplier+dock name covers; a mere same-city location does not", () => {
+    expect(manualPickupCoversDock(mpu({ stop: "Emser Norcross" }), "Norcross", SRC, NL)).toBe(true);
+    expect(manualPickupCoversDock(mpu({ stop: "Elite Flooring - Norcross" }), "Norcross", SRC, NL)).toBe(false);
+  });
+  it("is safe on junk", () => {
+    expect(manualPickupCoversDock(null, "Norcross", SRC, NL)).toBe(false);
+    expect(manualPickupCoversDock(mpu({ stop: "" }), "Norcross", SRC, NL)).toBe(false);
   });
 });
