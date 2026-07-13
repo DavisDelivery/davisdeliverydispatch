@@ -61,7 +61,7 @@ greenBtn:{background:"#16a34a",color:"#fff",border:"none",borderRadius:8,padding
 inputMb4:{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"7px 10px",fontSize:12,outline:"none",marginBottom:4},
 };
 import { useState, useCallback, useEffect, useRef, Fragment, Component } from "react";
-import { dedupeIds, dedupeAutoPickups, dedupeGhostDeliveries, dedupeDeliveries, reapOrphanAutoPickups, sanitizeEntry, _mergeEntryDriver, _mergeEntryDispatcher, buildMergedEntries, entrySig, makeTombFilter, makeDocTombFilter, mergeTombstones, vanishedAutoPickups, orderByIds, reconcileDriverRoster, applyDriverRemap, normDriverName } from "./manifestLogic.js";
+import { dedupeIds, dedupeAutoPickups, dedupeGhostDeliveries, dedupeDeliveries, reapOrphanAutoPickups, sanitizeEntry, _mergeEntryDriver, _mergeEntryDispatcher, buildMergedEntries, entrySig, makeTombFilter, makeDocTombFilter, mergeTombstones, vanishedAutoPickups, orderByIds, reconcileDriverRoster, applyDriverRemap, normDriverName, manualPickupCoversDock } from "./manifestLogic.js";
 import { diffOrderDocs, orderDocId, ordersParity } from "./ordersStore.js";
 
 const _SplitUI=({splitEntry,setSplitEntry})=>{const tw=splitEntry.totalWeight||0;const t1w=splitEntry.truck1Weight!==undefined?splitEntry.truck1Weight:Math.round(tw*(splitEntry.ratio/100));const t2w=tw-t1w;return(<><div style={_s.flexG6Mb6}><div style={_s.f1}><label style={_s.labelSm}>Total</label><input type="number" inputMode="numeric" value={tw||""} onChange={e=>{const newTw=parseInt(e.target.value)||0;setSplitEntry(p=>({...p,totalWeight:newTw,truck1Weight:Math.min(p.truck1Weight||Math.round(newTw/2),newTw)}));}} style={_s.splitTotal}/></div><div style={_s.f1}><label style={_s.labelBlue}>Truck 1</label><input type="number" inputMode="numeric" value={splitEntry.truck1Weight!==undefined?splitEntry.truck1Weight:""} onChange={e=>{const v=e.target.value;setSplitEntry(p=>({...p,truck1Weight:v===""?0:parseInt(v)||0}));}} style={_s.splitInput}/></div><div style={_s.f1}><label style={_s.labelGray}>Truck 2</label><div style={_s.splitT2}>{t2w.toLocaleString()}</div></div></div><input type="range" min={0} max={tw} step={100} value={t1w} onChange={e=>{const v=parseInt(e.target.value)||0;setSplitEntry(p=>({...p,truck1Weight:v}));}} style={_s.slider}/></>);};
@@ -4576,12 +4576,16 @@ const explicitLoads=driverLoadCount[dId]||1;
 const maxLoadSeen=loadsInAll.size>0?Math.max(...loadsInAll):1;
 const hasMultiLoads=loadsInAll.size>1||maxLoadSeen>1||explicitLoads>1;
 Object.values(byLocLoad).forEach(({loc,loadNum:ln,dels:locDels})=>{
-/* Scope the manual-pickup check to the same load (and same location when possible).
-   Otherwise a user-inserted PU on Load 2 would suppress auto-generated PUs on
-   Load 1 for the same customer+driver, leaving Load 1 without a pickup card. */
-const hasManualPU=all.some(e=>e.customer===cust&&e.stopType==="pickup"&&e.manualPickup&&e.driverId===dId&&(e.loadNum||1)===ln&&(!e.pickupFrom||e.pickupFrom===loc||puSrcs.find(s=>s.label.includes(loc))?.label===e.stop));
-if(hasManualPU)return;
 const puSrc=puSrcs.find(s=>s.label.includes(loc))||puSrcs[0];
+/* Scope the manual-pickup check to the same load AND the same dock. A manual
+   pickup only suppresses the auto dock card when it actually covers this dock
+   (manualPickupCoversDock) — a manual pickup somewhere else entirely (e.g. a
+   return pickup at "DCO Smyrna" scheduled for Emser Tile) must coexist with
+   the dock pickup. The old `!e.pickupFrom` clause let any dock-less manual
+   pickup silently erase the driver's real "Emser - Norcross" card and its
+   load-order note. */
+const hasManualPU=all.some(e=>e.customer===cust&&e.stopType==="pickup"&&e.manualPickup&&e.driverId===dId&&(e.loadNum||1)===ln&&manualPickupCoversDock(e,loc,puSrc.label,_normLoc));
+if(hasManualPU)return;
 const delWithPuDue=locDels.find(e=>e.pickupDueBy);
 const effectivePuDue=delWithPuDue?delWithPuDue.pickupDueBy:puDueBy;
 const existingPU=removedPUs.find(p=>p.driverId===dId&&p.stop===puSrc.label&&(p.loadNum||1)===(hasMultiLoads?ln:1));

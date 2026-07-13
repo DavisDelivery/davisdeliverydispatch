@@ -433,6 +433,33 @@ export const makeTombFilter=(deletedIds)=>{
   };
 };
 
+/* Does a MANUAL pickup stand in for the auto-generated dock pickup at `loc`
+   (short dock label, e.g. "Norcross") for the source `srcLabel` (full label,
+   e.g. "Emser - Norcross")? Only then may it suppress the auto card.
+
+   The old rule suppressed on `!e.pickupFrom` — ANY dock-less manual pickup for
+   the customer killed the real dock card for that driver+load. A return pickup
+   at a store ("DCO Smyrna" scheduled for Emser Tile) silently erased the
+   driver's "Emser - Norcross" card and its load order. A manual pickup
+   somewhere else must COEXIST with the dock pickup, not replace it.
+
+   Covers iff:
+     - its stop IS the source label (the dispatcher manually added the dock card), or
+     - its pickupFrom resolves to this dock (normalized, so "Norcross" and
+       "Emser - Norcross" both match), or
+     - no pickupFrom and its stop names BOTH the supplier and the dock ("Emser
+       Norcross" typed by hand) — requiring the supplier name keeps a mere
+       same-city location ("Elite Flooring - Norcross") from matching. */
+export const manualPickupCoversDock=(e,loc,srcLabel,normLoc)=>{
+  if(!e||!loc)return false;
+  if(srcLabel&&e.stop===srcLabel)return true;
+  const nl=typeof normLoc==="function"?normLoc:(s)=>String(s||"").trim().toLowerCase();
+  if(e.pickupFrom)return nl(e.pickupFrom)===nl(loc);
+  const stopL=String(e.stop||"").toLowerCase();
+  const supplier=String(srcLabel||"").split(" - ")[0].trim().toLowerCase();
+  return !!supplier&&stopL.includes(supplier)&&stopL.includes(String(loc).toLowerCase());
+};
+
 /* ── Durable tombstones (delete propagation) ─────────────────────────────────
    The in-memory tombstones above live 90s on ONE device — long enough to keep a
    Firestore echo from resurrecting a just-deleted stop locally, but invisible to
