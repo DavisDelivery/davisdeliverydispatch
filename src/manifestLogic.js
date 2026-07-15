@@ -92,6 +92,35 @@ export const dedupeGhostDeliveries=(entries)=>{
   return changed?out:entries;
 };
 
+/* ── The all-in billed rate ──────────────────────────────────────────────────
+   `baseRate` is stored FEE-EXCLUSIVE by convention: `liftgateFee` (almost
+   always $75) is a separate field, added on top whenever `liftgateApplied` is
+   true and the entry isn't hourly (hourly liftgate time is billed through the
+   separate Emser-hours system, not baseRate). Every live rate control in the
+   app displays and edits this combined total — a sweep found 11 other places
+   that had drifted to reading baseRate alone, silently dropping the fee on
+   every printed/exported document and revenue rollup. These two functions are
+   the single source of truth going forward; every read AND every write of an
+   entry's rate should route through them so the convention can't drift apart
+   again. The `||75` fallback also means a legacy/corrupted record — one with
+   liftgateApplied:true but liftgateFee missing or 0 — SELF-HEALS the moment it
+   is read, with no data migration required. */
+export const allInRate=(entry)=>{
+  if(!entry)return 0;
+  const lg=entry.liftgateApplied&&!entry.isHourly?(entry.liftgateFee||75):0;
+  return (entry.baseRate||0)+lg;
+};
+
+/* Inverse of allInRate. Rate-edit controls show/collect the all-in total; this
+   strips the liftgate portion back out before writing baseRate. Uses the SAME
+   ||75 fallback as allInRate so a read immediately followed by a write can
+   never disagree — that asymmetry (display falls back to 75, save fell back to
+   0) was the exact mechanism behind a real compounding-overcharge bug. */
+export const stripLiftgateFee=(allInTotal,entry)=>{
+  const lg=entry&&entry.liftgateApplied&&!entry.isHourly?(entry.liftgateFee||75):0;
+  return Math.max(0,(parseFloat(allInTotal)||0)-lg);
+};
+
 /* Collapse DUPLICATE DELIVERIES — the same order rendered as 2+ rows under
    different ids. Root cause (verified): split/rebuild mint fresh ids for one
    logical order, and re-entering the full weight/rate makes the copies overlap;
@@ -152,6 +181,13 @@ export const dedupeDeliveries=(entries)=>{
       if(!merged.eta&&e.eta){merged.eta=e.eta;merged.etaDest=e.etaDest;merged.etaSetAt=e.etaSetAt;}
       if(!merged.pickupDueBy&&e.pickupDueBy)merged.pickupDueBy=e.pickupDueBy;
       if(!merged.dueBy&&e.dueBy)merged.dueBy=e.dueBy;
+      /* A liftgate charge is never lost in a merge — forward-only, same as
+         every other field above. Two copies of the same order can diverge on
+         liftgate status alone (the toggle mutates an entry in place and never
+         touches baseRate, so it can't affect which copies group together
+         above); if the chosen survivor doesn't have it but a dropped
+         duplicate does, that $75 must not silently vanish. */
+      if(e.liftgateApplied&&!merged.liftgateApplied){merged.liftgateApplied=true;merged.liftgateFee=e.liftgateFee||merged.liftgateFee||75;}
       if(e.id!==survivor.id)addPhotos(e.photos);
     });
     if(photos.length)merged.photos=photos;

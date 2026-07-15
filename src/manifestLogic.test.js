@@ -21,6 +21,8 @@ import {
   makeDocTombFilter,
   DOC_TOMBSTONE_TTL,
   manualPickupCoversDock,
+  allInRate,
+  stripLiftgateFee,
 } from "./manifestLogic.js";
 
 /* Test helpers ---------------------------------------------------------- */
@@ -1024,5 +1026,76 @@ describe("manualPickupCoversDock", () => {
   it("is safe on junk", () => {
     expect(manualPickupCoversDock(null, "Norcross", SRC, NL)).toBe(false);
     expect(manualPickupCoversDock(mpu({ stop: "" }), "Norcross", SRC, NL)).toBe(false);
+  });
+});
+
+/* ====================================================================== */
+/* allInRate / stripLiftgateFee — the shared, single-source-of-truth
+   formula for "what does the customer actually get billed." baseRate is
+   stored FEE-EXCLUSIVE by convention; a sweep found 11 places across the app
+   had drifted to reading baseRate alone, silently dropping the $75 liftgate
+   fee on printed logs, manifests, exports, and revenue rollups (confirmed
+   production case: Hillman, baseRate 400 + liftgateFee 75, shown as $475 on
+   the live board but $400 on the printed Daily Log). */
+describe("allInRate — the all-in billed total for a delivery entry", () => {
+  it("Hillman production case: baseRate 400 + liftgateFee 75 = 475", () => {
+    expect(allInRate(del({ baseRate: 400, liftgateApplied: true, isHourly: false, liftgateFee: 75 }))).toBe(475);
+  });
+  it("no liftgate applied -> baseRate unchanged, regardless of a stray liftgateFee value", () => {
+    expect(allInRate(del({ baseRate: 400, liftgateApplied: false, liftgateFee: 75 }))).toBe(400);
+  });
+  it("hourly entry with liftgateApplied=true -> baseRate unchanged (Emser-hours system bills LG, not baseRate)", () => {
+    expect(allInRate(del({ baseRate: 0, isHourly: true, liftgateApplied: true, liftgateFee: 75 }))).toBe(0);
+  });
+  it("liftgateApplied=true but liftgateFee missing/0 (legacy or corrupted data) self-heals to $75", () => {
+    expect(allInRate(del({ baseRate: 400, liftgateApplied: true, isHourly: false, liftgateFee: 0 }))).toBe(475);
+    expect(allInRate(del({ baseRate: 400, liftgateApplied: true, isHourly: false }))).toBe(475);
+  });
+  it("a custom non-standard liftgateFee (e.g. $100) is respected, not clamped to 75", () => {
+    expect(allInRate(del({ baseRate: 400, liftgateApplied: true, isHourly: false, liftgateFee: 100 }))).toBe(500);
+  });
+  it("a pickup entry (baseRate 0, no liftgate) -> 0", () => {
+    expect(allInRate(pu())).toBe(0);
+  });
+  it("null/undefined entry -> 0 (defensive)", () => {
+    expect(allInRate(null)).toBe(0);
+    expect(allInRate(undefined)).toBe(0);
+  });
+});
+
+describe("stripLiftgateFee — inverse of allInRate, used by rate-edit save handlers", () => {
+  it("Hillman: dispatcher retypes 475 on a $75-LG entry -> stores baseRate 400", () => {
+    expect(stripLiftgateFee(475, del({ liftgateApplied: true, isHourly: false, liftgateFee: 75 }))).toBe(400);
+  });
+  it("liftgateFee missing (legacy/corrupted data) still strips 75, not 0 -- closes the read/write asymmetry that caused compounding overcharges", () => {
+    expect(stripLiftgateFee(475, del({ liftgateApplied: true, isHourly: false }))).toBe(400);
+  });
+  it("no liftgate applied -> the typed total passes through unchanged", () => {
+    expect(stripLiftgateFee(300, del({ liftgateApplied: false }))).toBe(300);
+  });
+  it("a typed total less than the fee clamps to 0, never goes negative", () => {
+    expect(stripLiftgateFee(50, del({ liftgateApplied: true, isHourly: false, liftgateFee: 75 }))).toBe(0);
+  });
+  it("round-trips with allInRate: display then re-save recovers the original baseRate", () => {
+    const e = del({ baseRate: 400, liftgateApplied: true, isHourly: false, liftgateFee: 75 });
+    expect(stripLiftgateFee(allInRate(e), e)).toBe(e.baseRate);
+  });
+});
+
+describe("dedupeDeliveries — never drops a liftgate charge across a merge", () => {
+  it("preserves liftgateApplied/liftgateFee when only one of two duplicates has it", () => {
+    const a = del({ id: "e_1", weight: 6000, status: "pending", liftgateApplied: false, liftgateFee: 0 });
+    const b = del({ id: "e_2", weight: 6000, status: "arrived", liftgateApplied: true, liftgateFee: 75 });
+    const out = dedupeDeliveries([a, b]);
+    expect(out).toHaveLength(1);
+    expect(out[0].liftgateApplied).toBe(true);
+    expect(out[0].liftgateFee).toBe(75);
+  });
+  it("does not add a liftgate charge when NEITHER duplicate has one", () => {
+    const a = del({ id: "e_1", weight: 6000, status: "pending" });
+    const b = del({ id: "e_2", weight: 6000, status: "arrived" });
+    const out = dedupeDeliveries([a, b]);
+    expect(out).toHaveLength(1);
+    expect(out[0].liftgateApplied).toBeFalsy();
   });
 });
