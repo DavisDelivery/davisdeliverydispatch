@@ -61,7 +61,7 @@ greenBtn:{background:"#16a34a",color:"#fff",border:"none",borderRadius:8,padding
 inputMb4:{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"7px 10px",fontSize:12,outline:"none",marginBottom:4},
 };
 import { useState, useCallback, useEffect, useRef, Fragment, Component } from "react";
-import { dedupeIds, dedupeAutoPickups, dedupeGhostDeliveries, dedupeDeliveries, reapOrphanAutoPickups, sanitizeEntry, _mergeEntryDriver, _mergeEntryDispatcher, buildMergedEntries, entrySig, makeTombFilter, makeDocTombFilter, mergeTombstones, vanishedAutoPickups, orderByIds, reconcileDriverRoster, applyDriverRemap, normDriverName, manualPickupCoversDock } from "./manifestLogic.js";
+import { dedupeIds, dedupeAutoPickups, dedupeGhostDeliveries, dedupeDeliveries, reapOrphanAutoPickups, sanitizeEntry, _mergeEntryDriver, _mergeEntryDispatcher, buildMergedEntries, entrySig, makeTombFilter, makeDocTombFilter, mergeTombstones, vanishedAutoPickups, orderByIds, reconcileDriverRoster, applyDriverRemap, normDriverName, manualPickupCoversDock, allInRate, stripLiftgateFee } from "./manifestLogic.js";
 import { diffOrderDocs, orderDocId, ordersParity } from "./ordersStore.js";
 
 const _SplitUI=({splitEntry,setSplitEntry})=>{const tw=splitEntry.totalWeight||0;const t1w=splitEntry.truck1Weight!==undefined?splitEntry.truck1Weight:Math.round(tw*(splitEntry.ratio/100));const t2w=tw-t1w;return(<><div style={_s.flexG6Mb6}><div style={_s.f1}><label style={_s.labelSm}>Total</label><input type="number" inputMode="numeric" value={tw||""} onChange={e=>{const newTw=parseInt(e.target.value)||0;setSplitEntry(p=>({...p,totalWeight:newTw,truck1Weight:Math.min(p.truck1Weight||Math.round(newTw/2),newTw)}));}} style={_s.splitTotal}/></div><div style={_s.f1}><label style={_s.labelBlue}>Truck 1</label><input type="number" inputMode="numeric" value={splitEntry.truck1Weight!==undefined?splitEntry.truck1Weight:""} onChange={e=>{const v=e.target.value;setSplitEntry(p=>({...p,truck1Weight:v===""?0:parseInt(v)||0}));}} style={_s.splitInput}/></div><div style={_s.f1}><label style={_s.labelGray}>Truck 2</label><div style={_s.splitT2}>{t2w.toLocaleString()}</div></div></div><input type="range" min={0} max={tw} step={100} value={t1w} onChange={e=>{const v=parseInt(e.target.value)||0;setSplitEntry(p=>({...p,truck1Weight:v}));}} style={_s.slider}/></>);};
@@ -2108,7 +2108,7 @@ style={{flex:1,minWidth:140,border:"1px solid #e7e5e4",borderRadius:6,padding:"3
 </div>
 
 <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:3,flexShrink:0}}>
-<span onClick={e=>e.stopPropagation()}><InlineRate value={entry.baseRate+(entry.liftgateApplied&&!entry.isHourly?(entry.liftgateFee||75):0)} isHourly={entry.isHourly} onSave={r=>onRate&&onRate(r)}/></span>
+<span onClick={e=>e.stopPropagation()}><InlineRate value={allInRate(entry)} isHourly={entry.isHourly} onSave={r=>onRate&&onRate(r)}/></span>
 {!isPU&&<div style={{display:"flex",gap:3}} onClick={e=>e.stopPropagation()}>
 {!entry.isHourly&&!entry.liftgateApplied&&<button onClick={()=>{if(onLiftgate)onLiftgate();}} style={{background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:5,padding:"2px 7px",cursor:"pointer",fontSize:9,color:"#ea580c",fontWeight:700}}>+LG</button>}
 {entry.isHourly&&!entry.liftgateApplied&&<button onClick={()=>{if(onLiftgate)onLiftgate();}} style={{background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:5,padding:"2px 7px",cursor:"pointer",fontSize:9,color:"#ea580c",fontWeight:700}}>+1HR LG</button>}
@@ -3120,7 +3120,7 @@ const loadRevenueHistory=async()=>{
       let flatTotal=0;const byCustomer={};let hourlyStops=0;
       weekEntries.forEach(e=>{
         if(e.isHourly){hourlyStops++;return;}
-        const lineRate=e.baseRate+(e.liftgateApplied?(e.liftgateFee||0):0);
+        const lineRate=allInRate(e);
         const fuelAmt=e.fuelPct>0?Math.round(lineRate*e.fuelPct):0;
         const lineTotal=lineRate+fuelAmt;
         flatTotal+=lineTotal;
@@ -3152,7 +3152,7 @@ const exportRevenueCSV=(weeks)=>{
     wk.entries.forEach(e=>{
       if(e.isHourly)return;
       const drv=drivers.find(d=>d.id===e.driverId);
-      const lineRate=e.baseRate+(e.liftgateApplied?(e.liftgateFee||0):0);
+      const lineRate=allInRate(e);
       const fuelAmt=e.fuelPct>0?Math.round(lineRate*e.fuelPct):0;
       rows.push([
         e._date,wk.weekLabel,e.customer||"",e.stop||"",
@@ -4456,7 +4456,7 @@ const defaultInstr=isQuoteCust?"BOL & Pictures must be sent back via Email":inst
 const custPickupSources=PICKUP_SOURCES.filter(ps=>ps.customer===cust);
 const isMultiSourceCust=custPickupSources.length>1;
 const fallbackPickup=isMultiSourceCust?selPickup:null;
-const entry={id:genId(),customer:cust,stop,baseRate:finalBaseRate,liftgateFee:isKnownLG?75:0,fuelPct:finalFuelPct,isHourly:ex.isHourly||false,note:ex.note||(isKnownLG?"$"+finalBaseRate+" + $75 LG":null),driverId:drvId,addr:ex.addr||getAddr(stop),stopType:ex.stopType||"delivery",priority:ex.priority||(cd?.priority)||false,instructions:ex.instructions!==undefined?ex.instructions:defaultInstr,status:null,arrivedAt:null,departedAt:null,eta:null,photos:[],signature:null,dueBy:autoDueBy||autoDeliverAfter||null,weight:ex.weight||0,loadNum:ex.loadNum||1,pickupFrom:imetcoPU||ex.pickupFrom||fallbackPickup||null,pickupDueBy:ex.pickupDueBy||null,manualPickup:ex.manualPickup||false,liftgateApplied:isKnownLG||ex.liftgateApplied||false,knownLiftgate:isKnownLG||false,shipPlan:ex.shipPlan||null};
+const entry={id:genId(),customer:cust,stop,baseRate:finalBaseRate,liftgateFee:isKnownLG?75:(ex.liftgateApplied?(ex.liftgateFee||75):0),fuelPct:finalFuelPct,isHourly:ex.isHourly||false,note:ex.note||(isKnownLG?"$"+finalBaseRate+" + $75 LG":null),driverId:drvId,addr:ex.addr||getAddr(stop),stopType:ex.stopType||"delivery",priority:ex.priority||(cd?.priority)||false,instructions:ex.instructions!==undefined?ex.instructions:defaultInstr,status:null,arrivedAt:null,departedAt:null,eta:null,photos:[],signature:null,dueBy:autoDueBy||autoDeliverAfter||null,weight:ex.weight||0,loadNum:ex.loadNum||1,pickupFrom:imetcoPU||ex.pickupFrom||fallbackPickup||null,pickupDueBy:ex.pickupDueBy||null,manualPickup:ex.manualPickup||false,liftgateApplied:isKnownLG||ex.liftgateApplied||false,knownLiftgate:isKnownLG||false,shipPlan:ex.shipPlan||null};
 if(entry.stopType==="delivery"){writeAuditLog({action:"create",customer:cust,stop,driverId:drvId,details:(finalBaseRate?"$"+finalBaseRate:"rate 0")+(isKnownLG?" + $75 LG":"")+(entry.pickupFrom?" | from "+entry.pickupFrom:"")+(entry.weight?" | "+entry.weight+" lbs":"")});}
 setLog(p=>{
 let all=[...(p[dk]||[])];
@@ -4841,15 +4841,16 @@ const updateInstructions=(eid,text)=>{const e=dl.find(x=>x.id===eid);const oldT=
 const updateRate=(eid,rate)=>{const e=dl.find(x=>x.id===eid);const typedTotal=parseFloat(rate)||0;
 /* The InlineRate input shows the all-in displayed value (baseRate +
    liftgateFee if applicable). When the user retypes, we receive the new
-   all-in total — so subtract liftgateFee to get the new baseRate, otherwise
-   the renderer would re-add LG on top and the override would appear to snap
-   back. Mirrors the rate-display gate (liftgateApplied && !isHourly). */
-const lgAdded=e&&e.liftgateApplied&&!e.isHourly?(e.liftgateFee||0):0;
-const newR=Math.max(0,typedTotal-lgAdded);
+   all-in total — so strip liftgateFee back out to get the new baseRate,
+   otherwise the renderer would re-add LG on top and the override would
+   appear to snap back. stripLiftgateFee uses the SAME ||75 fallback as the
+   display side (allInRate) so a read immediately followed by a write can
+   never disagree — that exact asymmetry once let a legacy liftgateFee:0
+   record's rate inflate by $75 on every edit. */
+const newR=stripLiftgateFee(typedTotal,e);
 const oldR=e?.baseRate||0;if(e&&oldR!==newR){writeAuditLog({action:"rate_change",customer:e.customer,stop:e.stop,driverId:e.driverId,details:"$"+oldR+" → $"+newR});}setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===eid?{...e,baseRate:newR}:e)}));};
 const updateRateForDay=(eid,rate,dayKey)=>{const dayEntries=log[dayKey]||[];const e=dayEntries.find(x=>x.id===eid);const typedTotal=parseFloat(rate)||0;
-const lgAdded=e&&e.liftgateApplied&&!e.isHourly?(e.liftgateFee||0):0;
-const newR=Math.max(0,typedTotal-lgAdded);
+const newR=stripLiftgateFee(typedTotal,e);
 const oldR=e?.baseRate||0;if(e&&oldR!==newR){writeAuditLog({action:"rate_change",customer:e.customer,stop:e.stop,driverId:e.driverId,details:"$"+oldR+" → $"+newR+" ("+dayKey+")"});}setLog(p=>({...p,[dayKey]:(p[dayKey]||[]).map(e=>e.id===eid?{...e,baseRate:newR}:e)}));};
 
 const[liftgateRequests,setLiftgateRequests]=useState([]);/* [{id,entryId,stop,driverId,driverName,time,status}] — mirrored from Firestore */
@@ -5250,7 +5251,7 @@ setInsertPickupFor(null);setPickupCustomer("");setPickupStop("");setPickupAddr("
 showToast(targetLoadNum>1?`Pickup added to Load ${targetLoadNum}`:`Pickup added`);
 };
 
-const computeDay=(key,emKey)=>{const entries=log[key]||[];let base=0;let lgFees=0;if(entries.some(e=>e.isHourly)){const{totalMins}=getShiftSummary(emKey||key);const lgCount=entries.filter(e=>e.isHourly&&e.liftgateApplied&&!DISTANCE_BONUS_STOPS.includes(e.stop)).length;const distBonus=entries.filter(e=>e.isHourly&&DISTANCE_BONUS_STOPS.includes(e.stop)).length;if(totalMins>0){const billedMins=totalMins+(lgCount+distBonus)*60;base+=102.50*(Math.round(billedMins/15)*15/60);}else{base+=102.50*(emH[`${emKey||key}-emser`]||4);}}const fBC={};entries.forEach(e=>{if(e.isHourly)return;base+=e.baseRate;lgFees+=(e.liftgateFee||0);if(e.fuelPct>0){if(!fBC[e.customer])fBC[e.customer]={pct:e.fuelPct,base:0};fBC[e.customer].base+=e.baseRate;}});let fuel=0;Object.values(fBC).forEach(c=>{fuel+=c.base*c.pct;});return{base:base+lgFees,fuel,total:base+lgFees+fuel,fBC,lgFees};};
+const computeDay=(key,emKey)=>{const entries=log[key]||[];let base=0;let lgFees=0;if(entries.some(e=>e.isHourly)){const{totalMins}=getShiftSummary(emKey||key);const lgCount=entries.filter(e=>e.isHourly&&e.liftgateApplied&&!DISTANCE_BONUS_STOPS.includes(e.stop)).length;const distBonus=entries.filter(e=>e.isHourly&&DISTANCE_BONUS_STOPS.includes(e.stop)).length;if(totalMins>0){const billedMins=totalMins+(lgCount+distBonus)*60;base+=102.50*(Math.round(billedMins/15)*15/60);}else{base+=102.50*(emH[`${emKey||key}-emser`]||4);}}const fBC={};entries.forEach(e=>{if(e.isHourly)return;base+=e.baseRate;lgFees+=allInRate(e)-(e.baseRate||0);if(e.fuelPct>0){if(!fBC[e.customer])fBC[e.customer]={pct:e.fuelPct,base:0};fBC[e.customer].base+=e.baseRate;}});let fuel=0;Object.values(fBC).forEach(c=>{fuel+=c.base*c.pct;});return{base:base+lgFees,fuel,total:base+lgFees+fuel,fBC,lgFees};};
 
 const getDriverMiles=(drvId,dayKey)=>{const entries=(log[dayKey||dk]||[]).filter(e=>e.driverId===drvId);return calcRouteMiles(entries);};
 const getWeekDriverMiles=(drvId)=>{let total=0;for(let i=0;i<5;i++){total+=getDriverMiles(drvId,`${wo}-${i}`);}return total;};
@@ -5285,10 +5286,11 @@ grandBase+=amt;
 }else{
 dayEntries.forEach(e=>{
 if(e.stopType==="pickup")return;
-const fuelAmt=e.fuelPct>0?e.baseRate*e.fuelPct:0;
+const lineRate=allInRate(e);
+const fuelAmt=e.fuelPct>0?lineRate*e.fuelPct:0;
 const lgNote=e.liftgateApplied?" + Liftgate":"";
-lines.push({day:weekDates[i].name,date:weekDates[i].date,desc:e.stop+lgNote,stops:e.stop,base:e.baseRate,fuel:fuelAmt,shipPlan:e.shipPlan||null});
-grandBase+=e.baseRate;grandFuel+=fuelAmt;
+lines.push({day:weekDates[i].name,date:weekDates[i].date,desc:e.stop+lgNote,stops:e.stop,base:lineRate,fuel:fuelAmt,shipPlan:e.shipPlan||null});
+grandBase+=lineRate;grandFuel+=fuelAmt;
 });
 }
 });
@@ -5565,7 +5567,7 @@ const DCOL_P=["#2563eb","#16a34a","#ea580c","#9333ea"];
 const col=DCOL_P[di]||"#1e5b92";
 const loads=[...new Set(de.map(e=>e.loadNum||1))].sort();
 const drvMiles=getDriverMiles(drvId);
-const drvRev=de.filter(e=>!e.isHourly&&e.stopType!=="pickup").reduce((s,e)=>s+e.baseRate,0);
+const drvRev=de.filter(e=>!e.isHourly&&e.stopType!=="pickup").reduce((s,e)=>s+allInRate(e),0);
 printContent(`Manifest \u2014 ${drv?.name} \u2014 ${wd[sd].name} ${wd[sd].date}`,()=>{
 let h=`<div class="header"><div><h1 style="color:${col}">DAVIS DELIVERY SERVICE</h1><div class="sub">${drv?.name} \u2014 ${wd[sd].name} ${wd[sd].date}</div></div><div class="total">${fmt(drvRev)}</div></div>`;
 h+=`<div style="display:flex;gap:16px;margin-bottom:12px;flex-wrap:wrap">`;
@@ -5591,7 +5593,7 @@ loads.forEach(ln=>{
     h+=`<td style="font-size:10px;color:#78716c">${e.addr||""}</td>`;
     h+=`<td style="font-size:11px;font-weight:700;color:#1e5b92;white-space:nowrap">${e.weight>0?e.weight.toLocaleString()+" lbs":""}</td>`;
     h+=`<td style="font-size:10px">${noteCell}</td>`;
-    h+=`<td style="text-align:right;font-weight:800;white-space:nowrap">${e.isHourly?"HR":fmt(e.baseRate)}</td></tr>`;
+    h+=`<td style="text-align:right;font-weight:800;white-space:nowrap">${e.isHourly?"HR":fmt(allInRate(e))}</td></tr>`;
   });
   h+=`</table>`;
 });
@@ -5608,7 +5610,7 @@ drivers.forEach((drv,di)=>{
   const col=DCOL_P[di]||"#1e5b92";
   const loads=[...new Set(de.map(e=>e.loadNum||1))].sort();
   const drvMiles=getDriverMiles(drv.id);
-  const drvRev=de.filter(e=>!e.isHourly&&e.stopType!=="pickup").reduce((s,e)=>s+e.baseRate,0);
+  const drvRev=de.filter(e=>!e.isHourly&&e.stopType!=="pickup").reduce((s,e)=>s+allInRate(e),0);
   h+=`<div class="section" style="${di>0?"page-break-before:always":""}">`;
   h+=`<div class="section-title" style="border-left-color:${col};background:${col}12;padding:10px 14px"><div style="display:flex;align-items:center;gap:10"><div style="width:34px;height:34px;border-radius:8px;background:${col};display:flex;align-items:center;justify-content:center;color:#fff;font-size:17px;font-weight:800">${drv.name.charAt(0)}</div><div><div style="font-size:16px;font-weight:800;color:${col}">${drv.name}</div><div style="font-size:11px;color:#78716c">${de.filter(e=>e.stopType!=="pickup").length} deliveries${drvMiles>0?" \xb7 ~"+drvMiles+"mi":""}${loads.length>1?" \xb7 "+loads.length+" loads":""}</div></div></div><span style="color:#16a34a;font-weight:800;font-size:18px;font-variant-numeric:tabular-nums">${fmt(drvRev)}</span></div>`;
   loads.forEach(ln=>{
@@ -5624,14 +5626,14 @@ drivers.forEach((drv,di)=>{
       const lgBadge=e.liftgateApplied?'<span style="font-size:8px;background:#fef3c7;color:#92400e;padding:1px 4px;border-radius:3px;font-weight:700;margin-right:3px">LG</span>':"";
       const pickupFrom=e.pickupFrom&&!isPU?`<div style="font-size:9px;color:#2563eb;font-weight:600">\u2191 from ${e.pickupFrom}</div>`:"";
       const noteCell=`${dueTag}${lgBadge}${e.note?'<span class="note">'+e.note+'</span>':""}${e.instructions?'<br><span class="instr">\ud83d\udccb '+e.instructions+'</span>':""}`;
-      h+=`<tr style="background:${isPU?"#eff6ff":i%2===0?"#fff":"#fafaf9"}"><td style="font-weight:700;color:${col}">${i+1}</td><td>${tag}</td><td><b style="font-size:12px">${e.stop}</b><div style="font-size:10px;color:#78716c">${e.customer}</div>${pickupFrom}</td><td style="font-size:10px;color:#78716c">${e.addr||""}</td><td style="font-size:11px;font-weight:700;color:#1e5b92;white-space:nowrap">${e.weight>0?e.weight.toLocaleString()+" lbs":""}</td><td style="font-size:10px">${noteCell}</td><td style="text-align:right;font-weight:800;white-space:nowrap">${e.isHourly?"HR":fmt(e.baseRate)}</td></tr>`;
+      h+=`<tr style="background:${isPU?"#eff6ff":i%2===0?"#fff":"#fafaf9"}"><td style="font-weight:700;color:${col}">${i+1}</td><td>${tag}</td><td><b style="font-size:12px">${e.stop}</b><div style="font-size:10px;color:#78716c">${e.customer}</div>${pickupFrom}</td><td style="font-size:10px;color:#78716c">${e.addr||""}</td><td style="font-size:11px;font-weight:700;color:#1e5b92;white-space:nowrap">${e.weight>0?e.weight.toLocaleString()+" lbs":""}</td><td style="font-size:10px">${noteCell}</td><td style="text-align:right;font-weight:800;white-space:nowrap">${e.isHourly?"HR":fmt(allInRate(e))}</td></tr>`;
     });
     h+=`</table>`;
   });
   h+=`</div>`;
 });
 const ua=dl.filter(e=>e.driverId===0);
-if(ua.length){h+=`<div class="section"><div class="section-title" style="border-left-color:#dc2626">\u26a0 Unassigned (${ua.length})</div><table><tr><th>#</th><th>Type</th><th>Stop</th><th>Customer</th><th>Address</th><th>Weight</th><th style="text-align:right">Rate</th></tr>`;ua.forEach((e,i)=>{const tag=e.stopType==="pickup"?'<span class="tag pu">PU</span>':e.priority?'<span class="tag pri">PRI</span>':'<span class="tag del">DEL</span>';h+=`<tr style="background:#fef2f2"><td>${i+1}</td><td>${tag}</td><td><b>${e.stop}</b></td><td>${e.customer}</td><td style="font-size:10px">${e.addr||""}</td><td style="font-size:11px;font-weight:700">${e.weight>0?e.weight.toLocaleString()+" lbs":""}</td><td style="text-align:right;font-weight:700">${e.isHourly?"HR":fmt(e.baseRate)}</td></tr>`;});h+=`</table></div>`;}
+if(ua.length){h+=`<div class="section"><div class="section-title" style="border-left-color:#dc2626">\u26a0 Unassigned (${ua.length})</div><table><tr><th>#</th><th>Type</th><th>Stop</th><th>Customer</th><th>Address</th><th>Weight</th><th style="text-align:right">Rate</th></tr>`;ua.forEach((e,i)=>{const tag=e.stopType==="pickup"?'<span class="tag pu">PU</span>':e.priority?'<span class="tag pri">PRI</span>':'<span class="tag del">DEL</span>';h+=`<tr style="background:#fef2f2"><td>${i+1}</td><td>${tag}</td><td><b>${e.stop}</b></td><td>${e.customer}</td><td style="font-size:10px">${e.addr||""}</td><td style="font-size:11px;font-weight:700">${e.weight>0?e.weight.toLocaleString()+" lbs":""}</td><td style="text-align:right;font-weight:700">${e.isHourly?"HR":fmt(allInRate(e))}</td></tr>`;});h+=`</table></div>`;}
 return h;});
 };
 const printDailyLog=()=>{printContent(`Daily Log \u2014 ${wd[sd].name} ${wd[sd].date}`,()=>{
@@ -5645,7 +5647,7 @@ deliveries.forEach(e=>{if(!byCustomer[e.customer])byCustomer[e.customer]=[];byCu
 const custList=Object.keys(byCustomer).sort();
 custList.forEach(cust=>{
   const custDels=byCustomer[cust];
-  const custRev=custDels.filter(e=>!e.isHourly).reduce((s,e)=>s+e.baseRate,0);
+  const custRev=custDels.filter(e=>!e.isHourly).reduce((s,e)=>s+allInRate(e),0);
   const CC_entry=CC?.[cust]||CC?.["One-Off Delivery"];
   const custCol=CC_entry?.accent||"#1e5b92";
   h+=`<div class="section"><div class="section-title" style="border-left-color:${custCol}">`;
@@ -5664,20 +5666,20 @@ custList.forEach(cust=>{
     h+=`<td style="font-size:11px;font-weight:600;color:#57534e">${drv?drv.name.split(" ")[0]:"Unassigned"}</td>`;
     h+=`<td style="font-size:11px;font-weight:700;color:#1e5b92;white-space:nowrap">${e.weight>0?e.weight.toLocaleString()+" lbs":""}</td>`;
     h+=`<td style="font-size:10px">${dueTag}${lgBadge}${e.note?'<span class="note">'+e.note+'</span>':""}${e.instructions?'<span class="instr"> | \ud83d\udccb '+e.instructions+'</span>':""}</td>`;
-    h+=`<td style="text-align:right;font-weight:800;white-space:nowrap">${e.isHourly?"HR":fmt(e.baseRate)}</td></tr>`;
+    h+=`<td style="text-align:right;font-weight:800;white-space:nowrap">${e.isHourly?"HR":fmt(allInRate(e))}</td></tr>`;
   });
   h+=`</table></div>`;
 });
-const custRevArr=custList.map(c=>{const dels=byCustomer[c];const isHr=dels.some(e=>e.isHourly);const rev=isHr?(()=>{if(shiftMins>0){const _lg=dels.filter(e=>e.isHourly&&e.liftgateApplied&&!DISTANCE_BONUS_STOPS.includes(e.stop)).length;const _d=dels.filter(e=>e.isHourly&&DISTANCE_BONUS_STOPS.includes(e.stop)).length;const bil=shiftMins+(_lg+_d)*60;return 102.50*Math.round(bil/15)*15/60;}return 0;})():dels.reduce((s,e)=>s+e.baseRate,0);return[c,rev];}).filter(([,r])=>r>0).sort((a,b)=>b[1]-a[1]);
+const custRevArr=custList.map(c=>{const dels=byCustomer[c];const isHr=dels.some(e=>e.isHourly);const rev=isHr?(()=>{if(shiftMins>0){const _lg=dels.filter(e=>e.isHourly&&e.liftgateApplied&&!DISTANCE_BONUS_STOPS.includes(e.stop)).length;const _d=dels.filter(e=>e.isHourly&&DISTANCE_BONUS_STOPS.includes(e.stop)).length;const bil=shiftMins+(_lg+_d)*60;return 102.50*Math.round(bil/15)*15/60;}return 0;})():dels.reduce((s,e)=>s+allInRate(e),0);return[c,rev];}).filter(([,r])=>r>0).sort((a,b)=>b[1]-a[1]);
 if(custRevArr.length>1){
   h+=`<div class="section"><div class="section-title"><span>Revenue by Customer</span><span class="amt">${fmt(dc.total)}</span></div><table>`;
   custRevArr.forEach(([cu,rev])=>{h+=`<tr><td style="font-weight:600">${cu}</td><td style="text-align:right;font-weight:700;color:#16a34a">${fmt(rev)}</td></tr>`;});
   h+=`</table></div>`;
 }
 return h;});};
-const printWeekly=()=>{printContent("Weekly",()=>{let h=`<div class="header"><div><h1>DAVIS DELIVERY — Weekly Summary</h1><div class="sub">${wd[0].date} — ${wd[4].date}</div></div><div class="total">${fmt(wkT)}</div></div>`;const wkShiftByDrv2={};let wkShiftTotal2=0;let wkBonusTotal2=0;DAYS.forEach((_,i)=>{const{byDriver,totalMins}=getShiftSummary(getFbKey(wo,i));wkShiftTotal2+=totalMins;const _dayEnts=log[`${wo}-${i}`]||[];const _dayLG=_dayEnts.filter(e=>e.isHourly&&e.liftgateApplied&&!DISTANCE_BONUS_STOPS.includes(e.stop)).length;const _dayDist=_dayEnts.filter(e=>e.isHourly&&DISTANCE_BONUS_STOPS.includes(e.stop)).length;wkBonusTotal2+=(_dayLG+_dayDist)*60;Object.entries(byDriver).forEach(([did,mins])=>{wkShiftByDrv2[did]=(wkShiftByDrv2[did]||0)+mins;});});if(wkShiftTotal2>0){const _wkBilled2=wkShiftTotal2+wkBonusTotal2;const hrs2=Math.round(_wkBilled2/15)*15/60;h+=`<div class="emser"><div><span class="lbl">⏱ Emser Week Total: ${formatMins(_wkBilled2)}</span><br><span style="font-size:10px;color:#64748b">${drivers.filter(d=>wkShiftByDrv2[d.id]).map(d=>`${d.name}: ${formatMins(wkShiftByDrv2[d.id])}`).join(" · ")}</span></div><span class="val">${fmt(102.50*hrs2)}</span></div>`;}const wkFuel={};DAYS.forEach((_,i)=>{const calc=wkD[i].calc;Object.entries(calc.fBC||{}).forEach(([cu,cf])=>{if(!wkFuel[cu])wkFuel[cu]={pct:cf.pct,base:0};wkFuel[cu].base+=cf.base;});});if(Object.keys(wkFuel).length>0){h+=`<div class="fuel"><div class="lbl">Week Fuel Surcharges</div>`;Object.entries(wkFuel).forEach(([cu,cf])=>{h+=`<div style="display:flex;justify-content:space-between;padding:2px 0"><span>${cu} (${fmt(cf.base)} × ${Math.round(cf.pct*100)}%)</span><b style="color:#d97706">${fmt(cf.base*cf.pct)}</b></div>`;});h+=`</div>`;}DAYS.forEach((day,i)=>{const{entries,calc}=wkD[i];const{totalMins:shiftMins}=getShiftSummary(getFbKey(wo,i));if(!entries.length&&!shiftMins)return;h+=`<div class="section"><div class="section-title"><span>${day} — ${wd[i].date}</span><span class="amt">${fmt(calc.total)}</span></div>`;if(shiftMins>0){const _wpLG=entries.filter(e=>e.isHourly&&e.liftgateApplied&&!DISTANCE_BONUS_STOPS.includes(e.stop)).length;const _wpDist=entries.filter(e=>e.isHourly&&DISTANCE_BONUS_STOPS.includes(e.stop)).length;const _wpBilled=shiftMins+(_wpLG+_wpDist)*60;const hrs=Math.round(_wpBilled/15)*15/60;h+=`<div style="padding:3px 10px;background:#eff6ff;border-left:3px solid #2563eb;margin-bottom:4px;font-size:11px"><b style="color:#2563eb">⏱ Emser ${formatMins(_wpBilled)}</b> — ${fmt(102.50*hrs)}</div>`;}h+=`<table><tr><th>Customer</th><th>Stop</th><th>Driver</th><th>Notes</th><th style="text-align:right">Rate</th></tr>`;entries.filter(e=>e.stopType!=="pickup"||e.manualPickup).sort((a,b)=>a.customer.localeCompare(b.customer)).forEach(e=>{const drv=drivers.find(d=>d.id===e.driverId);const _cu=CUSTOMERS[e.customer];const _showFuel=_cu&&_cu.fuel_surcharge&&!_cu.fuel_included&&e.fuelPct!==0;const _pct=_showFuel?Math.round((e.fuelPct||_cu.fuel_surcharge)*100):0;const _fuelChip=_showFuel?`<span style="font-size:9px;background:#fffbeb;color:#b45309;border:1px solid #fde68a;padding:1px 5px;border-radius:4px;font-weight:700;margin-right:6px">+${_pct}% FUEL</span>`:"";const _fromLabel=e.pickupFrom?` <span style="font-size:10px;color:#64748b;font-style:italic">· from ${e.pickupFrom}</span>`:"";h+=`<tr><td style="color:#57534e">${e.customer}</td><td><b>${e.stop}</b>${_fromLabel}</td><td>${drv?drv.name:""}</td><td style="font-size:10px">${e.instructions?'<span class="instr">'+e.instructions+'</span> ':""}${e.shipPlan?'<b style="color:#ea580c">SP# '+e.shipPlan+'</b>':""}</td><td style="text-align:right;font-weight:700;white-space:nowrap">${_fuelChip}${e.isHourly?"HR":fmt(e.baseRate)}</td></tr>`;});h+=`</table></div>`;});return h;});};
+const printWeekly=()=>{printContent("Weekly",()=>{let h=`<div class="header"><div><h1>DAVIS DELIVERY — Weekly Summary</h1><div class="sub">${wd[0].date} — ${wd[4].date}</div></div><div class="total">${fmt(wkT)}</div></div>`;const wkShiftByDrv2={};let wkShiftTotal2=0;let wkBonusTotal2=0;DAYS.forEach((_,i)=>{const{byDriver,totalMins}=getShiftSummary(getFbKey(wo,i));wkShiftTotal2+=totalMins;const _dayEnts=log[`${wo}-${i}`]||[];const _dayLG=_dayEnts.filter(e=>e.isHourly&&e.liftgateApplied&&!DISTANCE_BONUS_STOPS.includes(e.stop)).length;const _dayDist=_dayEnts.filter(e=>e.isHourly&&DISTANCE_BONUS_STOPS.includes(e.stop)).length;wkBonusTotal2+=(_dayLG+_dayDist)*60;Object.entries(byDriver).forEach(([did,mins])=>{wkShiftByDrv2[did]=(wkShiftByDrv2[did]||0)+mins;});});if(wkShiftTotal2>0){const _wkBilled2=wkShiftTotal2+wkBonusTotal2;const hrs2=Math.round(_wkBilled2/15)*15/60;h+=`<div class="emser"><div><span class="lbl">⏱ Emser Week Total: ${formatMins(_wkBilled2)}</span><br><span style="font-size:10px;color:#64748b">${drivers.filter(d=>wkShiftByDrv2[d.id]).map(d=>`${d.name}: ${formatMins(wkShiftByDrv2[d.id])}`).join(" · ")}</span></div><span class="val">${fmt(102.50*hrs2)}</span></div>`;}const wkFuel={};DAYS.forEach((_,i)=>{const calc=wkD[i].calc;Object.entries(calc.fBC||{}).forEach(([cu,cf])=>{if(!wkFuel[cu])wkFuel[cu]={pct:cf.pct,base:0};wkFuel[cu].base+=cf.base;});});if(Object.keys(wkFuel).length>0){h+=`<div class="fuel"><div class="lbl">Week Fuel Surcharges</div>`;Object.entries(wkFuel).forEach(([cu,cf])=>{h+=`<div style="display:flex;justify-content:space-between;padding:2px 0"><span>${cu} (${fmt(cf.base)} × ${Math.round(cf.pct*100)}%)</span><b style="color:#d97706">${fmt(cf.base*cf.pct)}</b></div>`;});h+=`</div>`;}DAYS.forEach((day,i)=>{const{entries,calc}=wkD[i];const{totalMins:shiftMins}=getShiftSummary(getFbKey(wo,i));if(!entries.length&&!shiftMins)return;h+=`<div class="section"><div class="section-title"><span>${day} — ${wd[i].date}</span><span class="amt">${fmt(calc.total)}</span></div>`;if(shiftMins>0){const _wpLG=entries.filter(e=>e.isHourly&&e.liftgateApplied&&!DISTANCE_BONUS_STOPS.includes(e.stop)).length;const _wpDist=entries.filter(e=>e.isHourly&&DISTANCE_BONUS_STOPS.includes(e.stop)).length;const _wpBilled=shiftMins+(_wpLG+_wpDist)*60;const hrs=Math.round(_wpBilled/15)*15/60;h+=`<div style="padding:3px 10px;background:#eff6ff;border-left:3px solid #2563eb;margin-bottom:4px;font-size:11px"><b style="color:#2563eb">⏱ Emser ${formatMins(_wpBilled)}</b> — ${fmt(102.50*hrs)}</div>`;}h+=`<table><tr><th>Customer</th><th>Stop</th><th>Driver</th><th>Notes</th><th style="text-align:right">Rate</th></tr>`;entries.filter(e=>e.stopType!=="pickup"||e.manualPickup).sort((a,b)=>a.customer.localeCompare(b.customer)).forEach(e=>{const drv=drivers.find(d=>d.id===e.driverId);const _cu=CUSTOMERS[e.customer];const _showFuel=_cu&&_cu.fuel_surcharge&&!_cu.fuel_included&&e.fuelPct!==0;const _pct=_showFuel?Math.round((e.fuelPct||_cu.fuel_surcharge)*100):0;const _fuelChip=_showFuel?`<span style="font-size:9px;background:#fffbeb;color:#b45309;border:1px solid #fde68a;padding:1px 5px;border-radius:4px;font-weight:700;margin-right:6px">+${_pct}% FUEL</span>`:"";const _fromLabel=e.pickupFrom?` <span style="font-size:10px;color:#64748b;font-style:italic">· from ${e.pickupFrom}</span>`:"";h+=`<tr><td style="color:#57534e">${e.customer}</td><td><b>${e.stop}</b>${_fromLabel}</td><td>${drv?drv.name:""}</td><td style="font-size:10px">${e.instructions?'<span class="instr">'+e.instructions+'</span> ':""}${e.shipPlan?'<b style="color:#ea580c">SP# '+e.shipPlan+'</b>':""}</td><td style="text-align:right;font-weight:700;white-space:nowrap">${_fuelChip}${e.isHourly?"HR":fmt(allInRate(e))}</td></tr>`;});h+=`</table></div>`;});return h;});};
 
-const printPODEntry=(entry)=>{const w=window.open("","_blank","width=800,height=900");if(!w){showToast("Print blocked — works when published");return;}const addr=entry.addr||getAddr(entry.stop);const drvName=drivers.find(d=>d.id===entry.driverId)?.name||"—";const isSigImg=entry.signature&&(entry.signature.startsWith("data:")||entry.signature.startsWith("http"));const photos=(entry.photos||[]).filter(p=>p&&!(typeof p==="string"&&p.startsWith("photo_")));const rate=entry.isHourly?"Hourly":fmt(entry.baseRate+(entry.liftgateApplied&&!entry.isHourly?(entry.liftgateFee||75):0));w.document.write(`<!DOCTYPE html><html><head><title>POD — ${entry.stop}</title><style>@media print{.no-print{display:none!important;}}body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;margin:0;padding:24px;color:#1c1917;}.header{display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid #1e5b92;padding-bottom:12px;margin-bottom:16px;}.logo{height:50px;background:#1e5b92;padding:6px 12px;border-radius:6px;}.pod-title{text-align:center;font-size:20px;font-weight:700;margin:14px 0;text-transform:uppercase;color:#1e5b92;letter-spacing:1px;}.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 28px;margin-bottom:20px;padding:14px 18px;background:#f8f8f6;border-radius:10px;}.info-grid .label{font-size:10px;color:#78716c;text-transform:uppercase;font-weight:600;letter-spacing:0.5px;}.info-grid .value{font-size:14px;font-weight:600;margin-bottom:4px;}.photos{display:flex;flex-wrap:wrap;gap:10px;margin:12px 0;}.photos img{max-width:300px;max-height:240px;border-radius:8px;border:1px solid #e7e5e4;object-fit:contain;}.sig-box{margin:20px 0;padding:16px;border:2px solid #16a34a;border-radius:10px;text-align:center;}.sig-box img{max-height:120px;}.sig-label{font-size:10px;color:#78716c;text-transform:uppercase;margin-bottom:6px;font-weight:600;}.footer{margin-top:24px;border-top:1px solid #e7e5e4;padding-top:10px;font-size:9px;color:#a8a29e;text-align:center;}</style></head><body>`);w.document.write(`<button class="no-print" onclick="window.print()" style="position:fixed;top:12px;right:12px;background:#1e5b92;color:#fff;border:none;border-radius:8px;padding:10px 24px;font-size:14px;font-weight:700;cursor:pointer;z-index:10;">Print</button>`);w.document.write(`<div class="header"><div><img class="logo" src="https://davisdelivery.com/wp-content/uploads/2025/05/davis-white2-scaled.png" onerror="this.outerHTML='<div style=\\'font-size:20px;font-weight:700;color:#1e5b92\\'>DAVIS DELIVERY SERVICE</div>'"/><div style="font-size:11px;color:#78716c;margin-top:6px;">4535 Shadburn Ferry Rd · Buford, GA 30518 · (770) 271-9498</div></div><div style="text-align:right"><div style="font-size:13px;font-weight:600;">${entry.dayName||""} ${entry.dayDate||""}</div></div></div>`);w.document.write(`<div class="pod-title">Proof of Delivery</div>`);w.document.write(`<div class="info-grid"><div><div class="label">Customer</div><div class="value">${entry.customer||""}</div></div><div><div class="label">Driver</div><div class="value">${drvName}</div></div><div><div class="label">Delivery To</div><div class="value">${entry.stop||""}</div></div><div><div class="label">Weight</div><div class="value">${entry.weight?entry.weight.toLocaleString()+" lbs":"—"}</div></div><div><div class="label">Address</div><div class="value">${addr||"—"}</div></div><div><div class="label">Rate</div><div class="value">${rate}</div></div><div><div class="label">Arrived</div><div class="value">${entry.arrivedAt||"—"}</div></div><div><div class="label">Departed</div><div class="value">${entry.departedAt||"—"}</div></div>${entry.shipPlan?`<div><div class="label">Ship Plan</div><div class="value">#${entry.shipPlan}</div></div>`:""}${entry.instructions?`<div style="grid-column:span 2"><div class="label">Instructions</div><div class="value">${entry.instructions}</div></div>`:""}</div>`);if(photos.length>0){w.document.write(`<div style="font-size:11px;color:#78716c;text-transform:uppercase;font-weight:600;margin-top:14px;">Delivery Photos</div><div class="photos">`);photos.forEach(p=>{w.document.write(`<img src="${p}" onerror="this.style.display='none'"/>`);});w.document.write(`</div>`);}if(entry.signature){if(isSigImg){w.document.write(`<div class="sig-box"><div class="sig-label">Signature</div><img src="${entry.signature}"/></div>`);}else{w.document.write(`<div class="sig-box"><div class="sig-label">Received By</div><div style="font-size:22px;font-weight:700;color:#16a34a;">${entry.signature}</div></div>`);}}w.document.write(`<div class="footer">Davis Delivery Service Inc. · Generated ${new Date().toLocaleString()}</div></body></html>`);w.document.close();};
+const printPODEntry=(entry)=>{const w=window.open("","_blank","width=800,height=900");if(!w){showToast("Print blocked — works when published");return;}const addr=entry.addr||getAddr(entry.stop);const drvName=drivers.find(d=>d.id===entry.driverId)?.name||"—";const isSigImg=entry.signature&&(entry.signature.startsWith("data:")||entry.signature.startsWith("http"));const photos=(entry.photos||[]).filter(p=>p&&!(typeof p==="string"&&p.startsWith("photo_")));const rate=entry.isHourly?"Hourly":fmt(allInRate(entry));w.document.write(`<!DOCTYPE html><html><head><title>POD — ${entry.stop}</title><style>@media print{.no-print{display:none!important;}}body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;margin:0;padding:24px;color:#1c1917;}.header{display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid #1e5b92;padding-bottom:12px;margin-bottom:16px;}.logo{height:50px;background:#1e5b92;padding:6px 12px;border-radius:6px;}.pod-title{text-align:center;font-size:20px;font-weight:700;margin:14px 0;text-transform:uppercase;color:#1e5b92;letter-spacing:1px;}.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 28px;margin-bottom:20px;padding:14px 18px;background:#f8f8f6;border-radius:10px;}.info-grid .label{font-size:10px;color:#78716c;text-transform:uppercase;font-weight:600;letter-spacing:0.5px;}.info-grid .value{font-size:14px;font-weight:600;margin-bottom:4px;}.photos{display:flex;flex-wrap:wrap;gap:10px;margin:12px 0;}.photos img{max-width:300px;max-height:240px;border-radius:8px;border:1px solid #e7e5e4;object-fit:contain;}.sig-box{margin:20px 0;padding:16px;border:2px solid #16a34a;border-radius:10px;text-align:center;}.sig-box img{max-height:120px;}.sig-label{font-size:10px;color:#78716c;text-transform:uppercase;margin-bottom:6px;font-weight:600;}.footer{margin-top:24px;border-top:1px solid #e7e5e4;padding-top:10px;font-size:9px;color:#a8a29e;text-align:center;}</style></head><body>`);w.document.write(`<button class="no-print" onclick="window.print()" style="position:fixed;top:12px;right:12px;background:#1e5b92;color:#fff;border:none;border-radius:8px;padding:10px 24px;font-size:14px;font-weight:700;cursor:pointer;z-index:10;">Print</button>`);w.document.write(`<div class="header"><div><img class="logo" src="https://davisdelivery.com/wp-content/uploads/2025/05/davis-white2-scaled.png" onerror="this.outerHTML='<div style=\\'font-size:20px;font-weight:700;color:#1e5b92\\'>DAVIS DELIVERY SERVICE</div>'"/><div style="font-size:11px;color:#78716c;margin-top:6px;">4535 Shadburn Ferry Rd · Buford, GA 30518 · (770) 271-9498</div></div><div style="text-align:right"><div style="font-size:13px;font-weight:600;">${entry.dayName||""} ${entry.dayDate||""}</div></div></div>`);w.document.write(`<div class="pod-title">Proof of Delivery</div>`);w.document.write(`<div class="info-grid"><div><div class="label">Customer</div><div class="value">${entry.customer||""}</div></div><div><div class="label">Driver</div><div class="value">${drvName}</div></div><div><div class="label">Delivery To</div><div class="value">${entry.stop||""}</div></div><div><div class="label">Weight</div><div class="value">${entry.weight?entry.weight.toLocaleString()+" lbs":"—"}</div></div><div><div class="label">Address</div><div class="value">${addr||"—"}</div></div><div><div class="label">Rate</div><div class="value">${rate}</div></div><div><div class="label">Arrived</div><div class="value">${entry.arrivedAt||"—"}</div></div><div><div class="label">Departed</div><div class="value">${entry.departedAt||"—"}</div></div>${entry.shipPlan?`<div><div class="label">Ship Plan</div><div class="value">#${entry.shipPlan}</div></div>`:""}${entry.instructions?`<div style="grid-column:span 2"><div class="label">Instructions</div><div class="value">${entry.instructions}</div></div>`:""}</div>`);if(photos.length>0){w.document.write(`<div style="font-size:11px;color:#78716c;text-transform:uppercase;font-weight:600;margin-top:14px;">Delivery Photos</div><div class="photos">`);photos.forEach(p=>{w.document.write(`<img src="${p}" onerror="this.style.display='none'"/>`);});w.document.write(`</div>`);}if(entry.signature){if(isSigImg){w.document.write(`<div class="sig-box"><div class="sig-label">Signature</div><img src="${entry.signature}"/></div>`);}else{w.document.write(`<div class="sig-box"><div class="sig-label">Received By</div><div style="font-size:22px;font-weight:700;color:#16a34a;">${entry.signature}</div></div>`);}}w.document.write(`<div class="footer">Davis Delivery Service Inc. · Generated ${new Date().toLocaleString()}</div></body></html>`);w.document.close();};
 
 const exportBackup=()=>{
   const backup={
@@ -6043,7 +6045,7 @@ if(isDesktop&&view!=="add"&&!selCust&&!quoteMode){
 const dkNote=dispNotes[emDk]||"";
 const allDriverEntries=drivers.map((drv,di)=>({drv,di,entries:drvEntries(drv.id)})).filter(({drv,entries})=>drv.active!==false||entries.length>0);
 const uaEntries=dl.filter(e=>e.driverId===0);
-const custRevenue={};dl.forEach(e=>{if(!e.isHourly){if(!custRevenue[e.customer])custRevenue[e.customer]=0;custRevenue[e.customer]+=e.baseRate;}});
+const custRevenue={};dl.forEach(e=>{if(!e.isHourly){if(!custRevenue[e.customer])custRevenue[e.customer]=0;custRevenue[e.customer]+=allInRate(e);}});
 if(dl.some(e=>e.isHourly)){const{totalMins:_crMins}=getShiftSummary(emDk);const _crLG=dl.filter(e=>e.isHourly&&e.liftgateApplied&&!DISTANCE_BONUS_STOPS.includes(e.stop)).length;const _crDist=dl.filter(e=>e.isHourly&&DISTANCE_BONUS_STOPS.includes(e.stop)).length;const _crHrs=_crMins>0?Math.round((_crMins+(_crLG+_crDist)*60)/15)*15/60:(emH[`${emDk}-emser`]||4);custRevenue["Emser Tile"]=(custRevenue["Emser Tile"]||0)+102.50*_crHrs;}
 const custRevArr=Object.entries(custRevenue).sort((a,b)=>b[1]-a[1]);
 const maxCustRev=Math.max(...custRevArr.map(c=>c[1]),1);
@@ -6343,7 +6345,7 @@ return cf;};
 const rpSt=(did)=>{const ids=rpOrders[did]||[];const cap=getDriverCapacity(did);const tw=ids.reduce((s,id)=>{const e=rpE(id);return s+(e?.weight||0);},0);
 const pus=ids.filter(id=>{const e=rpE(id);return e?.stopType==="pickup";}).length;
 const dels=ids.length-pus;const timed=ids.filter(id=>{const e=rpE(id);return!!e?.dueBy;}).length;
-const rev=ids.reduce((s,id)=>{const e=rpE(id);return s+(e?.isHourly?0:(e?.baseRate||0));},0);
+const rev=ids.reduce((s,id)=>{const e=rpE(id);return s+(e?.isHourly?0:allInRate(e));},0);
 let miles=0;const pts=[rpO];ids.forEach(id=>{const e=rpE(id);const c=rpC(e);if(c)pts.push(c);});
 for(let i=1;i<pts.length;i++)miles+=rpMiles(pts[i-1],pts[i]);
 return{tw,cap,pus,dels,timed,rev,miles:Math.round(miles)};};
@@ -6702,7 +6704,7 @@ return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius
        contributes to the Day Total but never appears in the customer
        summary below — the "IMETCO done Friday not showing up but $300 is
        in the total" bug. */
-    const dels=dl.filter(e=>e.stopType!=="pickup"||e.manualPickup);const groups={};dels.forEach(e=>{if(!groups[e.customer])groups[e.customer]=[];groups[e.customer].push(e);});return Object.entries(groups).sort((a,b)=>a[0].localeCompare(b[0])).map(([cust,custEntries])=>{const c=getCustColor(cust);const custBase=custEntries.reduce((s,e)=>s+e.baseRate+(e.liftgateApplied&&!e.isHourly?(e.liftgateFee||75):0),0);return(<div key={cust}>
+    const dels=dl.filter(e=>e.stopType!=="pickup"||e.manualPickup);const groups={};dels.forEach(e=>{if(!groups[e.customer])groups[e.customer]=[];groups[e.customer].push(e);});return Object.entries(groups).sort((a,b)=>a[0].localeCompare(b[0])).map(([cust,custEntries])=>{const c=getCustColor(cust);const custBase=custEntries.reduce((s,e)=>s+allInRate(e),0);return(<div key={cust}>
 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 12px",background:c.accent+"11",borderRadius:"10px 10px 0 0",borderBottom:`2px solid ${c.accent}`}}>
 <div style={_s.flexC6}><div style={{width:4,height:20,borderRadius:2,background:c.accent}}/><span style={{fontSize:13,fontWeight:700,color:c.accent,textTransform:"uppercase"}}>{cust}</span><span style={{fontSize:11,color:"#78716c"}}>({custEntries.length} {custEntries.length===1?"stop":"stops"})</span></div>
 <span style={{fontSize:14,fontWeight:700,fontVariantNumeric:"tabular-nums",color:c.accent}}>{fmt(custBase)}</span>
@@ -6720,7 +6722,7 @@ return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius
 {entry.dueBy&&<span style={{fontSize:9,background:entry.dueBy.includes("-")?"#7c3aed":entry.dueBy.startsWith("After")?"#2563eb":"#dc2626",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700}}>⏰ {entry.dueBy}</span>}
 {drv&&<span style={{fontSize:9,background:DCOL[di]||"#78716c",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:600}}>{drv.name.split(" ")[0]}</span>}
 </div>
-<div style={{fontSize:16,fontWeight:700,fontVariantNumeric:"tabular-nums",flexShrink:0}}><InlineRate value={entry.baseRate+(entry.liftgateApplied&&!entry.isHourly?(entry.liftgateFee||75):0)} isHourly={entry.isHourly} onSave={r=>updateRate(entry.id,r)}/></div>
+<div style={{fontSize:16,fontWeight:700,fontVariantNumeric:"tabular-nums",flexShrink:0}}><InlineRate value={allInRate(entry)} isHourly={entry.isHourly} onSave={r=>updateRate(entry.id,r)}/></div>
 </div>
 
 <div style={{fontSize:15,fontWeight:600,marginBottom:2}}>{entry.stop}</div>
@@ -6845,7 +6847,7 @@ return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius
 </div>
 <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
 {(()=>{const cu=CUSTOMERS[entry.customer];if(!cu||!cu.fuel_surcharge||cu.fuel_included)return null;if(entry.stopType==="pickup")return null;if(entry.fuelPct===0)return null;const pct=Math.round((entry.fuelPct||cu.fuel_surcharge)*100);return<span title={"Bill: add "+pct+"% fuel surcharge on top of line rate"} style={{fontSize:9,background:"#fffbeb",color:"#b45309",border:"1px solid #fde68a",padding:"1px 5px",borderRadius:4,fontWeight:700,letterSpacing:"0.02em"}}>+{pct}% FUEL</span>;})()}
-<InlineRate value={entry.baseRate+(entry.liftgateApplied&&!entry.isHourly?(entry.liftgateFee||75):0)} isHourly={entry.isHourly} onSave={r=>updateRateForDay(entry.id,r,dayKey)}/>
+<InlineRate value={allInRate(entry)} isHourly={entry.isHourly} onSave={r=>updateRateForDay(entry.id,r,dayKey)}/>
 </div>
 </div>);})}
 </div>);})}
@@ -7179,7 +7181,7 @@ else{showToast("Pick a weekday (Mon-Fri)");}
 <span style={{fontSize:12,color:"#78716c"}}>{histLoading?<span style={{color:"#2563eb",fontWeight:600}}>⏳ loading…</span>:`${histFiltered.length} deliveries`}</span>
 </div>
 {histFiltered.length===0&&<div style={_s.emptyState2}><div style={{fontSize:40,marginBottom:12}}>🔍</div><p style={{fontSize:14,margin:0}}>{histAll.length===0?"No delivery data yet":"No matches"}</p></div>}
-{histFiltered.length>0&&(()=>{const grouped={};histFiltered.forEach(e=>{const gk=`${e.weekOff}-${e.dayIdx}`;if(!grouped[gk])grouped[gk]={dayName:e.dayName,dayDate:e.dayDate,weekOff:e.weekOff,dayIdx:e.dayIdx,entries:[]};grouped[gk].entries.push(e);});return Object.values(grouped).sort((a,b)=>a.weekOff!==b.weekOff?b.weekOff-a.weekOff:b.dayIdx-a.dayIdx).map((grp,gi)=>{const dayTotal=grp.entries.reduce((s,e)=>s+e.baseRate,0);const isCur=grp.weekOff===wo;return(<div key={gi} style={{marginBottom:14}}>
+{histFiltered.length>0&&(()=>{const grouped={};histFiltered.forEach(e=>{const gk=`${e.weekOff}-${e.dayIdx}`;if(!grouped[gk])grouped[gk]={dayName:e.dayName,dayDate:e.dayDate,weekOff:e.weekOff,dayIdx:e.dayIdx,entries:[]};grouped[gk].entries.push(e);});return Object.values(grouped).sort((a,b)=>a.weekOff!==b.weekOff?b.weekOff-a.weekOff:b.dayIdx-a.dayIdx).map((grp,gi)=>{const dayTotal=grp.entries.reduce((s,e)=>s+allInRate(e),0);const isCur=grp.weekOff===wo;return(<div key={gi} style={{marginBottom:14}}>
 <div style={{display:"flex",justifyContent:"space-between",padding:"6px 4px",borderBottom:"1px solid #e7e5e4",marginBottom:6}}>
 <span style={{fontSize:13,fontWeight:700,color:isCur?"#1c1917":"#78716c"}}>{grp.dayName} — {grp.dayDate}{!isCur&&<span style={{fontSize:10,color:"#a8a29e",fontWeight:500,marginLeft:4}}>{grp.weekOff===wo-1?"last wk":(wo-grp.weekOff)+"w ago"}</span>}</span>
 <span style={{fontSize:12,fontWeight:600,color:"#16a34a",fontVariantNumeric:"tabular-nums"}}>{fmt(dayTotal)}</span>
@@ -7202,7 +7204,7 @@ else{showToast("Pick a weekday (Mon-Fri)");}
 <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0,marginLeft:8}}>
 {drv&&<span style={{fontSize:9,background:DCOL[di]||"#78716c",color:"#fff",padding:"1px 4px",borderRadius:3,fontWeight:600}}>{drv.name.split(" ")[0]}</span>}
 {(()=>{const cu=CUSTOMERS[entry.customer];if(!cu||!cu.fuel_surcharge||cu.fuel_included)return null;if(entry.stopType==="pickup")return null;if(entry.fuelPct===0)return null;const pct=Math.round((entry.fuelPct||cu.fuel_surcharge)*100);return<span title={"Bill: add "+pct+"% fuel surcharge on top of line rate"} style={{fontSize:9,background:"#fffbeb",color:"#b45309",border:"1px solid #fde68a",padding:"1px 5px",borderRadius:4,fontWeight:700,letterSpacing:"0.02em"}}>+{pct}% FUEL</span>;})()}
-<InlineRate value={entry.baseRate+(entry.liftgateApplied&&!entry.isHourly?(entry.liftgateFee||75):0)} isHourly={entry.isHourly} onSave={r=>updateRate(entry.id,r)}/>
+<InlineRate value={allInRate(entry)} isHourly={entry.isHourly} onSave={r=>updateRate(entry.id,r)}/>
 </div>
 </div>);})}
 </div>);});})()}
@@ -7334,7 +7336,7 @@ return<div style={{fontSize:20,fontWeight:700,color:"#1c1917"}}>✍ {sig}</div>;
 
 <div style={{padding:"12px 20px 16px",borderTop:"1px solid #e7e5e4",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
 <span style={{fontSize:13,color:"#78716c"}}>Rate</span>
-<span style={{fontSize:18,fontWeight:700,fontVariantNumeric:"tabular-nums"}}>{e.isHourly?"Hourly":fmt(e.baseRate+(e.liftgateApplied&&!e.isHourly?(e.liftgateFee||75):0))}</span>
+<span style={{fontSize:18,fontWeight:700,fontVariantNumeric:"tabular-nums"}}>{e.isHourly?"Hourly":fmt(allInRate(e))}</span>
 </div>
 </div>
 </div>);})()}
@@ -7473,7 +7475,7 @@ style={{background:isDrgOver?"#dcfce7":isDrgSrc?"#fef9c3":done?"#f0fdf4":onSite?
 {entry.pickupDueBy&&<span style={{fontSize:8,background:"#16a34a",color:"#fff",padding:"1px 4px",borderRadius:2,fontWeight:700,display:"inline-flex",alignItems:"center",gap:1}}>{"📦"}{entry.pickupDueBy}</span>}
 {isImetco&&<span style={{fontSize:8,background:"#ea580c",color:"#fff",padding:"1px 4px",borderRadius:2,fontWeight:700}}>SHIP PLAN REQ</span>}
 </div>
-<InlineRate value={entry.baseRate+(entry.liftgateApplied&&!entry.isHourly?(entry.liftgateFee||75):0)} isHourly={entry.isHourly} onSave={r=>updateRate(entry.id,r)}/>
+<InlineRate value={allInRate(entry)} isHourly={entry.isHourly} onSave={r=>updateRate(entry.id,r)}/>
 </div>
 <div style={{fontSize:uiCompact?13:14,fontWeight:700,color:"#1c1917",marginTop:uiCompact?0:2}}>{entry.stop}</div>
 {addr&&!uiCompact&&<div style={{fontSize:11,color:"#57534e",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:1}}>{addr}</div>}
@@ -7566,7 +7568,7 @@ style={{background:isDrgOver?"#dcfce7":isDrgSrc?"#fef9c3":done?"#f0fdf4":onSite?
 {entry.dueBy&&<span style={{fontSize:8,background:entry.dueBy.includes("-")?"#7c3aed":entry.dueBy.startsWith("After")?"#2563eb":"#dc2626",color:"#fff",padding:"1px 4px",borderRadius:2,fontWeight:700}}>{"\u23F0"}{entry.dueBy}</span>}
 {entry.pickupDueBy&&<span style={_s.tagGreen}>{"📦"}{entry.pickupDueBy}</span>}
 </div>
-<InlineRate value={entry.baseRate+(entry.liftgateApplied&&!entry.isHourly?(entry.liftgateFee||75):0)} isHourly={entry.isHourly} onSave={r=>updateRate(entry.id,r)}/>
+<InlineRate value={allInRate(entry)} isHourly={entry.isHourly} onSave={r=>updateRate(entry.id,r)}/>
 </div>
 <div style={{fontSize:uiCompact?13:14,fontWeight:700,color:"#1c1917",marginTop:uiCompact?0:2}}>{entry.stop}</div>
 {addr&&!uiCompact&&<div style={{fontSize:11,color:"#57534e",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:1}}>{addr}</div>}
@@ -7825,7 +7827,7 @@ onAssignStop={mapActiveDrv?(stopId,drvId)=>{assignInOrder(stopId,mapActiveDrv,ma
 {entry.signature&&(()=>{const isImg=typeof entry.signature==="string"&&(entry.signature.startsWith("data:")||entry.signature.startsWith("http"));return<div style={{fontSize:9,color:"#16a34a",marginTop:1}}>{isImg?"✍ Signed":"✍ "+entry.signature}</div>;})()}
 {entry.photos&&entry.photos.length>0&&<div style={{display:"flex",gap:3,marginTop:3}}>{entry.photos.map((p,pi)=><img key={pi} src={p} alt="" style={{width:24,height:24,objectFit:"cover",borderRadius:4,border:"1px solid #e7e5e4"}}/>)}</div>}
 </div>
-<InlineRate value={entry.baseRate+(entry.liftgateApplied&&!entry.isHourly?(entry.liftgateFee||75):0)} isHourly={entry.isHourly} onSave={r=>updateRate(entry.id,r)}/>
+<InlineRate value={allInRate(entry)} isHourly={entry.isHourly} onSave={r=>updateRate(entry.id,r)}/>
 </div>
 </div>);})}
 
@@ -8991,7 +8993,7 @@ return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius
        contributes to the Day Total but never appears in the customer
        summary below — the "IMETCO done Friday not showing up but $300 is
        in the total" bug. */
-    const dels=dl.filter(e=>e.stopType!=="pickup"||e.manualPickup);const groups={};dels.forEach(e=>{if(!groups[e.customer])groups[e.customer]=[];groups[e.customer].push(e);});return Object.entries(groups).sort((a,b)=>a[0].localeCompare(b[0])).map(([cust,custEntries])=>{const c=getCustColor(cust);const custBase=custEntries.reduce((s,e)=>s+e.baseRate+(e.liftgateApplied&&!e.isHourly?(e.liftgateFee||75):0),0);return(<div key={cust} style={{marginBottom:14}}>
+    const dels=dl.filter(e=>e.stopType!=="pickup"||e.manualPickup);const groups={};dels.forEach(e=>{if(!groups[e.customer])groups[e.customer]=[];groups[e.customer].push(e);});return Object.entries(groups).sort((a,b)=>a[0].localeCompare(b[0])).map(([cust,custEntries])=>{const c=getCustColor(cust);const custBase=custEntries.reduce((s,e)=>s+allInRate(e),0);return(<div key={cust} style={{marginBottom:14}}>
 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 12px",background:c.accent+"11",borderRadius:"10px 10px 0 0",borderBottom:`2px solid ${c.accent}`}}>
 <div style={_s.flexC6}><div style={{width:3,height:16,borderRadius:2,background:c.accent}}/><span style={{fontSize:12,fontWeight:700,color:c.accent,textTransform:"uppercase"}}>{cust}</span><span style={{fontSize:10,color:"#78716c"}}>({custEntries.length})</span></div>
 <span style={{fontSize:13,fontWeight:700,fontVariantNumeric:"tabular-nums",color:c.accent}}>{fmt(custBase)}</span>
@@ -9019,7 +9021,7 @@ return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius
 {entry.photos&&entry.photos.length>0&&!entry.photos.every(p=>typeof p==="string"&&p.startsWith("photo_"))&&<div style={{fontSize:9,color:"#7c3aed",fontWeight:600,marginTop:1}}>📷 {entry.photos.filter(p=>!(typeof p==="string"&&p.startsWith("photo_"))).length} photo{entry.photos.filter(p=>!(typeof p==="string"&&p.startsWith("photo_"))).length!==1?"s":""}</div>}
 </div>
 <div style={{textAlign:"right",marginLeft:12}}>
-<div style={{fontSize:16,fontWeight:700,fontVariantNumeric:"tabular-nums"}}><InlineRate value={entry.baseRate+(entry.liftgateApplied&&!entry.isHourly?(entry.liftgateFee||75):0)} isHourly={entry.isHourly} onSave={r=>updateRate(entry.id,r)}/></div>
+<div style={{fontSize:16,fontWeight:700,fontVariantNumeric:"tabular-nums"}}><InlineRate value={allInRate(entry)} isHourly={entry.isHourly} onSave={r=>updateRate(entry.id,r)}/></div>
 {!entry.liftgateApplied&&!entry.isHourly&&<button onClick={()=>manualLiftgate(entry.id)} style={{background:"#fff7ed",border:"1px solid #fed7aa",color:"#ea580c",fontSize:10,cursor:"pointer",padding:"3px 8px",borderRadius:6,fontWeight:700,marginTop:4,display:"block"}}>+LG $75</button>}
 {!entry.liftgateApplied&&entry.isHourly&&<button onClick={()=>{setEmH(p=>{const key=`${emDk}-emser`;const cur=p[key]||4;return{...p,[key]:cur+1};});setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===entry.id?{...e,liftgateApplied:true}:e)}));showToast("Liftgate +1 hr added");}} style={{background:"#fff7ed",border:"1px solid #fed7aa",color:"#ea580c",fontSize:10,cursor:"pointer",padding:"3px 8px",borderRadius:6,fontWeight:700,marginTop:4,display:"block"}}>+1HR LG</button>}
 {entry.liftgateApplied&&(entry.knownLiftgate?<div style={{fontSize:9,color:"#16a34a",fontWeight:700,marginTop:4}}>{entry.isHourly?"✓ LG +1HR":"✓ LG +$75"}</div>:<button onClick={()=>removeLiftgate(entry.id)} title="Tap to remove liftgate" style={{fontSize:9,color:"#16a34a",fontWeight:700,marginTop:4,background:"none",border:"none",padding:0,cursor:"pointer",display:"block",fontFamily:"inherit"}}>{entry.isHourly?"✓ LG +1HR ✕":"✓ LG +$75 ✕"}</button>)}
@@ -9097,7 +9099,7 @@ style={{flex:1,border:entry.shipPlan?"1px solid #bbf7d0":"1px solid #fca5a5",bor
 {drivers.map((drv,di)=>{const mins=shiftByDrv[drv.id]||0;if(!mins)return null;const initials=drv.name.split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase();return(<span key={drv.id} style={{fontSize:11,background:DCOL[di],color:"#fff",padding:"1px 6px",borderRadius:4,fontWeight:600}}>{initials} {formatMins(mins)}</span>);})}
 <span style={{marginLeft:"auto",fontSize:11,fontWeight:700,color:"#1d4ed8",fontVariantNumeric:"tabular-nums"}}>{formatMins(shiftMins)} — {fmt(102.50*Math.round(shiftMins/15)*15/60)}</span>
 </div>}
-{entries.filter(e=>e.stopType!=="pickup"||e.manualPickup).sort((a,b)=>a.customer.localeCompare(b.customer)).map(entry=>{const c=getCustColor(entry.customer);const drv=drivers.find(d=>d.id===entry.driverId);const di2=drivers.findIndex(d=>d.id===entry.driverId);const isImetco=entry.customer==="IMETCO";return(<div key={entry.id}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 8px 6px 16px",borderLeft:`3px solid ${c.accent}`,marginTop:4,background:"#fff",borderRadius:isImetco?"0 8px 0 0":"0 8px 8px 0"}}><div style={{display:"flex",alignItems:"center",gap:4,flex:1,minWidth:0}}><span style={{fontSize:11,color:c.accent,fontWeight:600}}>{entry.customer}</span><span style={_s.truncate}>{entry.stop}</span>{entry.pickupFrom&&<span style={{fontSize:10,color:"#64748b",fontStyle:"italic",flexShrink:0}}>· from {entry.pickupFrom}</span>}{drv&&<span style={{fontSize:9,background:DCOL[di2]||"#78716c",color:"#fff",padding:"1px 4px",borderRadius:3,fontWeight:600,flexShrink:0}}>{drv.name.charAt(0)}</span>}</div><div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>{(()=>{const cu=CUSTOMERS[entry.customer];if(!cu||!cu.fuel_surcharge||cu.fuel_included)return null;if(entry.stopType==="pickup")return null;if(entry.fuelPct===0)return null;const pct=Math.round((entry.fuelPct||cu.fuel_surcharge)*100);return<span title={"Bill: add "+pct+"% fuel surcharge on top of line rate"} style={{fontSize:9,background:"#fffbeb",color:"#b45309",border:"1px solid #fde68a",padding:"1px 5px",borderRadius:4,fontWeight:700,letterSpacing:"0.02em"}}>+{pct}% FUEL</span>;})()}<InlineRate value={entry.baseRate+(entry.liftgateApplied&&!entry.isHourly?(entry.liftgateFee||75):0)} isHourly={entry.isHourly} onSave={r=>updateRateForDay(entry.id,r,wk2)}/></div></div>
+{entries.filter(e=>e.stopType!=="pickup"||e.manualPickup).sort((a,b)=>a.customer.localeCompare(b.customer)).map(entry=>{const c=getCustColor(entry.customer);const drv=drivers.find(d=>d.id===entry.driverId);const di2=drivers.findIndex(d=>d.id===entry.driverId);const isImetco=entry.customer==="IMETCO";return(<div key={entry.id}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 8px 6px 16px",borderLeft:`3px solid ${c.accent}`,marginTop:4,background:"#fff",borderRadius:isImetco?"0 8px 0 0":"0 8px 8px 0"}}><div style={{display:"flex",alignItems:"center",gap:4,flex:1,minWidth:0}}><span style={{fontSize:11,color:c.accent,fontWeight:600}}>{entry.customer}</span><span style={_s.truncate}>{entry.stop}</span>{entry.pickupFrom&&<span style={{fontSize:10,color:"#64748b",fontStyle:"italic",flexShrink:0}}>· from {entry.pickupFrom}</span>}{drv&&<span style={{fontSize:9,background:DCOL[di2]||"#78716c",color:"#fff",padding:"1px 4px",borderRadius:3,fontWeight:600,flexShrink:0}}>{drv.name.charAt(0)}</span>}</div><div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>{(()=>{const cu=CUSTOMERS[entry.customer];if(!cu||!cu.fuel_surcharge||cu.fuel_included)return null;if(entry.stopType==="pickup")return null;if(entry.fuelPct===0)return null;const pct=Math.round((entry.fuelPct||cu.fuel_surcharge)*100);return<span title={"Bill: add "+pct+"% fuel surcharge on top of line rate"} style={{fontSize:9,background:"#fffbeb",color:"#b45309",border:"1px solid #fde68a",padding:"1px 5px",borderRadius:4,fontWeight:700,letterSpacing:"0.02em"}}>+{pct}% FUEL</span>;})()}<InlineRate value={allInRate(entry)} isHourly={entry.isHourly} onSave={r=>updateRateForDay(entry.id,r,wk2)}/></div></div>
 {isImetco&&<div style={{padding:"4px 8px 6px 16px",borderLeft:`3px solid ${c.accent}`,background:"#fff",borderRadius:"0 0 8px 0",display:"flex",alignItems:"center",gap:6}}>
 <span style={{fontSize:10,fontWeight:700,color:"#ea580c",flexShrink:0}}>SP#:</span>
 <input value={entry.shipPlan||""} onChange={e=>{const eid=entry.id;const val=e.target.value;setLog(p=>({...p,[wk2]:(p[wk2]||[]).map(en=>en.id===eid?{...en,shipPlan:val}:en)}));}} placeholder="—"
@@ -9447,7 +9449,7 @@ else{showToast("Pick a weekday (Mon-Fri)");}
 {(histSearch||histCustFilter||histDrvFilter)&&<button onClick={()=>{setHistSearch("");setHistCustFilter("");setHistDrvFilter("");}} style={{background:"#fef2f2",border:"none",borderRadius:6,padding:"4px 10px",cursor:"pointer",fontSize:11,color:"#dc2626",fontWeight:600}}>Clear</button>}
 </div>
 {histFiltered.length===0&&<div style={_s.emptyState}><div style={{fontSize:36,marginBottom:12}}>{"🔍"}</div><p style={{fontSize:14,margin:0}}>{histAll.length===0?"No delivery data yet":"No matches"}</p></div>}
-{histFiltered.length>0&&(()=>{const grouped={};histFiltered.forEach(e=>{const gk=`${e.weekOff}-${e.dayIdx}`;if(!grouped[gk])grouped[gk]={dayName:e.dayName,dayDate:e.dayDate,weekOff:e.weekOff,dayIdx:e.dayIdx,entries:[]};grouped[gk].entries.push(e);});return Object.values(grouped).sort((a,b)=>a.weekOff!==b.weekOff?b.weekOff-a.weekOff:b.dayIdx-a.dayIdx).map((grp,gi)=>{const dayTotal=grp.entries.reduce((s,e)=>s+e.baseRate,0);const isCur=grp.weekOff===wo;return(<div key={gi} style={{marginBottom:12}}>
+{histFiltered.length>0&&(()=>{const grouped={};histFiltered.forEach(e=>{const gk=`${e.weekOff}-${e.dayIdx}`;if(!grouped[gk])grouped[gk]={dayName:e.dayName,dayDate:e.dayDate,weekOff:e.weekOff,dayIdx:e.dayIdx,entries:[]};grouped[gk].entries.push(e);});return Object.values(grouped).sort((a,b)=>a.weekOff!==b.weekOff?b.weekOff-a.weekOff:b.dayIdx-a.dayIdx).map((grp,gi)=>{const dayTotal=grp.entries.reduce((s,e)=>s+allInRate(e),0);const isCur=grp.weekOff===wo;return(<div key={gi} style={{marginBottom:12}}>
 <div style={{display:"flex",justifyContent:"space-between",padding:"6px 4px",borderBottom:"1px solid #e7e5e4",marginBottom:4}}>
 <span style={{fontSize:13,fontWeight:700,color:isCur?"#1c1917":"#78716c"}}>{grp.dayName} — {grp.dayDate}{!isCur&&<span style={{fontSize:10,color:"#a8a29e",fontWeight:500,marginLeft:4}}>{grp.weekOff===wo-1?"last wk":(wo-grp.weekOff)+"w ago"}</span>}</span>
 <span style={{fontSize:12,fontWeight:600,color:"#16a34a",fontVariantNumeric:"tabular-nums"}}>{fmt(dayTotal)}</span>
@@ -9473,7 +9475,7 @@ else{showToast("Pick a weekday (Mon-Fri)");}
 <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0,marginLeft:6}}>
 {drv&&<span style={{fontSize:9,background:DCOL[di]||"#78716c",color:"#fff",padding:"1px 4px",borderRadius:3,fontWeight:600}}>{drv.name.charAt(0)}</span>}
 {(()=>{const cu=CUSTOMERS[entry.customer];if(!cu||!cu.fuel_surcharge||cu.fuel_included)return null;if(entry.stopType==="pickup")return null;if(entry.fuelPct===0)return null;const pct=Math.round((entry.fuelPct||cu.fuel_surcharge)*100);return<span title={"Bill: add "+pct+"% fuel surcharge on top of line rate"} style={{fontSize:9,background:"#fffbeb",color:"#b45309",border:"1px solid #fde68a",padding:"1px 5px",borderRadius:4,fontWeight:700,letterSpacing:"0.02em"}}>+{pct}% FUEL</span>;})()}
-<InlineRate value={entry.baseRate+(entry.liftgateApplied&&!entry.isHourly?(entry.liftgateFee||75):0)} isHourly={entry.isHourly} onSave={r=>updateRate(entry.id,r)}/>
+<InlineRate value={allInRate(entry)} isHourly={entry.isHourly} onSave={r=>updateRate(entry.id,r)}/>
 </div>
 </div>);})}
 </div>);});})()}
@@ -9555,7 +9557,7 @@ return<div style={{fontSize:20,fontWeight:700}}>✍ {sig}</div>;})()}
 
 <div style={{padding:"10px 20px 20px",borderTop:"1px solid #e7e5e4",display:"flex",justifyContent:"space-between"}}>
 <span style={{fontSize:12,color:"#78716c"}}>Rate</span>
-<span style={{fontSize:17,fontWeight:700}}>{e.isHourly?"Hourly":fmt(e.baseRate+(e.liftgateApplied&&!e.isHourly?(e.liftgateFee||75):0))}</span>
+<span style={{fontSize:17,fontWeight:700}}>{e.isHourly?"Hourly":fmt(allInRate(e))}</span>
 </div>
 </div>
 </div>);})()}
