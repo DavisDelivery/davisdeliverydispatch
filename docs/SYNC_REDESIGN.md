@@ -107,6 +107,20 @@ Stable IDs are the foundation of the new model, so we build that first — it's 
 - *Result:* the BEC-Alpharetta duplicate, the resurrection, and the pickup mislabels stop — within the current storage, using the stable IDs Phase 2 also needs.
 - *Tests:* replay split→un-split→re-weight (no duplicate), delete-stays-deleted, pickup-not-duplicated.
 
+#### Phase 1.5 — `seq`: stop order becomes replicated data (shipped, on the array model)
+
+Order was the one piece of state with **no representation in the data at all** — it was an entry's position inside each screen's own array. Both reconciliation paths made the local array the authority on it (the receive handler rebuilt the day in local order; `buildMergedEntries` started from local), so a reorder made on one screen could not travel, and whichever screen saved last stamped its order onto the day document. Two dispatchers ping-ponged forever — one saw *Emser – Norcross* picking up first on Load 2, the other saw *Emser – Roswell* first, and refreshing both screens did not settle it, because each refresh only adopted whatever was in Firebase at that instant.
+
+The `seq` field of §2 landed early, on today's array model:
+
+- Every stop carries `seq` (gapped by 1000) plus `seqAt`, its **own** edit clock. Order now merges last-writer-wins per stop like any other dispatcher field — and separately from `updatedAt`, so a rate edit on one screen can't drag a stale position along with it and undo somebody else's reorder.
+- Every device renders `sort by (seq, id)`; the id tiebreak is a plain string compare, never `localeCompare`.
+- Local reorder paths (drag, sort presets, route-planner apply, insert, pickup rebuild) express themselves as an array position; `resequenceEntries` turns that into `seq` + `seqAt` on the stops that actually moved — a single drag rewrites **one** number (longest-increasing-subsequence keep), so one screen's drag can't stomp another's.
+- Stops written before the field existed are numbered from **Firebase's** array positions, so every device mints the identical value; minting never claims an order clock.
+- `buildMergedEntries` persists the day in `seq` order, so the stored array, a cold load, and the shadow store's `_seq` all agree.
+
+*Result:* the two screens converge, and the reorder itself propagates instead of being discarded. The Phase 2 read cutover inherits the field ready-made — `orderDocsToEntries` already sorts on it.
+
 ### Phase 2 — Per-order documents (the architecture)
 - New `orders/{id}` collection; client subscribes to `where date == day`.
 - Reassign/split/edit/delete/reorder become single-doc `updateDoc`/`deleteDoc`.

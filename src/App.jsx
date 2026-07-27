@@ -61,7 +61,7 @@ greenBtn:{background:"#16a34a",color:"#fff",border:"none",borderRadius:8,padding
 inputMb4:{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"7px 10px",fontSize:12,outline:"none",marginBottom:4},
 };
 import { useState, useCallback, useEffect, useRef, Fragment, Component } from "react";
-import { dedupeIds, dedupeAutoPickups, dedupeGhostDeliveries, dedupeDeliveries, reapOrphanAutoPickups, sanitizeEntry, _mergeEntryDriver, _mergeEntryDispatcher, buildMergedEntries, entrySig, makeTombFilter, makeDocTombFilter, mergeTombstones, vanishedAutoPickups, orderByIds, reconcileDriverRoster, applyDriverRemap, normDriverName, manualPickupCoversDock, allInRate, stripLiftgateFee } from "./manifestLogic.js";
+import { dedupeIds, dedupeAutoPickups, dedupeGhostDeliveries, dedupeDeliveries, reapOrphanAutoPickups, sanitizeEntry, _mergeEntryDriver, _mergeEntryDispatcher, buildMergedEntries, entrySig, makeTombFilter, makeDocTombFilter, mergeTombstones, vanishedAutoPickups, orderByIds, reconcileDriverRoster, applyDriverRemap, normDriverName, manualPickupCoversDock, allInRate, stripLiftgateFee, resequenceEntries, sortBySeq, normalizeOrder } from "./manifestLogic.js";
 import { diffOrderDocs, orderDocId, ordersParity } from "./ordersStore.js";
 
 const _SplitUI=({splitEntry,setSplitEntry})=>{const tw=splitEntry.totalWeight||0;const t1w=splitEntry.truck1Weight!==undefined?splitEntry.truck1Weight:Math.round(tw*(splitEntry.ratio/100));const t2w=tw-t1w;return(<><div style={_s.flexG6Mb6}><div style={_s.f1}><label style={_s.labelSm}>Total</label><input type="number" inputMode="numeric" value={tw||""} onChange={e=>{const newTw=parseInt(e.target.value)||0;setSplitEntry(p=>({...p,totalWeight:newTw,truck1Weight:Math.min(p.truck1Weight||Math.round(newTw/2),newTw)}));}} style={_s.splitTotal}/></div><div style={_s.f1}><label style={_s.labelBlue}>Truck 1</label><input type="number" inputMode="numeric" value={splitEntry.truck1Weight!==undefined?splitEntry.truck1Weight:""} onChange={e=>{const v=e.target.value;setSplitEntry(p=>({...p,truck1Weight:v===""?0:parseInt(v)||0}));}} style={_s.splitInput}/></div><div style={_s.f1}><label style={_s.labelGray}>Truck 2</label><div style={_s.splitT2}>{t2w.toLocaleString()}</div></div></div><input type="range" min={0} max={tw} step={100} value={t1w} onChange={e=>{const v=parseInt(e.target.value)||0;setSplitEntry(p=>({...p,truck1Weight:v}));}} style={_s.slider}/></>);};
@@ -172,6 +172,23 @@ let _idSeq=0;
    so setLog only re-stamps updatedAt on entries a dispatcher actually changed —
    the per-entry edit clock that powers last-writer-wins in _mergeEntryDispatcher. */
 const _sameEntryContent=(a,b)=>{try{return JSON.stringify({...a,updatedAt:0})===JSON.stringify({...b,updatedAt:0});}catch(e){return false;}};
+/* Put one driver's stops back into the day array in a new order, WITHIN the
+   slots they already occupy. The reorder paths used to rebuild the day as
+   `[...everyone else, ...this driver reordered]`, which hoisted the whole
+   driver's block to the end of the array. Array position is what mints the
+   `seq` ordering key, so that shape would re-number — and claim a fresh order
+   clock on — every stop the dispatcher never touched, letting one drag stomp
+   another dispatcher's concurrent reorder. In-place keeps a drag down to the
+   one stop that actually moved. Falls back to the old append shape if the set
+   of stops changed (callers only ever permute, so that is belt-and-braces). */
+const _reorderDriverBlock=(all,drvId,nextOrder)=>{
+  const slots=[];
+  all.forEach((e,i)=>{if(e&&e.driverId===drvId)slots.push(i);});
+  if(slots.length!==nextOrder.length)return[...all.filter(e=>!(e&&e.driverId===drvId)),...nextOrder];
+  const out=all.slice();
+  slots.forEach((idx,k)=>{out[idx]=nextOrder[k];});
+  return out;
+};
 const genId=()=>{
   _idSeq=(_idSeq+1)%1000000;
   const t=Date.now().toString(36);
@@ -2955,7 +2972,17 @@ const setLog=useCallback((updater)=>{
            subscription uses _rawSetLog, so a remote edit keeps ITS updatedAt. */
         const prevById={};(prev[k]||[]).forEach(e=>{if(e&&e.id)prevById[e.id]=e;});
         const nowTs=Date.now();
-        const stamped=(next[k]||[]).map(e=>{
+        /* Capture ORDER as data before stamping. Every local reorder path — drag,
+           route-planner apply, an insert, a pickup rebuild — expresses itself as
+           a new ARRAY POSITION and nothing else, so without this a reorder
+           changed no field, carried no edit clock, and could never replicate:
+           the other dispatcher's screen kept its own order forever and the two
+           screens flipped Firebase back and forth (the "one of us sees Norcross
+           first, the other sees Roswell first" bug). resequenceEntries writes a
+           new `seq` + `seqAt` on the stops that actually MOVED (and only those),
+           which the content diff below then turns into a normal edit. */
+        const ordered=resequenceEntries(next[k]||[],nowTs);
+        const stamped=ordered.map(e=>{
           if(!e||!e.id)return e;
           const pe=prevById[e.id];
           return (pe&&_sameEntryContent(pe,e))?e:{...e,updatedAt:nowTs};
@@ -3815,30 +3842,39 @@ useEffect(()=>{
            stamps with the dispatcher's stale (un-stamped) copy. */
         const dirtyOrCooldown=dirtyDaysRef.current.has(lk)||saveCooldownRef.current.has(lk);
         const localEnts=prev[lk]||[];
-        let finalEntries=fbFiltered;
-        /* Preserve LOCAL ordering whenever we already have local state for this
-           day — not only while dirty/in-cooldown. The dispatcher's screen is
-           the source of truth for STOP ORDER; Firebase is authoritative only
-           for driver-stamped FIELDS (status/arrivedAt/photos/etc.), never for
-           ordering.
+        /* Number the incoming day from FIREBASE's own array positions first, so
+           stops written before `seq` existed get the same number on every
+           device (the shared array is the only arrangement all devices can see).
+           Minting never rewrites a number that is already there. */
+        const fbNumbered=resequenceEntries(fbFiltered,0);
+        let finalEntries=sortBySeq(fbNumbered);
+        /* STOP ORDER is replicated data now, not a property of whichever screen
+           you happen to be sitting at. Every device renders sort-by-`seq`, and a
+           reorder merges per stop on its own clock (`seqAt`) like any other
+           edit — see the `seq` block in manifestLogic.js.
 
-           The old code only preserved local order during dirty/cooldown and
-           otherwise walked FB order. That left a gap: after the 5s cooldown
-           expired, the next subscription echo would re-impose FB's array order.
-           So when Chad manually moved a pickup (e.g. dragging Emser-Roswell up
-           to sit beside Emser-Norcross) and then did something elsewhere that
-           triggered a later echo, Brent's manual order snapped back — the
-           'I moved them back to back and it reverted' bug.
+           What this replaces: this handler used to rebuild the day in LOCAL
+           order and append FB-only stops at the end, making each screen the
+           authority on its own order. A reorder therefore could not travel — the
+           other dispatcher's screen re-imposed its own arrangement on every
+           snapshot, and whoever saved last stamped their order onto the day
+           document, so the two screens flipped Firebase back and forth. Both
+           dispatchers refreshing did not settle it: each refresh only adopted
+           whatever order was in Firebase at that instant, and the other tab's
+           next save flipped it straight back (one screen showed Emser-Norcross
+           picking up first, the other showed Emser-Roswell).
 
-           Build order: local entries in LOCAL order (field-merged with FB when
-           both have the id), then any FB-only entries appended at the end
-           (genuine additions from another writer / the driver app). Only when
-           there's NO local state yet (first load) do we take FB order as-is. */
+           The bug that rule was defending against — 'I dragged Emser-Roswell up
+           beside Emser-Norcross and a later echo snapped it back' — stays fixed,
+           and now for a reason the merge can actually see: the drag stamped
+           `seqAt` on the stop that moved, so it beats the older Firebase copy
+           on merge. A stale echo can no longer revert it, and a genuine reorder
+           from the other dispatcher now arrives instead of being discarded. */
         if(localEnts.length){
           const localById={};
           localEnts.forEach(e=>{if(e&&e.id)localById[e.id]=e;});
           const fbById={};
-          fbFiltered.forEach(e=>{if(e&&e.id)fbById[e.id]=e;});
+          fbNumbered.forEach(e=>{if(e&&e.id)fbById[e.id]=e;});
           const out=[];
           localEnts.forEach(localE=>{
             if(!localE||!localE.id)return;
@@ -3847,10 +3883,12 @@ useEffect(()=>{
             const fbE=fbById[localE.id];
             out.push(fbE?_mergeEntryDispatcher(localE,fbE):localE);
           });
-          fbFiltered.forEach(fbE=>{
+          fbNumbered.forEach(fbE=>{
             if(fbE&&fbE.id&&!localById[fbE.id])out.push(fbE);
           });
-          finalEntries=out;
+          /* Local-only stops (added here, not yet saved) are numbered from where
+             they sit in the local array; then the whole day sorts by `seq`. */
+          finalEntries=normalizeOrder(out,0);
         }
         const fbJson=JSON.stringify(finalEntries);
         if(fbJson!==JSON.stringify(prev[lk]||[])){
@@ -3903,12 +3941,15 @@ useEffect(()=>{
         const fbFiltered=(tombSet.size||docTomb.size)?entries.filter(e=>!tombSet.has(e)&&!docTomb.has(e)):entries;
         const dirtyOrCooldown=dirtyDaysRef.current.has(lk)||saveCooldownRef.current.has(lk);
         const localEnts=prev[lk]||[];
-        let finalEntries=fbFiltered;
+        /* Same `seq`-ordered reconciliation as the current-week handler above —
+           see the comment there for why order is replicated data. */
+        const fbNumbered=resequenceEntries(fbFiltered,0);
+        let finalEntries=sortBySeq(fbNumbered);
         if(localEnts.length){
           const localById={};
           localEnts.forEach(e=>{if(e&&e.id)localById[e.id]=e;});
           const fbById={};
-          fbFiltered.forEach(e=>{if(e&&e.id)fbById[e.id]=e;});
+          fbNumbered.forEach(e=>{if(e&&e.id)fbById[e.id]=e;});
           const out=[];
           localEnts.forEach(localE=>{
             if(!localE||!localE.id)return;
@@ -3917,10 +3958,10 @@ useEffect(()=>{
             const fbE=fbById[localE.id];
             out.push(fbE?_mergeEntryDispatcher(localE,fbE):localE);
           });
-          fbFiltered.forEach(fbE=>{
+          fbNumbered.forEach(fbE=>{
             if(fbE&&fbE.id&&!localById[fbE.id])out.push(fbE);
           });
-          finalEntries=out;
+          finalEntries=normalizeOrder(out,0);
         }
         const fbJson=JSON.stringify(finalEntries);
         if(fbJson!==JSON.stringify(prev[lk]||[])){
@@ -5193,7 +5234,7 @@ return{pu,tm,rg};
 };
 const _sParseTime=(db)=>{if(!db)return 9999;const m=db.match(/(\d{1,2})(?::(\d{2}))?\s*(AM|PM)/i);if(!m)return 9999;let h=parseInt(m[1]);const min=parseInt(m[2]||"0");const ap=(m[3]||"").toUpperCase();if(ap==="PM"&&h!==12)h+=12;if(ap==="AM"&&h===12)h=0;return h*60+min;};
 const _sApply=(drvId,sorted,msg)=>{
-setLog(p=>{const all=[...(p[dk]||[])];const rest=all.filter(e=>e.driverId!==drvId);return{...p,[dk]:[...rest,...sorted]};});
+setLog(p=>{const all=[...(p[dk]||[])];return{...p,[dk]:_reorderDriverBlock(all,drvId,sorted)};});
 setSortMenuDrv(null);showToast(msg);
 };
 
@@ -5246,7 +5287,20 @@ const currentDriverStops=(log[dk]||[]).filter(e=>e.driverId===drvId);
 const anchorStop=afterIdx>=0?currentDriverStops[afterIdx]:null;
 const targetLoadNum=anchorStop?(anchorStop.loadNum||1):1;
 const entry={id:genId(),customer:pickupCustomer||"Pickup",stop:`${pickupCustomer||"Pickup"}${forLabel}`,baseRate:0,fuelPct:0,isHourly:false,note:noteItems||null,driverId:drvId,addr:pickupAddr||"",stopType:"pickup",priority:false,pickupFrom:pickupStop,pickupFor:pickupForDel,deliveryAddr:pickupDelAddr||null,instructions:"",status:null,arrivedAt:null,departedAt:null,eta:null,photos:[],signature:null,loadNum:targetLoadNum,manualPickup:true};
-setLog(p=>{const all=[...(p[dk]||[])];const de=all.filter(e=>e.driverId===drvId);const rest=all.filter(e=>e.driverId!==drvId);de.splice(afterIdx+1,0,entry);return{...p,[dk]:[...rest,...de]};});
+setLog(p=>{
+const all=[...(p[dk]||[])];
+const drvStops=all.filter(e=>e.driverId===drvId);
+const anchor=afterIdx>=0?drvStops[afterIdx]:null;
+/* Splice at the anchor's REAL index in the day array instead of rebuilding the
+   day as [...other drivers, ...this driver] — that shape hoisted the driver's
+   whole block to the end, and array position is what mints the `seq` ordering
+   key, so it would renumber every stop rather than just placing the new one. */
+let gi;
+if(anchor){const ai=all.indexOf(anchor);gi=ai>=0?ai+1:all.length;}
+else{const fi=all.findIndex(e=>e&&e.driverId===drvId);gi=fi>=0?fi:all.length;}
+all.splice(gi,0,entry);
+return{...p,[dk]:all};
+});
 setInsertPickupFor(null);setPickupCustomer("");setPickupStop("");setPickupAddr("");setPickupForDel("");setPickupNote("");setPickupDelAddr("");
 showToast(targetLoadNum>1?`Pickup added to Load ${targetLoadNum}`:`Pickup added`);
 };
@@ -5466,14 +5520,14 @@ const handleDrop=(drvId,toIdx)=>{
 if(!dragSrc){setDragSrc(null);setDragOver(null);return;}
 if(dragSrc.drvId===drvId&&dragSrc.idx===toIdx){setDragSrc(null);setDragOver(null);return;}
 if(dragSrc.drvId===drvId){
-setLog(p=>{const all=[...(p[dk]||[])];const de=all.filter(e=>e.driverId===drvId);const rest=all.filter(e=>e.driverId!==drvId);
+setLog(p=>{const all=[...(p[dk]||[])];const de=all.filter(e=>e.driverId===drvId);
 /* Find the grabbed row by ID, not the drag-start array index — an index can
    go stale if a subscription echo / auto-save reorders the list mid-drag,
    splicing out (and moving) the WRONG stop. Falls back to idx for any drag
    started before id tracking. */
 const srcIdx=dragSrc.id!=null?de.findIndex(e=>e.id===dragSrc.id):dragSrc.idx;
 if(srcIdx<0)return p;
-const[moved]=de.splice(srcIdx,1);const tgt=Math.min(Math.max(toIdx,0),de.length);de.splice(tgt,0,moved);return{...p,[dk]:[...rest,...de]};});
+const[moved]=de.splice(srcIdx,1);const tgt=Math.min(Math.max(toIdx,0),de.length);de.splice(tgt,0,moved);return{...p,[dk]:_reorderDriverBlock(all,drvId,de)};});
 }else{
 const srcEntries=dl.filter(e=>e.driverId===dragSrc.drvId);
 const entry=dragSrc.id!=null?srcEntries.find(e=>e.id===dragSrc.id):srcEntries[dragSrc.idx];
@@ -5485,7 +5539,7 @@ showToast("Moved to "+targetName);
 }
 setDragSrc(null);setDragOver(null);
 };
-const reorderDriver=(drvId,orderedIds)=>{setLog(p=>{let all=[...(p[dk]||[])];const drvEntries2=all.filter(e=>e.driverId===drvId);const rest=all.filter(e=>e.driverId!==drvId);all=[...rest,...orderByIds(drvEntries2,orderedIds)];/* orderByIds strands unlisted entries (auto-pickups) at the end when the caller passes a delivery-only id list (desktop RouteBuilder Apply); rebuild each affected customer's auto-pickups so they land before their first delivery. */const custs=new Set(drvEntries2.filter(e=>e.stopType==="delivery").map(e=>e.customer));custs.forEach(c=>{all=rebuildPickupsFor(all,c);});return{...p,[dk]:all};});showToast("Routes applied");};
+const reorderDriver=(drvId,orderedIds)=>{setLog(p=>{let all=[...(p[dk]||[])];const drvEntries2=all.filter(e=>e.driverId===drvId);all=_reorderDriverBlock(all,drvId,orderByIds(drvEntries2,orderedIds));/* orderByIds strands unlisted entries (auto-pickups) at the end when the caller passes a delivery-only id list (desktop RouteBuilder Apply); rebuild each affected customer's auto-pickups so they land before their first delivery. */const custs=new Set(drvEntries2.filter(e=>e.stopType==="delivery").map(e=>e.customer));custs.forEach(c=>{all=rebuildPickupsFor(all,c);});return{...p,[dk]:all};});showToast("Routes applied");};
 const getCustColor=cust=>CC[cust]||CC["One-Off Delivery"];
 
 const jumpToDate=dateStr=>{const target=new Date(dateStr+"T12:00:00");const now=_weekRefNow();const tD=target.getDay();const tM=new Date(target);tM.setDate(target.getDate()-(tD===0?6:tD-1));const nD=now.getDay();const nM=new Date(now);nM.setDate(now.getDate()-(nD===0?6:nD-1));tM.setHours(0,0,0,0);nM.setHours(0,0,0,0);const diff=Math.round((tM-nM)/(7*24*60*60*1000));const dayIdx=tD===0?6:tD-1;setWo(diff);setSd(Math.min(Math.max(dayIdx,0),4));setShowDatePicker(false);setView("manifest");};
@@ -6302,8 +6356,7 @@ setLog(p=>{
     if(!ids.length)return;
     const drvId=Number(did);
     const drvStops=all.filter(e=>e.driverId===drvId);
-    const rest=all.filter(e=>e.driverId!==drvId);
-    all=[...rest,...orderByIds(drvStops,ids)];
+    all=_reorderDriverBlock(all,drvId,orderByIds(drvStops,ids));
   });
   const deliveryCustomers=new Set(all.filter(e=>e.stopType==="delivery").map(e=>e.customer));
   deliveryCustomers.forEach(cust=>{
@@ -10373,13 +10426,18 @@ useEffect(()=>{
         const localById={};const localBySig={};const localSigCount={};const fbSigCount={};
         localEnts.forEach(e=>{if(e&&e.id){localById[e.id]=e;const s=entrySig(e);localSigCount[s]=(localSigCount[s]||0)+1;if(!(s in localBySig))localBySig[s]=e;}});
         fbEnts.forEach(e=>{if(e){const s=entrySig(e);fbSigCount[s]=(fbSigCount[s]||0)+1;}});
-        const merged=fbEnts.map(fbE=>{
+        /* Ordered by `seq` — the same single order every dispatcher screen
+           renders — rather than by raw array position, so a phone can't show a
+           different sequence than the board that planned it. Numbering here
+           only fills in stops written before `seq` existed, from Firebase's own
+           positions; the driver never reorders anything. */
+        const merged=normalizeOrder(fbEnts.map(fbE=>{
           let localE=localById[fbE.id];
           if(!localE){const s=entrySig(fbE);if(localSigCount[s]===1&&fbSigCount[s]===1)localE=localBySig[s];}
           if(!localE)return fbE;
           if(fbE.driverId!==driverId&&localE.driverId!==driverId)return fbE;
           return _mergeEntryDriver(localE,fbE);
-        });
+        }),0);
         const mergedJson=JSON.stringify(merged);
         if(mergedJson!==JSON.stringify(localEnts)){
           updated[lk]=merged;

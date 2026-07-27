@@ -23,6 +23,11 @@ import {
   manualPickupCoversDock,
   allInRate,
   stripLiftgateFee,
+  resequenceEntries,
+  sortBySeq,
+  normalizeOrder,
+  seqOf,
+  SEQ_STEP,
 } from "./manifestLogic.js";
 
 /* Test helpers ---------------------------------------------------------- */
@@ -1097,5 +1102,230 @@ describe("dedupeDeliveries — never drops a liftgate charge across a merge", ()
     const out = dedupeDeliveries([a, b]);
     expect(out).toHaveLength(1);
     expect(out[0].liftgateApplied).toBeFalsy();
+  });
+});
+
+/* ====================================================================== */
+/* Stop ORDER as replicated data (`seq` / `seqAt`).
+
+   The reported bug: one dispatcher's screen showed "Emser - Norcross" picking
+   up first on Load 2, the other's showed "Emser - Roswell" first, and BOTH
+   refreshing did not settle it. Order was not data — it was the position of an
+   entry inside each screen's own array — so no merge could reconcile it and the
+   two screens flipped Firebase back and forth forever. */
+
+const seqs = (arr) => arr.map((e) => seqOf(e));
+const ids = (arr) => arr.map((e) => e.id);
+
+/* Mirrors the dispatcher receive path in App.jsx (tombstones omitted): number
+   the incoming day from FIREBASE order, merge per stop by id, re-sort by seq. */
+const receive = (localEnts, fbEnts) => {
+  const fbNumbered = resequenceEntries(fbEnts, 0);
+  if (!localEnts.length) return sortBySeq(fbNumbered);
+  const localById = {}; localEnts.forEach((e) => { if (e && e.id) localById[e.id] = e; });
+  const fbById = {}; fbNumbered.forEach((e) => { if (e && e.id) fbById[e.id] = e; });
+  const out = [];
+  localEnts.forEach((l) => { const f = fbById[l.id]; out.push(f ? _mergeEntryDispatcher(l, f) : l); });
+  fbNumbered.forEach((f) => { if (!localById[f.id]) out.push(f); });
+  return normalizeOrder(out, 0);
+};
+
+describe("resequenceEntries — order becomes a field", () => {
+  it("mints numbers from array position for legacy stops that have none", () => {
+    const out = resequenceEntries([del({ id: "a" }), del({ id: "b" }), del({ id: "c" })], 0);
+    expect(seqs(out)).toEqual([0, SEQ_STEP, 2 * SEQ_STEP]);
+  });
+
+  it("mints IDENTICALLY on two devices given the same shared array (the convergence property)", () => {
+    const fb = [del({ id: "a" }), del({ id: "b" }), del({ id: "c" })];
+    const devA = resequenceEntries(fb.map((e) => ({ ...e })), 0);
+    const devB = resequenceEntries(fb.map((e) => ({ ...e })), 0);
+    expect(seqs(devA)).toEqual(seqs(devB));
+  });
+
+  it("a drag rewrites ONLY the stop that moved, and stamps its order clock", () => {
+    const a = del({ id: "a", seq: 0 }), b = del({ id: "b", seq: 1000 }), c = del({ id: "c", seq: 2000 });
+    const out = resequenceEntries([c, a, b], 5000); /* dispatcher dragged c to the top */
+    expect(out.find((e) => e.id === "a").seq).toBe(0);      /* untouched */
+    expect(out.find((e) => e.id === "b").seq).toBe(1000);   /* untouched */
+    expect(out.find((e) => e.id === "a").seqAt).toBeUndefined();
+    expect(out.find((e) => e.id === "b").seqAt).toBeUndefined();
+    const moved = out.find((e) => e.id === "c");
+    expect(moved.seq).toBeLessThan(0);                      /* renumbered above a */
+    expect(moved.seqAt).toBe(5000);                         /* claims the reorder */
+  });
+
+  it("re-sorting by the new numbers reproduces exactly what the dispatcher arranged", () => {
+    const a = del({ id: "a", seq: 0 }), b = del({ id: "b", seq: 1000 }), c = del({ id: "c", seq: 2000 });
+    expect(ids(sortBySeq(resequenceEntries([b, c, a], 7)))).toEqual(["b", "c", "a"]);
+  });
+
+  it("a new stop inserted between two others lands between them", () => {
+    const a = del({ id: "a", seq: 0 }), b = del({ id: "b", seq: 1000 });
+    const fresh = del({ id: "new" });
+    const out = resequenceEntries([a, fresh, b], 9);
+    expect(seqOf(out[1])).toBeGreaterThan(0);
+    expect(seqOf(out[1])).toBeLessThan(1000);
+    expect(ids(sortBySeq(out))).toEqual(["a", "new", "b"]);
+  });
+
+  it("MINT mode never rewrites an existing number and never claims an order clock", () => {
+    const a = del({ id: "a", seq: 5 }), b = del({ id: "b", seq: 1 }); /* out of order on purpose */
+    const arr = [a, b];
+    const out = resequenceEntries(arr, 0);
+    expect(out).toBe(arr);                /* nothing to mint -> same reference */
+    expect(seqs(out)).toEqual([5, 1]);    /* the odd order is left for sortBySeq to settle */
+    expect(out.every((e) => e.seqAt === undefined)).toBe(true);
+  });
+
+  it("returns the SAME array reference when every number already matches (no spurious save)", () => {
+    const arr = [del({ id: "a", seq: 0 }), del({ id: "b", seq: 1000 })];
+    expect(resequenceEntries(arr, 12345)).toBe(arr);
+  });
+
+  it("a pure field edit (no move) rewrites nothing", () => {
+    const arr = [del({ id: "a", seq: 0 }), del({ id: "b", seq: 1000, baseRate: 999 })];
+    expect(resequenceEntries(arr, 12345)).toBe(arr);
+  });
+});
+
+describe("sortBySeq — every device computes the same order", () => {
+  it("two devices holding the same stops in different array order sort identically", () => {
+    const mk = () => [del({ id: "a", seq: 0 }), del({ id: "b", seq: 1000 }), del({ id: "c", seq: 2000 })];
+    const devA = sortBySeq(mk());
+    const devB = sortBySeq([mk()[2], mk()[0], mk()[1]]);
+    expect(ids(devA)).toEqual(ids(devB));
+  });
+
+  it("equal numbers tie-break on id — NOT on locale-sensitive collation", () => {
+    const out = sortBySeq([del({ id: "z", seq: 5 }), del({ id: "a", seq: 5 })]);
+    expect(ids(out)).toEqual(["a", "z"]);
+  });
+
+  it("returns the SAME array reference when already ordered", () => {
+    const arr = [del({ id: "a", seq: 0 }), del({ id: "b", seq: 1000 })];
+    expect(sortBySeq(arr)).toBe(arr);
+  });
+});
+
+describe("_mergeEntryDispatcher — order replicates on its own clock", () => {
+  it("a remote reorder ARRIVES (this is what could never happen before)", () => {
+    const local = del({ id: "x", seq: 1000 });
+    const fb = del({ id: "x", seq: -1000, seqAt: 500 });
+    expect(_mergeEntryDispatcher(local, fb).seq).toBe(-1000);
+  });
+
+  it("a stale echo cannot revert a drag made here a moment ago", () => {
+    const local = del({ id: "x", seq: -1000, seqAt: 900 });
+    const fb = del({ id: "x", seq: 1000 });
+    expect(_mergeEntryDispatcher(local, fb).seq).toBe(-1000);
+  });
+
+  it("neither side ever reordered -> Firebase wins, so both devices land on one value", () => {
+    const local = del({ id: "x", seq: 7000 });
+    const fb = del({ id: "x", seq: 3000 });
+    expect(_mergeEntryDispatcher(local, fb).seq).toBe(3000);
+  });
+
+  it("a rate edit does NOT drag a stale position along with it", () => {
+    /* Dispatcher A retypes the rate (newer updatedAt, old position); B had
+       already moved the stop. A's rate must win, B's position must survive. */
+    const local = del({ id: "x", baseRate: 500, updatedAt: 900, seq: 1000 });
+    const fb = del({ id: "x", baseRate: 100, updatedAt: 100, seq: -1000, seqAt: 800 });
+    const out = _mergeEntryDispatcher(local, fb);
+    expect(out.baseRate).toBe(500);
+    expect(out.seq).toBe(-1000);
+  });
+
+  it("a stop nobody has numbered yet stays unnumbered", () => {
+    const out = _mergeEntryDispatcher(del({ id: "x" }), del({ id: "x" }));
+    expect(out.seq).toBeUndefined();
+    expect(out.seqAt).toBeUndefined();
+  });
+});
+
+describe("buildMergedEntries — the saved day is in seq order", () => {
+  it("persists stops in agreed order regardless of the saving device's array order", () => {
+    const fb = [del({ id: "a", seq: 0 }), del({ id: "b", seq: 1000 })];
+    const local = [del({ id: "b", seq: 1000 }), del({ id: "a", seq: 0 })]; /* same stops, this screen's arrangement */
+    expect(ids(buildMergedEntries(fb, local, {}))).toEqual(["a", "b"]);
+  });
+
+  it("mints numbers for a legacy day without inventing a reorder", () => {
+    const out = buildMergedEntries([del({ id: "a" }), del({ id: "b" })], [del({ id: "a" }), del({ id: "b" })], {});
+    expect(seqs(out)).toEqual([0, SEQ_STEP]);
+    expect(out.every((e) => e.seqAt === undefined)).toBe(true);
+  });
+});
+
+describe("REGRESSION: two dispatchers disagreeing on the Emser pickup order", () => {
+  /* Load 2 exactly as reported: two Emser docks feeding two deliveries. */
+  const day = () => [
+    pu({ id: "pu_nor", customer: "Emser Tile", stop: "Emser - Norcross", pickupFrom: "Norcross", driverId: 5, loadNum: 2 }),
+    pu({ id: "pu_ros", customer: "Emser Tile", stop: "Emser - Roswell", pickupFrom: "Roswell", driverId: 5, loadNum: 2 }),
+    del({ id: "d_gel", customer: "Emser Tile", stop: "Gel & Associates - Atlanta", pickupFrom: "Norcross", driverId: 5, loadNum: 2, weight: 2000 }),
+    del({ id: "d_bir", customer: "Emser Tile", stop: "Emser Birmingham", pickupFrom: "Roswell", driverId: 5, loadNum: 2, weight: 3000 }),
+  ];
+
+  it("a reorder on one screen reaches the other, and does not bounce back on the next save", () => {
+    /* Both dispatchers load the same legacy day — identical order to start. */
+    const fb0 = day();
+    let screenA = receive([], day());
+    let screenB = receive([], day());
+    expect(ids(screenA)).toEqual(ids(screenB));
+
+    /* B drags Roswell above Norcross (a local action -> stamps the order clock). */
+    const dragged = [screenB[1], screenB[0], screenB[2], screenB[3]];
+    screenB = resequenceEntries(dragged, 1000);
+    expect(ids(screenB).slice(0, 2)).toEqual(["pu_ros", "pu_nor"]);
+
+    /* B saves. */
+    const fb1 = buildMergedEntries(resequenceEntries(fb0, 0), screenB, {});
+    expect(ids(fb1).slice(0, 2)).toEqual(["pu_ros", "pu_nor"]);
+
+    /* A receives it — before the fix A re-imposed its own order and never saw this. */
+    screenA = receive(screenA, fb1);
+    expect(ids(screenA)).toEqual(ids(screenB));
+
+    /* ...and A's next save does NOT flip Firebase back (the ping-pong). */
+    const fb2 = buildMergedEntries(fb1, screenA, {});
+    expect(ids(fb2)).toEqual(ids(screenB));
+
+    /* A refresh on either screen shows the same thing, repeatedly. */
+    expect(ids(receive([], fb2))).toEqual(ids(screenB));
+    expect(ids(receive(screenB, fb2))).toEqual(ids(screenB));
+    expect(ids(receive(screenA, fb2))).toEqual(ids(screenB));
+  });
+
+  it("both dispatchers reordering at once still land on ONE order, not two", () => {
+    let screenA = receive([], day());
+    let screenB = receive([], day());
+
+    /* A pulls Birmingham to the top; B pulls Roswell to the top. Concurrently. */
+    screenA = resequenceEntries([screenA[3], screenA[0], screenA[1], screenA[2]], 1000);
+    screenB = resequenceEntries([screenB[1], screenB[0], screenB[2], screenB[3]], 1100);
+
+    /* Both save, in whichever order they reach Firestore. */
+    let fb = buildMergedEntries(resequenceEntries(day(), 0), screenA, {});
+    fb = buildMergedEntries(fb, screenB, {});
+
+    /* Both then receive it — and agree. */
+    const afterA = receive(screenA, fb);
+    const afterB = receive(screenB, fb);
+    expect(ids(afterA)).toEqual(ids(afterB));
+
+    /* And it is STABLE: neither screen's next save changes it. */
+    const fbA = buildMergedEntries(fb, afterA, {});
+    const fbB = buildMergedEntries(fbA, afterB, {});
+    expect(ids(fbB)).toEqual(ids(afterA));
+    expect(ids(receive(afterA, fbB))).toEqual(ids(afterA));
+    expect(ids(receive(afterB, fbB))).toEqual(ids(afterA));
+  });
+
+  it("keeps every stop — reconciling order never drops or duplicates one", () => {
+    let screenA = receive([], day());
+    screenA = resequenceEntries([screenA[2], screenA[0], screenA[3], screenA[1]], 1000);
+    const fb = buildMergedEntries(resequenceEntries(day(), 0), screenA, {});
+    expect(ids(fb).slice().sort()).toEqual(["d_bir", "d_gel", "pu_nor", "pu_ros"]);
   });
 });
