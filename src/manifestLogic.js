@@ -749,8 +749,73 @@ export const sortBySeq=(entries)=>{
   return entries;
 };
 
-/* Number-then-sort, the shape every read path wants. */
-export const normalizeOrder=(entries,now)=>sortBySeq(resequenceEntries(entries,now));
+/* An auto-pickup must come BEFORE the deliveries it feeds — you cannot drop a
+   pallet you have not collected yet. That was only ever enforced at WRITE time,
+   by rebuildPickupsFor placing a regenerated pickup in front of its first
+   delivery. Nothing enforced it at READ time, so once a day's array drifted
+   into pickup-after-delivery (a route apply that stranded the pickups at the
+   end, a load move, any path that didn't re-run the rebuild) it stayed that way
+   on every screen: the driver's Load 1 showed "DCO Smyrna" first and the
+   "Emser - Norcross" pickup that supplies it second — with a departure stamp an
+   hour EARLIER, because in the real world it obviously happened first.
+
+   Same reasoning as reapOrphanAutoPickups: rather than chase every caller
+   forever, enforce the invariant here, on the read path everything shares. Each
+   auto-pickup moves to just ahead of the earliest delivery it feeds; a pickup
+   already ahead of its deliveries never moves.
+
+   Only AUTO pickups are touched. A manual pickup is a deliberate dispatcher
+   placement (a return pickup at the end of a route is a real thing) and is left
+   exactly where it was put.
+
+   opts (optional): { multiSource(customer)->bool, normLoc(str)->str } — same
+   pair reapOrphanAutoPickups takes. Multi-source suppliers ship from >1 dock, so
+   a pickup is matched to deliveries at ITS dock; a delivery whose dock can't be
+   resolved counts as fed by any dock (conservative — it can only ever move the
+   pickup earlier, never leave a delivery ahead of its supply). */
+export const orderAutoPickupsFirst=(entries,opts)=>{
+  if(!Array.isArray(entries)||entries.length<2)return entries;
+  const multiSource=opts&&typeof opts.multiSource==="function"?opts.multiSource:()=>false;
+  const normLoc=opts&&typeof opts.normLoc==="function"?opts.normLoc:(s)=>String(s||"").trim().toLowerCase();
+  const feeds=(pu,d)=>{
+    if(!d||d.stopType!=="delivery")return false;
+    if(d.customer!==pu.customer)return false;
+    if(d.driverId!==pu.driverId)return false;
+    if((d.loadNum||1)!==(pu.loadNum||1))return false;
+    if(!multiSource(pu.customer))return true;      /* single dock → every delivery on the load */
+    const puLoc=normLoc(pu.pickupFrom)||normLoc(pu.stop);
+    const delLoc=normLoc(d.pickupFrom);
+    if(!puLoc||!delLoc)return true;                 /* dock unknown on either side → treat as fed */
+    return puLoc===delLoc;
+  };
+  const arr=entries.slice();
+  let changed=false;
+  for(let i=0;i<arr.length;i++){
+    const e=arr[i];
+    if(!e||e.stopType!=="pickup"||e.manualPickup||!(e.driverId>0))continue;
+    let first=-1;
+    for(let j=0;j<i;j++){if(feeds(e,arr[j])){first=j;break;}}
+    if(first<0)continue;                            /* already ahead of its deliveries */
+    arr.splice(i,1);
+    arr.splice(first,0,e);
+    changed=true;
+    /* Everything past i keeps its index (the removal and the re-insert cancel
+       out above it), so the scan continues from i+1 without skipping a stop. */
+  }
+  return changed?arr:entries;
+};
+
+/* Number, sort, then put each auto-pickup ahead of what it supplies — the shape
+   every read path wants. Idempotent: a second pass over its own output is a
+   no-op, so ingest → render → save can't walk the order anywhere.
+
+   `seq` is deliberately NOT rewritten to match a pickup this moved. Minting a
+   number inside a shared read path would have every device racing to claim the
+   same reorder; the invariant is a pure function of the data instead, so all
+   devices land on the identical order without anyone claiming authority. The
+   first local edit on the day resequences it for real (with a proper clock) and
+   the stored numbers heal to match. */
+export const normalizeOrder=(entries,now,opts)=>orderAutoPickupsFirst(sortBySeq(resequenceEntries(entries,now)),opts);
 
 /* Resolve the ORDER field between two copies of one stop. Higher seqAt (a real
    reorder) wins. When neither side has ever been explicitly reordered — or the
@@ -874,10 +939,11 @@ export const buildMergedEntries=(fbEntriesRaw,localEntriesRaw,{isDriver=false,ca
      delivery keeps its pickup. Self-heals any orphan already persisted in
      Firebase: the merge drops it, and the transaction write makes that stick. */
   const reconciled=reapOrphanAutoPickups(dedupeDeliveries(dedupeGhostDeliveries(dedupeAutoPickups(merged,normLoc?{normLoc}:undefined))),multiSource?{multiSource,normLoc}:undefined);
-  /* Persist the day in `seq` order so the stored array itself is the agreed
-     order — a client that loads it cold, an export, and the shadow order store's
-     `_seq` all line up without re-deriving anything. `now` is 0 here: the merge
-     mints numbers for stops written before this field existed, but it never
-     rewrites one, so a transaction can't invent a reorder nobody asked for. */
-  return normalizeOrder(reconciled,0);
+  /* Persist the day in `seq` order, auto-pickups ahead of what they supply, so
+     the stored array itself is the agreed order — a client that loads it cold,
+     an export, and the shadow order store's `_seq` all line up without
+     re-deriving anything. `now` is 0 here: the merge mints numbers for stops
+     written before this field existed, but it never rewrites one, so a
+     transaction can't invent a reorder nobody asked for. */
+  return normalizeOrder(reconciled,0,multiSource?{multiSource,normLoc}:undefined);
 };

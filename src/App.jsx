@@ -61,7 +61,7 @@ greenBtn:{background:"#16a34a",color:"#fff",border:"none",borderRadius:8,padding
 inputMb4:{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"7px 10px",fontSize:12,outline:"none",marginBottom:4},
 };
 import { useState, useCallback, useEffect, useRef, Fragment, Component } from "react";
-import { dedupeIds, dedupeAutoPickups, dedupeGhostDeliveries, dedupeDeliveries, reapOrphanAutoPickups, sanitizeEntry, _mergeEntryDriver, _mergeEntryDispatcher, buildMergedEntries, entrySig, makeTombFilter, makeDocTombFilter, mergeTombstones, vanishedAutoPickups, orderByIds, reconcileDriverRoster, applyDriverRemap, normDriverName, manualPickupCoversDock, allInRate, stripLiftgateFee, resequenceEntries, sortBySeq, normalizeOrder } from "./manifestLogic.js";
+import { dedupeIds, dedupeAutoPickups, dedupeGhostDeliveries, dedupeDeliveries, reapOrphanAutoPickups, sanitizeEntry, _mergeEntryDriver, _mergeEntryDispatcher, buildMergedEntries, entrySig, makeTombFilter, makeDocTombFilter, mergeTombstones, vanishedAutoPickups, orderByIds, reconcileDriverRoster, applyDriverRemap, normDriverName, manualPickupCoversDock, allInRate, stripLiftgateFee, resequenceEntries, sortBySeq, normalizeOrder, orderAutoPickupsFirst } from "./manifestLogic.js";
 import { diffOrderDocs, orderDocId, ordersParity } from "./ordersStore.js";
 
 const _SplitUI=({splitEntry,setSplitEntry})=>{const tw=splitEntry.totalWeight||0;const t1w=splitEntry.truck1Weight!==undefined?splitEntry.truck1Weight:Math.round(tw*(splitEntry.ratio/100));const t2w=tw-t1w;return(<><div style={_s.flexG6Mb6}><div style={_s.f1}><label style={_s.labelSm}>Total</label><input type="number" inputMode="numeric" value={tw||""} onChange={e=>{const newTw=parseInt(e.target.value)||0;setSplitEntry(p=>({...p,totalWeight:newTw,truck1Weight:Math.min(p.truck1Weight||Math.round(newTw/2),newTw)}));}} style={_s.splitTotal}/></div><div style={_s.f1}><label style={_s.labelBlue}>Truck 1</label><input type="number" inputMode="numeric" value={splitEntry.truck1Weight!==undefined?splitEntry.truck1Weight:""} onChange={e=>{const v=e.target.value;setSplitEntry(p=>({...p,truck1Weight:v===""?0:parseInt(v)||0}));}} style={_s.splitInput}/></div><div style={_s.f1}><label style={_s.labelGray}>Truck 2</label><div style={_s.splitT2}>{t2w.toLocaleString()}</div></div></div><input type="range" min={0} max={tw} step={100} value={t1w} onChange={e=>{const v=parseInt(e.target.value)||0;setSplitEntry(p=>({...p,truck1Weight:v}));}} style={_s.slider}/></>);};
@@ -2981,7 +2981,11 @@ const setLog=useCallback((updater)=>{
            first, the other sees Roswell first" bug). resequenceEntries writes a
            new `seq` + `seqAt` on the stops that actually MOVED (and only those),
            which the content diff below then turns into a normal edit. */
-        const ordered=resequenceEntries(next[k]||[],nowTs);
+        /* An auto-pickup also has to sit ahead of the deliveries it supplies.
+           Applying it HERE (not just on the read paths) means the correction is
+           immediate and gets a proper edit clock from this local action, rather
+           than arriving as a snap-back on the next Firebase echo. */
+        const ordered=resequenceEntries(orderAutoPickupsFirst(next[k]||[],_reapOpts),nowTs);
         const stamped=ordered.map(e=>{
           if(!e||!e.id)return e;
           const pe=prevById[e.id];
@@ -3847,7 +3851,7 @@ useEffect(()=>{
            device (the shared array is the only arrangement all devices can see).
            Minting never rewrites a number that is already there. */
         const fbNumbered=resequenceEntries(fbFiltered,0);
-        let finalEntries=sortBySeq(fbNumbered);
+        let finalEntries=normalizeOrder(fbNumbered,0,_reapOpts);
         /* STOP ORDER is replicated data now, not a property of whichever screen
            you happen to be sitting at. Every device renders sort-by-`seq`, and a
            reorder merges per stop on its own clock (`seqAt`) like any other
@@ -3888,7 +3892,7 @@ useEffect(()=>{
           });
           /* Local-only stops (added here, not yet saved) are numbered from where
              they sit in the local array; then the whole day sorts by `seq`. */
-          finalEntries=normalizeOrder(out,0);
+          finalEntries=normalizeOrder(out,0,_reapOpts);
         }
         const fbJson=JSON.stringify(finalEntries);
         if(fbJson!==JSON.stringify(prev[lk]||[])){
@@ -3944,7 +3948,7 @@ useEffect(()=>{
         /* Same `seq`-ordered reconciliation as the current-week handler above —
            see the comment there for why order is replicated data. */
         const fbNumbered=resequenceEntries(fbFiltered,0);
-        let finalEntries=sortBySeq(fbNumbered);
+        let finalEntries=normalizeOrder(fbNumbered,0,_reapOpts);
         if(localEnts.length){
           const localById={};
           localEnts.forEach(e=>{if(e&&e.id)localById[e.id]=e;});
@@ -3961,7 +3965,7 @@ useEffect(()=>{
           fbNumbered.forEach(fbE=>{
             if(fbE&&fbE.id&&!localById[fbE.id])out.push(fbE);
           });
-          finalEntries=normalizeOrder(out,0);
+          finalEntries=normalizeOrder(out,0,_reapOpts);
         }
         const fbJson=JSON.stringify(finalEntries);
         if(fbJson!==JSON.stringify(prev[lk]||[])){
@@ -10437,7 +10441,7 @@ useEffect(()=>{
           if(!localE)return fbE;
           if(fbE.driverId!==driverId&&localE.driverId!==driverId)return fbE;
           return _mergeEntryDriver(localE,fbE);
-        }),0);
+        }),0,_reapOpts);
         const mergedJson=JSON.stringify(merged);
         if(mergedJson!==JSON.stringify(localEnts)){
           updated[lk]=merged;

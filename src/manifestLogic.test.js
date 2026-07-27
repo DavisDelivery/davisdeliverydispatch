@@ -26,6 +26,7 @@ import {
   resequenceEntries,
   sortBySeq,
   normalizeOrder,
+  orderAutoPickupsFirst,
   seqOf,
   SEQ_STEP,
 } from "./manifestLogic.js";
@@ -1327,5 +1328,142 @@ describe("REGRESSION: two dispatchers disagreeing on the Emser pickup order", ()
     screenA = resequenceEntries([screenA[2], screenA[0], screenA[3], screenA[1]], 1000);
     const fb = buildMergedEntries(resequenceEntries(day(), 0), screenA, {});
     expect(ids(fb).slice().sort()).toEqual(["d_bir", "d_gel", "pu_nor", "pu_ros"]);
+  });
+});
+
+/* ====================================================================== */
+/* An auto-pickup must precede the deliveries it feeds.
+
+   Reported from a driver's phone: Load 1 listed "DCO Smyrna" first and the
+   "Emser - Norcross" pickup that supplies it second — with a departure stamp an
+   hour EARLIER on the pickup, because in the real world it obviously happened
+   first. rebuildPickupsFor only enforced the ordering when it ran (add / remove
+   / reassign / load change); nothing enforced it on the read path, so a day
+   whose array had drifted stayed wrong on every screen. */
+
+const EMSER_OPTS = { multiSource: (c) => c === "Emser Tile", normLoc: (v) => String(v || "").trim().toLowerCase().replace(/^emser( tile)?\s*[-–—]\s*/, "") };
+
+describe("orderAutoPickupsFirst — a pickup can't come after what it supplies", () => {
+  it("moves an auto-pickup ahead of the delivery it feeds", () => {
+    const d = del({ id: "d1", customer: "Cust", driverId: 5, loadNum: 1 });
+    const p = pu({ id: "p1", customer: "Cust", driverId: 5, loadNum: 1 });
+    expect(ids(orderAutoPickupsFirst([d, p]))).toEqual(["p1", "d1"]);
+  });
+
+  it("leaves a pickup that is already ahead alone (same array reference)", () => {
+    const arr = [pu({ id: "p1", customer: "Cust", driverId: 5, loadNum: 1 }), del({ id: "d1", customer: "Cust", driverId: 5, loadNum: 1 })];
+    expect(orderAutoPickupsFirst(arr)).toBe(arr);
+  });
+
+  it("never moves a MANUAL pickup — that placement is deliberate", () => {
+    const d = del({ id: "d1", customer: "Cust", driverId: 5, loadNum: 1 });
+    const p = pu({ id: "p1", customer: "Cust", driverId: 5, loadNum: 1, manualPickup: true });
+    expect(ids(orderAutoPickupsFirst([d, p]))).toEqual(["d1", "p1"]);
+  });
+
+  it("stays within its own load — a Load 2 pickup does not jump a Load 1 delivery", () => {
+    const d1 = del({ id: "d1", customer: "Cust", driverId: 5, loadNum: 1 });
+    const d2 = del({ id: "d2", customer: "Cust", driverId: 5, loadNum: 2 });
+    const p2 = pu({ id: "p2", customer: "Cust", driverId: 5, loadNum: 2 });
+    expect(ids(orderAutoPickupsFirst([d1, d2, p2]))).toEqual(["d1", "p2", "d2"]);
+  });
+
+  it("stays within its own driver", () => {
+    const d = del({ id: "d1", customer: "Cust", driverId: 7, loadNum: 1 });
+    const p = pu({ id: "p1", customer: "Cust", driverId: 5, loadNum: 1 });
+    expect(ids(orderAutoPickupsFirst([d, p]))).toEqual(["d1", "p1"]);
+  });
+
+  it("multi-source: each dock's pickup leads its OWN dock's delivery", () => {
+    const dNor = del({ id: "d_nor", customer: "Emser Tile", driverId: 5, loadNum: 2, pickupFrom: "Emser Tile — Norcross" });
+    const dRos = del({ id: "d_ros", customer: "Emser Tile", driverId: 5, loadNum: 2, pickupFrom: "Emser Tile — Roswell" });
+    const pNor = pu({ id: "p_nor", customer: "Emser Tile", driverId: 5, loadNum: 2, pickupFrom: "Norcross" });
+    const pRos = pu({ id: "p_ros", customer: "Emser Tile", driverId: 5, loadNum: 2, pickupFrom: "Roswell" });
+    const out = ids(orderAutoPickupsFirst([dNor, dRos, pNor, pRos], EMSER_OPTS));
+    expect(out.indexOf("p_nor")).toBeLessThan(out.indexOf("d_nor"));
+    expect(out.indexOf("p_ros")).toBeLessThan(out.indexOf("d_ros"));
+  });
+
+  it("multi-source: a Roswell pickup does NOT vault a Norcross-only delivery", () => {
+    const dNor = del({ id: "d_nor", customer: "Emser Tile", driverId: 5, loadNum: 2, pickupFrom: "Norcross" });
+    const pRos = pu({ id: "p_ros", customer: "Emser Tile", driverId: 5, loadNum: 2, pickupFrom: "Roswell" });
+    expect(ids(orderAutoPickupsFirst([dNor, pRos], EMSER_OPTS))).toEqual(["d_nor", "p_ros"]);
+  });
+
+  it("an orphan pickup with nothing to feed is left where it is", () => {
+    const d = del({ id: "d1", customer: "Other", driverId: 5, loadNum: 1 });
+    const p = pu({ id: "p1", customer: "Cust", driverId: 5, loadNum: 1 });
+    expect(ids(orderAutoPickupsFirst([d, p]))).toEqual(["d1", "p1"]);
+  });
+
+  it("is idempotent — a second pass changes nothing", () => {
+    const day = [
+      del({ id: "d1", customer: "Cust", driverId: 5, loadNum: 1 }),
+      del({ id: "d2", customer: "Cust", driverId: 5, loadNum: 1 }),
+      pu({ id: "p1", customer: "Cust", driverId: 5, loadNum: 1 }),
+    ];
+    const once = orderAutoPickupsFirst(day);
+    expect(orderAutoPickupsFirst(once)).toBe(once);
+  });
+
+  it("conserves every stop — nothing dropped, nothing duplicated", () => {
+    const day = [
+      del({ id: "d1", customer: "Cust", driverId: 5, loadNum: 1 }),
+      del({ id: "d2", customer: "Cust", driverId: 5, loadNum: 2 }),
+      pu({ id: "p1", customer: "Cust", driverId: 5, loadNum: 1 }),
+      pu({ id: "p2", customer: "Cust", driverId: 5, loadNum: 2 }),
+      del({ id: "d3", customer: "Other", driverId: 9, loadNum: 1 }),
+    ];
+    expect(ids(orderAutoPickupsFirst(day)).slice().sort()).toEqual(["d1", "d2", "d3", "p1", "p2"]);
+  });
+});
+
+describe("REGRESSION: driver's phone listed the Emser pickup AFTER its delivery", () => {
+  /* The day exactly as it reached the phone: both auto-pickups stranded behind
+     both deliveries, so Load 1 rendered DCO Smyrna (departed 8:59) above the
+     Emser - Norcross pickup that supplied it (departed 8:04). */
+  const strandedDay = () => [
+    del({ id: "d_dco", customer: "Emser Tile", stop: "DCO Smyrna", driverId: 5, loadNum: 1, pickupFrom: "Emser Tile — Norcross", weight: 14000 }),
+    del({ id: "d_gel", customer: "Emser Tile", stop: "Gel & Associates - Atlanta", driverId: 5, loadNum: 2, pickupFrom: "Emser Tile — Norcross", weight: 2000 }),
+    pu({ id: "p_l1", customer: "Emser Tile", stop: "Emser - Norcross", driverId: 5, loadNum: 1, pickupFrom: "Norcross" }),
+    pu({ id: "p_l2", customer: "Emser Tile", stop: "Emser - Norcross", driverId: 5, loadNum: 2, pickupFrom: "Norcross" }),
+  ];
+
+  const onLoad = (arr, ln) => ids(arr.filter((e) => (e.loadNum || 1) === ln));
+
+  it("every load renders its pickup first once the day is normalized", () => {
+    const out = normalizeOrder(strandedDay(), 0, EMSER_OPTS);
+    expect(onLoad(out, 1)).toEqual(["p_l1", "d_dco"]);
+    expect(onLoad(out, 2)).toEqual(["p_l2", "d_gel"]);
+  });
+
+  it("the corrected order is what gets SAVED, so it heals in storage too", () => {
+    const local = normalizeOrder(strandedDay(), 0, EMSER_OPTS);
+    const saved = buildMergedEntries(strandedDay(), local, { multiSource: EMSER_OPTS.multiSource, normLoc: EMSER_OPTS.normLoc });
+    expect(onLoad(saved, 1)).toEqual(["p_l1", "d_dco"]);
+    expect(onLoad(saved, 2)).toEqual(["p_l2", "d_gel"]);
+  });
+
+  it("stays fixed across a further round-trip (no oscillation)", () => {
+    let fb = buildMergedEntries(strandedDay(), normalizeOrder(strandedDay(), 0, EMSER_OPTS), { multiSource: EMSER_OPTS.multiSource, normLoc: EMSER_OPTS.normLoc });
+    const screen = normalizeOrder(fb, 0, EMSER_OPTS);
+    fb = buildMergedEntries(fb, screen, { multiSource: EMSER_OPTS.multiSource, normLoc: EMSER_OPTS.normLoc });
+    expect(ids(normalizeOrder(fb, 0, EMSER_OPTS))).toEqual(ids(screen));
+    expect(onLoad(fb, 1)).toEqual(["p_l1", "d_dco"]);
+  });
+
+  it("both screens still agree — the seq fix and this invariant compose", () => {
+    /* Two dispatchers holding the stranded day in DIFFERENT arrangements. */
+    const raw = strandedDay();
+    const screenA = normalizeOrder(raw, 0, EMSER_OPTS);
+    const screenB = normalizeOrder([raw[3], raw[1], raw[0], raw[2]], 0, EMSER_OPTS);
+    const fb = buildMergedEntries(screenA, screenB, { multiSource: EMSER_OPTS.multiSource, normLoc: EMSER_OPTS.normLoc });
+
+    /* Both receive it and reconcile against their own local copy. */
+    const viewA = orderAutoPickupsFirst(receive(screenA, fb), EMSER_OPTS);
+    const viewB = orderAutoPickupsFirst(receive(screenB, fb), EMSER_OPTS);
+    expect(ids(viewA)).toEqual(ids(viewB));              /* one order, not two */
+    expect(onLoad(viewA, 1)).toEqual(["p_l1", "d_dco"]); /* ...and it's the right one */
+    expect(onLoad(viewA, 2)).toEqual(["p_l2", "d_gel"]);
   });
 });
