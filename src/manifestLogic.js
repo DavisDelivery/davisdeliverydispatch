@@ -311,7 +311,9 @@ export const DRIVER_OWNED_FIELDS=["status","arrivedAt","departedAt","photos","si
 
 export const _mergeEntryDriver=(localE,fbE)=>{
   /* Caller is the driver assigned to this entry. Take local's driver-owned
-     fields (with forward-only status) and FB's everything-else. */
+     fields (with forward-only status) and FB's everything-else — which includes
+     the ordering key: a driver never reorders stops, so FB's `seq` is taken as
+     given by starting from fbE. */
   const out={...fbE};
   const localRank=STATUS_RANK[localE.status]??0;
   const fbRank=STATUS_RANK[fbE.status]??0;
@@ -372,7 +374,10 @@ export const _mergeEntryDispatcher=(localE,fbE)=>{
   if(localE.eta){out.eta=localE.eta;out.etaDest=localE.etaDest;out.etaSetAt=localE.etaSetAt;}
   else if(fbE.eta){out.eta=fbE.eta;out.etaDest=fbE.etaDest;out.etaSetAt=fbE.etaSetAt;}
   const mt=Math.max(lt,ft); if(mt)out.updatedAt=mt; /* carry the winning edit's stamp forward */
-  return out;
+  /* ORDER resolves on its OWN clock (seqAt), never on updatedAt — a rate edit
+     here must not drag a stale position along with it and undo somebody else's
+     reorder. See the `seq` block below for the full rationale. */
+  return _applySeq(out,localE,fbE);
 };
 
 /* Coerce possibly-bad Firestore data into safe types so render code that calls
@@ -407,6 +412,10 @@ export function sanitizeEntry(e){
     weight:safeNum(e.weight),
     loadNum:e.loadNum==null?undefined:safeNum(e.loadNum),
     etaSetAt:e.etaSetAt==null?undefined:safeNum(e.etaSetAt),
+    /* Ordering key + its edit clock. Coerced like loadNum so a string/garbage
+       value out of Firestore can never poison the sort comparator. */
+    seq:e.seq==null?undefined:safeNum(e.seq),
+    seqAt:e.seqAt==null?undefined:safeNum(e.seqAt),
     isHourly:!!e.isHourly,
     priority:!!e.priority,
     liftgateApplied:!!e.liftgateApplied,
@@ -576,6 +585,258 @@ export const vanishedAutoPickups=(before,after)=>{
   return before.filter(e=>e&&e.id&&e.stopType==="pickup"&&!e.manualPickup&&!surviving.has(e.id));
 };
 
+/* ── Stop ORDER as replicated data (`seq` / `seqAt`) ─────────────────────────
+   THE BUG THIS FIXES: two dispatchers, same day, same load — one saw "Emser -
+   Norcross" picking up first, the other saw "Emser - Roswell" first, and a
+   refresh on both screens did not settle it.
+
+   Root cause: order was NOT data. It was the position of an entry inside the
+   day's array, and every reconciliation path made the LOCAL array the authority
+   on it — the receive path rebuilt the day in local order and appended FB-only
+   stops at the end, and buildMergedEntries started from local too. So:
+     - a reorder made on screen A could never reach screen B (B's receive path
+       re-imposed B's own order on every snapshot), and
+     - whichever screen saved last stamped ITS order onto the day document,
+       so the two screens flipped Firebase back and forth forever.
+   A refresh only adopted whatever order happened to be in Firebase at that
+   instant; the other tab's next save flipped it straight back. There was no
+   convergence rule at all, because a drag changes no field — so unlike a rate
+   or a reassign, a reorder carried no edit clock for the merge to reason about.
+
+   Fix: give every stop an explicit ordering number, `seq`, and its own edit
+   clock, `seqAt`. Order is now a FIELD that replicates and merges under the
+   same last-writer-wins rule as every other dispatcher field, and every device
+   renders `sort by (seq, id)` — so all devices agree by construction.
+
+   `seqAt` is deliberately SEPARATE from `updatedAt`: a rate edit on one screen
+   must not stomp a reorder made on another, and vice versa. Where neither side
+   has ever explicitly reordered a stop (both numbers are merely minted from an
+   array position), the FIREBASE value wins — it is the copy every device shares,
+   so all devices land on it instead of each preferring its own.
+
+   This is the `seq` field of the target architecture in docs/SYNC_REDESIGN.md
+   §2, landed on today's array model: the same ordering key the per-order store
+   (ordersStore.js) already writes as `_seq`. */
+export const SEQ_STEP=1000; /* gapped, so an insert or a drag re-mints one number instead of renumbering the day */
+export const seqOf=(e)=>{const v=e&&e.seq;return typeof v==="number"&&isFinite(v)?v:null;};
+export const seqAtOf=(e)=>{const v=e&&e.seqAt;return typeof v==="number"&&isFinite(v)?v:0;};
+
+/* Which entries may KEEP their current number: the longest strictly-increasing
+   subsequence of the existing seqs, by array position. Everything else is
+   re-minted between its kept neighbours. Using the LIS (rather than a
+   left-to-right "is it bigger than the last kept one?" scan) is what keeps a
+   drag down to ONE rewritten entry: drag a stop from the bottom of a route to
+   the top and only that stop's seq changes — so only that stop claims a new
+   edit clock, and only that stop can win a merge against another dispatcher. */
+const _lisKeep=(seqs)=>{
+  const n=seqs.length;
+  const keep=new Array(n).fill(false);
+  const tailSeq=[];   /* tailSeq[k] = smallest tail value of an increasing run of length k+1 */
+  const tailIdx=[];   /* index that produced it */
+  const prev=new Array(n).fill(-1);
+  for(let i=0;i<n;i++){
+    if(seqs[i]==null)continue;
+    let lo=0,hi=tailSeq.length;
+    while(lo<hi){const mid=(lo+hi)>>1;if(tailSeq[mid]<seqs[i])lo=mid+1;else hi=mid;}
+    tailSeq[lo]=seqs[i];tailIdx[lo]=i;
+    prev[i]=lo>0?tailIdx[lo-1]:-1;
+  }
+  let k=tailIdx.length?tailIdx[tailIdx.length-1]:-1;
+  while(k>=0){keep[k]=true;k=prev[k];}
+  return keep;
+};
+
+/* Make every entry's `seq` agree with its CURRENT position in `entries`.
+   Returns the same array reference when nothing needed changing.
+
+   Two modes, by `now`:
+     - now = a timestamp (a LOCAL user action: drag, insert, route apply, a
+       pickup rebuild) — entries that actually moved get a new seq AND
+       seqAt=now, so the move replicates and beats a stale echo.
+     - now = 0/omitted (INGEST / merge: we are only filling in numbers for data
+       written before this field existed) — existing seqs are never rewritten
+       and no edit clock is claimed, so minting can't masquerade as a reorder.
+   Entries with no seq are always given one, interpolated between their
+   neighbours so a brand-new stop lands exactly where the dispatcher put it. */
+export const resequenceEntries=(entries,now)=>{
+  if(!Array.isArray(entries)||entries.length===0)return entries;
+  const nowTs=Number(now)||0;
+  const n=entries.length;
+  const cur=entries.map(e=>(e?seqOf(e):null));
+  const keep=nowTs?_lisKeep(cur):cur.map(v=>v!=null);
+  const out=entries.slice();
+  let changed=false;
+  const put=(i,val)=>{
+    const e=entries[i];
+    if(!e||typeof e!=="object")return;
+    if(cur[i]===val)return;
+    changed=true;
+    /* An entry that already HAD a number and is being moved is a real reorder →
+       stamp the order clock. A first-time mint claims no authority. */
+    out[i]=(cur[i]!=null&&nowTs)?{...e,seq:val,seqAt:nowTs}:{...e,seq:val};
+  };
+  let i=0,prevSeq=null,exhausted=false;
+  while(i<n){
+    if(keep[i]){prevSeq=cur[i];i++;continue;}
+    let j=i;while(j<n&&!keep[j])j++;
+    const count=j-i;
+    const nextSeq=j<n?cur[j]:null;
+    if(prevSeq==null&&nextSeq==null){
+      for(let k=0;k<count;k++)put(i+k,k*SEQ_STEP);
+      prevSeq=(count-1)*SEQ_STEP;
+    }else if(prevSeq==null){
+      /* leading run — count back from the first kept number */
+      for(let k=0;k<count;k++)put(i+k,nextSeq-(count-k)*SEQ_STEP);
+      prevSeq=nextSeq-SEQ_STEP;
+    }else if(nextSeq==null||nextSeq<=prevSeq){
+      let last=prevSeq;
+      for(let k=0;k<count;k++){last=prevSeq+(k+1)*SEQ_STEP;put(i+k,last);}
+      prevSeq=last;
+    }else{
+      const step=(nextSeq-prevSeq)/(count+1);
+      if(step<=1e-6){
+        /* Gap subdivided past usefulness (thousands of inserts at one spot).
+           A local action can afford to renumber the day from scratch; a MINT
+           must not — rewriting numbers with no clock behind them is how two
+           devices start disagreeing again. Minting instead stacks on the
+           previous number and lets the id tiebreak settle it, which every
+           device computes the same way. */
+        if(nowTs){exhausted=true;break;}
+        for(let k=0;k<count;k++)put(i+k,prevSeq);
+      }else{
+        let last=prevSeq;
+        for(let k=0;k<count;k++){last=prevSeq+(k+1)*step;put(i+k,last);}
+        prevSeq=last;
+      }
+    }
+    i=j;
+  }
+  /* Numbering space exhausted between two kept stops (needs thousands of
+     inserts at one spot). Renumber the whole day from position — deterministic,
+     and only reachable from an explicit local action. */
+  if(exhausted){
+    const flat=entries.map((e,k)=>{
+      if(!e||typeof e!=="object")return e;
+      const val=k*SEQ_STEP;
+      if(seqOf(e)===val)return e;
+      return seqOf(e)!=null?{...e,seq:val,seqAt:nowTs}:{...e,seq:val};
+    });
+    return flat;
+  }
+  return changed?out:entries;
+};
+
+/* The one render/persist order, computed identically on every device: by `seq`,
+   ties broken by id. The tiebreak uses plain string comparison, NOT
+   localeCompare — locale-sensitive collation is exactly the kind of thing that
+   differs between two dispatchers' browsers, which is the bug we are fixing.
+   Entries with no seq at all sink to the end in their existing order (only
+   reachable for junk without an id; resequenceEntries numbers everything else). */
+export const sortBySeq=(entries)=>{
+  if(!Array.isArray(entries)||entries.length<2)return entries;
+  const seqs=entries.map(e=>(e?seqOf(e):null));
+  const idx=entries.map((_e,i)=>i);
+  idx.sort((a,b)=>{
+    const sa=seqs[a],sb=seqs[b];
+    if(sa==null&&sb==null)return a-b;
+    if(sa==null)return 1;
+    if(sb==null)return -1;
+    if(sa!==sb)return sa-sb;
+    const ia=String((entries[a]&&entries[a].id)??""),ib=String((entries[b]&&entries[b].id)??"");
+    return ia<ib?-1:ia>ib?1:a-b;
+  });
+  for(let k=0;k<idx.length;k++){if(idx[k]!==k)return idx.map(p=>entries[p]);}
+  return entries;
+};
+
+/* An auto-pickup must come BEFORE the deliveries it feeds — you cannot drop a
+   pallet you have not collected yet. That was only ever enforced at WRITE time,
+   by rebuildPickupsFor placing a regenerated pickup in front of its first
+   delivery. Nothing enforced it at READ time, so once a day's array drifted
+   into pickup-after-delivery (a route apply that stranded the pickups at the
+   end, a load move, any path that didn't re-run the rebuild) it stayed that way
+   on every screen: the driver's Load 1 showed "DCO Smyrna" first and the
+   "Emser - Norcross" pickup that supplies it second — with a departure stamp an
+   hour EARLIER, because in the real world it obviously happened first.
+
+   Same reasoning as reapOrphanAutoPickups: rather than chase every caller
+   forever, enforce the invariant here, on the read path everything shares. Each
+   auto-pickup moves to just ahead of the earliest delivery it feeds; a pickup
+   already ahead of its deliveries never moves.
+
+   Only AUTO pickups are touched. A manual pickup is a deliberate dispatcher
+   placement (a return pickup at the end of a route is a real thing) and is left
+   exactly where it was put.
+
+   opts (optional): { multiSource(customer)->bool, normLoc(str)->str } — same
+   pair reapOrphanAutoPickups takes. Multi-source suppliers ship from >1 dock, so
+   a pickup is matched to deliveries at ITS dock; a delivery whose dock can't be
+   resolved counts as fed by any dock (conservative — it can only ever move the
+   pickup earlier, never leave a delivery ahead of its supply). */
+export const orderAutoPickupsFirst=(entries,opts)=>{
+  if(!Array.isArray(entries)||entries.length<2)return entries;
+  const multiSource=opts&&typeof opts.multiSource==="function"?opts.multiSource:()=>false;
+  const normLoc=opts&&typeof opts.normLoc==="function"?opts.normLoc:(s)=>String(s||"").trim().toLowerCase();
+  const feeds=(pu,d)=>{
+    if(!d||d.stopType!=="delivery")return false;
+    if(d.customer!==pu.customer)return false;
+    if(d.driverId!==pu.driverId)return false;
+    if((d.loadNum||1)!==(pu.loadNum||1))return false;
+    if(!multiSource(pu.customer))return true;      /* single dock → every delivery on the load */
+    const puLoc=normLoc(pu.pickupFrom)||normLoc(pu.stop);
+    const delLoc=normLoc(d.pickupFrom);
+    if(!puLoc||!delLoc)return true;                 /* dock unknown on either side → treat as fed */
+    return puLoc===delLoc;
+  };
+  const arr=entries.slice();
+  let changed=false;
+  for(let i=0;i<arr.length;i++){
+    const e=arr[i];
+    if(!e||e.stopType!=="pickup"||e.manualPickup||!(e.driverId>0))continue;
+    let first=-1;
+    for(let j=0;j<i;j++){if(feeds(e,arr[j])){first=j;break;}}
+    if(first<0)continue;                            /* already ahead of its deliveries */
+    arr.splice(i,1);
+    arr.splice(first,0,e);
+    changed=true;
+    /* Everything past i keeps its index (the removal and the re-insert cancel
+       out above it), so the scan continues from i+1 without skipping a stop. */
+  }
+  return changed?arr:entries;
+};
+
+/* Number, sort, then put each auto-pickup ahead of what it supplies — the shape
+   every read path wants. Idempotent: a second pass over its own output is a
+   no-op, so ingest → render → save can't walk the order anywhere.
+
+   `seq` is deliberately NOT rewritten to match a pickup this moved. Minting a
+   number inside a shared read path would have every device racing to claim the
+   same reorder; the invariant is a pure function of the data instead, so all
+   devices land on the identical order without anyone claiming authority. The
+   first local edit on the day resequences it for real (with a proper clock) and
+   the stored numbers heal to match. */
+export const normalizeOrder=(entries,now,opts)=>orderAutoPickupsFirst(sortBySeq(resequenceEntries(entries,now)),opts);
+
+/* Resolve the ORDER field between two copies of one stop. Higher seqAt (a real
+   reorder) wins. When neither side has ever been explicitly reordered — or the
+   clocks tie — Firebase wins, because it is the copy both devices can see and
+   therefore the only value they can both converge on. A side with no number
+   never overrides a side that has one. */
+const _pickSeq=(localE,fbE)=>{
+  const ls=seqOf(localE),fs=seqOf(fbE);
+  if(ls==null&&fs==null)return null;
+  if(ls==null)return{seq:fs,seqAt:seqAtOf(fbE)};
+  if(fs==null)return{seq:ls,seqAt:seqAtOf(localE)};
+  return seqAtOf(localE)>seqAtOf(fbE)?{seq:ls,seqAt:seqAtOf(localE)}:{seq:fs,seqAt:seqAtOf(fbE)};
+};
+const _applySeq=(out,localE,fbE)=>{
+  const r=_pickSeq(localE,fbE);
+  if(!r){delete out.seq;delete out.seqAt;return out;}
+  out.seq=r.seq;
+  if(r.seqAt)out.seqAt=r.seqAt; else delete out.seqAt;
+  return out;
+};
+
 /* Reorder `items` to follow `orderedIds`, with every item NOT named in the list
    kept (appended after, in original order). Consumes by POSITION (each id claims
    one not-yet-used matching item), so a legacy colliding-id pair can't collapse:
@@ -598,7 +859,8 @@ export const orderByIds=(items,orderedIds)=>{
    Firestore transaction. Given the current FB array and the caller's local
    array, produce the array to persist:
      - both id-repaired first (dedupeIds);
-     - start from local (preserves dispatcher order + not-yet-synced adds);
+     - start from local (preserves not-yet-synced adds; ORDER no longer rides on
+       this — it is carried per stop by `seq` and re-sorted at the end);
      - per local entry, merge with FB per ownership (dispatcher vs the driver
        it's assigned to); a stop whose id diverged is reconciled by CONTENT
        (signature-fallback) rather than dropped; a driver drops any stop FB no
@@ -676,5 +938,12 @@ export const buildMergedEntries=(fbEntriesRaw,localEntriesRaw,{isDriver=false,ca
   /* Orphan reap LAST, after the delivery safety-net re-append, so a rescued
      delivery keeps its pickup. Self-heals any orphan already persisted in
      Firebase: the merge drops it, and the transaction write makes that stick. */
-  return reapOrphanAutoPickups(dedupeDeliveries(dedupeGhostDeliveries(dedupeAutoPickups(merged,normLoc?{normLoc}:undefined))),multiSource?{multiSource,normLoc}:undefined);
+  const reconciled=reapOrphanAutoPickups(dedupeDeliveries(dedupeGhostDeliveries(dedupeAutoPickups(merged,normLoc?{normLoc}:undefined))),multiSource?{multiSource,normLoc}:undefined);
+  /* Persist the day in `seq` order, auto-pickups ahead of what they supply, so
+     the stored array itself is the agreed order — a client that loads it cold,
+     an export, and the shadow order store's `_seq` all line up without
+     re-deriving anything. `now` is 0 here: the merge mints numbers for stops
+     written before this field existed, but it never rewrites one, so a
+     transaction can't invent a reorder nobody asked for. */
+  return normalizeOrder(reconciled,0,multiSource?{multiSource,normLoc}:undefined);
 };
