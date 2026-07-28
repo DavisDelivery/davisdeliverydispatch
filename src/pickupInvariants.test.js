@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { rebuildPickupsForPure, orderAutoPickupsFirst, orderByIds, applyReassign, applySetLoadNum, applyMoveInDriver, applyReorderDriver, applyDropReorder, dedupeIds, dedupeAutoPickups, reapOrphanAutoPickups, normalizeOrder } from "./manifestLogic.js";
+import { rebuildPickupsForPure, orderAutoPickupsFirst, orderByIds, applyReassign, applySetLoadNum, applyMoveInDriver, applyReorderDriver, applyDropReorder, resolvePickupLabel, dedupeIds, dedupeAutoPickups, reapOrphanAutoPickups, normalizeOrder } from "./manifestLogic.js";
 import { PICKUP_SOURCES, MULTI_PICKUP, normLoc } from "./pickupConfig.js";
 
 /* ── Scenario sweep over the auto-pickup engine ───────────────────────────────
@@ -437,4 +437,69 @@ describe("manifest — every operation, invariants plus stop conservation", () =
       expect(ALL(back, back), `sync after session\n  ${log.join("\n  ")}`).toEqual([]);
     });
   }
+});
+
+/* ── The text on the card ────────────────────────────────────────────────────
+   Correct data still misleads if the label under the address names the wrong
+   origin. But a first pass at these invariants asserted something false — that a
+   pickup card on the load means the dock is DECIDED, so the delivery should
+   never still show "⚠ pick location". It isn't: when nobody names a dock, the
+   engine falls back to the supplier's first one, and that card is a GUESS. The
+   warning is what tells the dispatcher the guess is unconfirmed; silencing it
+   would send a driver to the wrong building with false confidence. Those 49
+   "failures" were the test being wrong, and the app was right.
+
+   What follows is what the label genuinely owes the reader. */
+describe("pickup label — the contracts it actually owes", () => {
+  const labelChecks = (board) => {
+    const out = [];
+    board
+      .filter((e) => e.stopType === "delivery" && e.driverId > 0)
+      .forEach((d) => {
+        const siblings = board.filter(
+          (e) => e.driverId === d.driverId && (e.loadNum || 1) === (d.loadNum || 1),
+        );
+        const { text, ambiguous } = resolvePickupLabel(d, siblings);
+        const docks = docksFor(d.customer);
+
+        /* Never blank, never a stray "undefined" on a driver's card. */
+        if (!text || !String(text).trim() || /undefined|null|NaN/.test(text))
+          out.push(`"${d.stop}" renders a broken label: ${JSON.stringify(text)}`);
+
+        /* A supplier with ONE dock has nothing to choose — it must never prompt. */
+        if (docks.length === 1 && ambiguous)
+          out.push(`"${d.stop}" prompts for a dock but ${d.customer} only has one`);
+
+        /* When the delivery NAMES one of its supplier's docks, that is a
+           decision, and the label must show it rather than prompt. */
+        const named = docks.find(
+          (s) =>
+            d.pickupFrom &&
+            (d.pickupFrom === s.label || normLoc(d.pickupFrom) === normLoc(s.label)),
+        );
+        if (named) {
+          if (ambiguous) out.push(`"${d.stop}" names dock "${named.label}" yet still prompts`);
+          else if (normLoc(text) !== normLoc(named.label))
+            out.push(`"${d.stop}" names dock "${named.label}" but reads "${text}"`);
+        }
+
+        /* If it IS prompting, it must look like a prompt — a half-formed label
+           that merely looks like an address is the dangerous version. */
+        if (ambiguous && !/pick location/.test(text))
+          out.push(`"${d.stop}" is ambiguous but reads "${text}", which does not read as a prompt`);
+      });
+    return out;
+  };
+
+  scenarios.forEach((sc) => {
+    it(`label: ${sc.name}`, () => {
+      const d = deps({ driverLoadCount: sc.driverLoadCount });
+      const board = orderAutoPickupsFirst(rebuildAll(sc.entries, d), {
+        multiSource: (c) => !!MULTI_PICKUP[c],
+        normLoc,
+        docksFor: (c) => docksFor(c).map((s) => s.label),
+      });
+      expect(labelChecks(board)).toEqual([]);
+    });
+  });
 });

@@ -1,3 +1,4 @@
+import { MULTI_PICKUP } from "./pickupConfig.js";
 /* manifestLogic.js — pure, side-effect-free manifest data logic.
 
    Extracted from App.jsx so it can be unit-tested in isolation (App.jsx loads
@@ -1357,3 +1358,40 @@ export const applyDropReorder=(all,drvId,srcId,srcIdxFallback,toIdx)=>{
   de.splice(Math.min(Math.max(toIdx,0),de.length),0,moved);
   return reorderDriverBlock(all,drvId,de);
 };
+
+/* ── What the driver actually reads ──────────────────────────────────────────
+   The text under a stop's address. Correct underlying data still misleads if
+   this renders the wrong origin, or demands a dock choice the board already
+   answers — the "⚠ pick location" prompt with no right answer. Extracted so the
+   label can be checked against the pickup cards on the same board. */
+export const resolvePickupLabel=(entry,siblings)=>{
+  const pf=entry.pickupFrom;
+  const cust=entry.customer;
+  /* Which multi-pickup customer is this stop tied to? It can be named either
+     in `customer` (e.g. a Traditions delivery) or carried in `pickupFrom`
+     (e.g. a Quote Delivery whose load originates at Traditions). */
+  let multiCust=null;
+  if(cust&&MULTI_PICKUP[cust])multiCust=cust;
+  else if(pf&&MULTI_PICKUP[pf])multiCust=pf;
+  if(multiCust){
+    const locs=MULTI_PICKUP[multiCust];
+    /* A specific location is present if pickupFrom names one of the source
+       labels, or the short location word inside them (Alpharetta/Atlanta). */
+    const specific=pf&&pf!==multiCust&&locs.some(l=>{
+      const shortLoc=l.label.split(" - ").pop();
+      return pf===l.label||pf===shortLoc||pf.includes(shortLoc);
+    });
+    if(specific)return{text:pf.includes(" - ")?pf:(multiCust+" — "+pf),ambiguous:false};
+    /* No dock named — but a MANUAL pickup on this load may already say where the
+       load comes from (e.g. collected at MTI in Sugar Hill, delivered to Emser
+       Norcross). Asking "Norcross or Roswell?" there offers no correct answer,
+       and either chip would record a pickup that never happened. */
+    const manualSrc=manualPickupOrigin(entry,siblings);
+    if(manualSrc)return{text:manualSrc,ambiguous:false};
+    return{text:multiCust+" — ⚠ pick location",ambiguous:true};
+  }
+  /* Single-location or no special handling — original behavior. */
+  if(pf&&pf.includes(" - "))return{text:pf,ambiguous:false};
+  return{text:cust+(pf?" — "+pf:""),ambiguous:false};
+};
+

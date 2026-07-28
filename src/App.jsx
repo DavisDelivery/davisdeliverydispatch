@@ -62,7 +62,7 @@ inputMb4:{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"7px 10
 };
 import { useState, useCallback, useEffect, useRef, Fragment, Component } from "react";
 import { PICKUP_SOURCES, MULTI_PICKUP, normLoc as _normLoc } from "./pickupConfig.js";
-import { dedupeIds, dedupeAutoPickups, dedupeGhostDeliveries, dedupeDeliveries, reapOrphanAutoPickups, sanitizeEntry, _mergeEntryDriver, _mergeEntryDispatcher, buildMergedEntries, entrySig, makeTombFilter, makeDocTombFilter, mergeTombstones, vanishedAutoPickups, orderByIds, reconcileDriverRoster, applyDriverRemap, normDriverName, manualPickupCoversDock, allInRate, stripLiftgateFee, resequenceEntries, sortBySeq, normalizeOrder, orderAutoPickupsFirst, manualPickupOrigin, deliveryCollectedOffDock, rebuildPickupsForPure, insertIdxForLoad, applyReassign, applySetLoadNum, reorderDriverBlock as _reorderDriverBlock, applyMoveInDriver, applyReorderDriver, applyDropReorder } from "./manifestLogic.js";
+import { dedupeIds, dedupeAutoPickups, dedupeGhostDeliveries, dedupeDeliveries, reapOrphanAutoPickups, sanitizeEntry, _mergeEntryDriver, _mergeEntryDispatcher, buildMergedEntries, entrySig, makeTombFilter, makeDocTombFilter, mergeTombstones, vanishedAutoPickups, orderByIds, reconcileDriverRoster, applyDriverRemap, normDriverName, manualPickupCoversDock, allInRate, stripLiftgateFee, resequenceEntries, sortBySeq, normalizeOrder, orderAutoPickupsFirst, manualPickupOrigin, deliveryCollectedOffDock, rebuildPickupsForPure, insertIdxForLoad, applyReassign, applySetLoadNum, reorderDriverBlock as _reorderDriverBlock, applyMoveInDriver, applyReorderDriver, applyDropReorder, resolvePickupLabel } from "./manifestLogic.js";
 import { diffOrderDocs, orderDocId, ordersParity } from "./ordersStore.js";
 
 const _SplitUI=({splitEntry,setSplitEntry})=>{const tw=splitEntry.totalWeight||0;const t1w=splitEntry.truck1Weight!==undefined?splitEntry.truck1Weight:Math.round(tw*(splitEntry.ratio/100));const t2w=tw-t1w;return(<><div style={_s.flexG6Mb6}><div style={_s.f1}><label style={_s.labelSm}>Total</label><input type="number" inputMode="numeric" value={tw||""} onChange={e=>{const newTw=parseInt(e.target.value)||0;setSplitEntry(p=>({...p,totalWeight:newTw,truck1Weight:Math.min(p.truck1Weight||Math.round(newTw/2),newTw)}));}} style={_s.splitTotal}/></div><div style={_s.f1}><label style={_s.labelBlue}>Truck 1</label><input type="number" inputMode="numeric" value={splitEntry.truck1Weight!==undefined?splitEntry.truck1Weight:""} onChange={e=>{const v=e.target.value;setSplitEntry(p=>({...p,truck1Weight:v===""?0:parseInt(v)||0}));}} style={_s.splitInput}/></div><div style={_s.f1}><label style={_s.labelGray}>Truck 2</label><div style={_s.splitT2}>{t2w.toLocaleString()}</div></div></div><input type="range" min={0} max={tw} step={100} value={t1w} onChange={e=>{const v=parseInt(e.target.value)||0;setSplitEntry(p=>({...p,truck1Weight:v}));}} style={_s.slider}/></>);};
@@ -1021,36 +1021,6 @@ const _reapOpts={multiSource:(c)=>!!MULTI_PICKUP[c],normLoc:_normLoc,
 /* Given an entry, work out what pickup text to show and whether the location
    is still ambiguous (a multi-location customer with no specific location
    picked). Returns {text, ambiguous}. */
-const resolvePickupLabel=(entry,siblings)=>{
-  const pf=entry.pickupFrom;
-  const cust=entry.customer;
-  /* Which multi-pickup customer is this stop tied to? It can be named either
-     in `customer` (e.g. a Traditions delivery) or carried in `pickupFrom`
-     (e.g. a Quote Delivery whose load originates at Traditions). */
-  let multiCust=null;
-  if(cust&&MULTI_PICKUP[cust])multiCust=cust;
-  else if(pf&&MULTI_PICKUP[pf])multiCust=pf;
-  if(multiCust){
-    const locs=MULTI_PICKUP[multiCust];
-    /* A specific location is present if pickupFrom names one of the source
-       labels, or the short location word inside them (Alpharetta/Atlanta). */
-    const specific=pf&&pf!==multiCust&&locs.some(l=>{
-      const shortLoc=l.label.split(" - ").pop();
-      return pf===l.label||pf===shortLoc||pf.includes(shortLoc);
-    });
-    if(specific)return{text:pf.includes(" - ")?pf:(multiCust+" — "+pf),ambiguous:false};
-    /* No dock named — but a MANUAL pickup on this load may already say where the
-       load comes from (e.g. collected at MTI in Sugar Hill, delivered to Emser
-       Norcross). Asking "Norcross or Roswell?" there offers no correct answer,
-       and either chip would record a pickup that never happened. */
-    const manualSrc=manualPickupOrigin(entry,siblings);
-    if(manualSrc)return{text:manualSrc,ambiguous:false};
-    return{text:multiCust+" — ⚠ pick location",ambiguous:true};
-  }
-  /* Single-location or no special handling — original behavior. */
-  if(pf&&pf.includes(" - "))return{text:pf,ambiguous:false};
-  return{text:cust+(pf?" — "+pf:""),ambiguous:false};
-};
 
 const CC={"Emser Tile":{bg:"#1e40af",accent:"#2563eb"},"Florida Tile":{bg:"#166534",accent:"#16a34a"},"Specialty":{bg:"#6b21a8",accent:"#9333ea"},"IMETCO":{bg:"#9a3412",accent:"#ea580c"},"MM Systems":{bg:"#075985",accent:"#0284c7"},"Perfect Edge":{bg:"#9f1239",accent:"#e11d48"},"Woodbury Stamping":{bg:"#3f3f46",accent:"#71717a"},"Quote Delivery":{bg:"#78350f",accent:"#d97706"},"One-Off Delivery":{bg:"#374151",accent:"#6b7280"}};
 const DCOL=["#2563eb","#16a34a","#ea580c","#9333ea"];
