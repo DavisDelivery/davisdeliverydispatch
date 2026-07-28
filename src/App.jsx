@@ -62,7 +62,7 @@ inputMb4:{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"7px 10
 };
 import { useState, useCallback, useEffect, useRef, Fragment, Component } from "react";
 import { PICKUP_SOURCES, MULTI_PICKUP, normLoc as _normLoc } from "./pickupConfig.js";
-import { dedupeIds, dedupeAutoPickups, dedupeGhostDeliveries, dedupeDeliveries, reapOrphanAutoPickups, sanitizeEntry, _mergeEntryDriver, _mergeEntryDispatcher, buildMergedEntries, entrySig, makeTombFilter, makeDocTombFilter, mergeTombstones, vanishedAutoPickups, orderByIds, reconcileDriverRoster, applyDriverRemap, normDriverName, manualPickupCoversDock, allInRate, stripLiftgateFee, resequenceEntries, sortBySeq, normalizeOrder, orderAutoPickupsFirst, manualPickupOrigin, deliveryCollectedOffDock, rebuildPickupsForPure, insertIdxForLoad, applyReassign, applySetLoadNum } from "./manifestLogic.js";
+import { dedupeIds, dedupeAutoPickups, dedupeGhostDeliveries, dedupeDeliveries, reapOrphanAutoPickups, sanitizeEntry, _mergeEntryDriver, _mergeEntryDispatcher, buildMergedEntries, entrySig, makeTombFilter, makeDocTombFilter, mergeTombstones, vanishedAutoPickups, orderByIds, reconcileDriverRoster, applyDriverRemap, normDriverName, manualPickupCoversDock, allInRate, stripLiftgateFee, resequenceEntries, sortBySeq, normalizeOrder, orderAutoPickupsFirst, manualPickupOrigin, deliveryCollectedOffDock, rebuildPickupsForPure, insertIdxForLoad, applyReassign, applySetLoadNum, reorderDriverBlock as _reorderDriverBlock, applyMoveInDriver, applyReorderDriver, applyDropReorder } from "./manifestLogic.js";
 import { diffOrderDocs, orderDocId, ordersParity } from "./ordersStore.js";
 
 const _SplitUI=({splitEntry,setSplitEntry})=>{const tw=splitEntry.totalWeight||0;const t1w=splitEntry.truck1Weight!==undefined?splitEntry.truck1Weight:Math.round(tw*(splitEntry.ratio/100));const t2w=tw-t1w;return(<><div style={_s.flexG6Mb6}><div style={_s.f1}><label style={_s.labelSm}>Total</label><input type="number" inputMode="numeric" value={tw||""} onChange={e=>{const newTw=parseInt(e.target.value)||0;setSplitEntry(p=>({...p,totalWeight:newTw,truck1Weight:Math.min(p.truck1Weight||Math.round(newTw/2),newTw)}));}} style={_s.splitTotal}/></div><div style={_s.f1}><label style={_s.labelBlue}>Truck 1</label><input type="number" inputMode="numeric" value={splitEntry.truck1Weight!==undefined?splitEntry.truck1Weight:""} onChange={e=>{const v=e.target.value;setSplitEntry(p=>({...p,truck1Weight:v===""?0:parseInt(v)||0}));}} style={_s.splitInput}/></div><div style={_s.f1}><label style={_s.labelGray}>Truck 2</label><div style={_s.splitT2}>{t2w.toLocaleString()}</div></div></div><input type="range" min={0} max={tw} step={100} value={t1w} onChange={e=>{const v=parseInt(e.target.value)||0;setSplitEntry(p=>({...p,truck1Weight:v}));}} style={_s.slider}/></>);};
@@ -182,14 +182,6 @@ const _sameEntryContent=(a,b)=>{try{return JSON.stringify({...a,updatedAt:0})===
    another dispatcher's concurrent reorder. In-place keeps a drag down to the
    one stop that actually moved. Falls back to the old append shape if the set
    of stops changed (callers only ever permute, so that is belt-and-braces). */
-const _reorderDriverBlock=(all,drvId,nextOrder)=>{
-  const slots=[];
-  all.forEach((e,i)=>{if(e&&e.driverId===drvId)slots.push(i);});
-  if(slots.length!==nextOrder.length)return[...all.filter(e=>!(e&&e.driverId===drvId)),...nextOrder];
-  const out=all.slice();
-  slots.forEach((idx,k)=>{out[idx]=nextOrder[k];});
-  return out;
-};
 const genId=()=>{
   _idSeq=(_idSeq+1)%1000000;
   const t=Date.now().toString(36);
@@ -5005,29 +4997,7 @@ useEffect(()=>{
    the previous/next entry that shares the same driver AND same load.
    Stable across any concurrent state changes and confined to the
    correct load group. */
-const moveInDriver=(drvId,entryId,dir)=>{
-  setLog(p=>{
-    const all=[...(p[dk]||[])];
-    const fromIdx=all.findIndex(e=>e.id===entryId);
-    if(fromIdx<0)return p;
-    const moving=all[fromIdx];
-    if(moving.driverId!==drvId)return p;
-    const moveLoad=moving.loadNum||1;
-    /* Find the neighbor inside the same (driver, load) group in the
-       direction the user clicked. dir is +1 (down) or -1 (up). */
-    const neighbors=[];
-    for(let i=0;i<all.length;i++){
-      const e=all[i];
-      if(e.driverId===drvId&&(e.loadNum||1)===moveLoad)neighbors.push(i);
-    }
-    const posInGroup=neighbors.indexOf(fromIdx);
-    const targetPos=posInGroup+dir;
-    if(targetPos<0||targetPos>=neighbors.length)return p;
-    const toIdx=neighbors[targetPos];
-    [all[fromIdx],all[toIdx]]=[all[toIdx],all[fromIdx]];
-    return{...p,[dk]:all};
-  });
-};
+const moveInDriver=(drvId,entryId,dir)=>{setLog(p=>{const all=applyMoveInDriver(p[dk]||[],drvId,entryId,dir);return all===(p[dk]||[])?p:{...p,[dk]:all};});};
 
 const[sortMenuDrv,setSortMenuDrv]=useState(null);
 const _sCoord=(e)=>{if(!e)return null;const addr=e.addr||getAddr(e.stop);return getCoords(addr);};
@@ -5336,7 +5306,7 @@ showToast("Moved to "+targetName);
 }
 setDragSrc(null);setDragOver(null);
 };
-const reorderDriver=(drvId,orderedIds)=>{setLog(p=>{let all=[...(p[dk]||[])];const drvEntries2=all.filter(e=>e.driverId===drvId);all=_reorderDriverBlock(all,drvId,orderByIds(drvEntries2,orderedIds));/* orderByIds strands unlisted entries (auto-pickups) at the end when the caller passes a delivery-only id list (desktop RouteBuilder Apply); rebuild each affected customer's auto-pickups so they land before their first delivery. */const custs=new Set(drvEntries2.filter(e=>e.stopType==="delivery").map(e=>e.customer));custs.forEach(c=>{all=rebuildPickupsFor(all,c);});return{...p,[dk]:all};});showToast("Routes applied");};
+const reorderDriver=(drvId,orderedIds)=>{setLog(p=>({...p,[dk]:applyReorderDriver(p[dk]||[],drvId,orderedIds,{rebuildPickups:rebuildPickupsFor,orderByIds})}));showToast("Routes applied");};
 const getCustColor=cust=>CC[cust]||CC["One-Off Delivery"];
 
 const jumpToDate=dateStr=>{const target=new Date(dateStr+"T12:00:00");const now=_weekRefNow();const tD=target.getDay();const tM=new Date(target);tM.setDate(target.getDate()-(tD===0?6:tD-1));const nD=now.getDay();const nM=new Date(now);nM.setDate(now.getDate()-(nD===0?6:nD-1));tM.setHours(0,0,0,0);nM.setHours(0,0,0,0);const diff=Math.round((tM-nM)/(7*24*60*60*1000));const dayIdx=tD===0?6:tD-1;setWo(diff);setSd(Math.min(Math.max(dayIdx,0),4));setShowDatePicker(false);setView("manifest");};

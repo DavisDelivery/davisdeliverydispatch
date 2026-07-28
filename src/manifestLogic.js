@@ -1292,3 +1292,68 @@ export const applySetLoadNum=(all,eid,n,deps)=>{
     return rebuildPickups(out,entry.customer);
   return out;
 };
+
+/* Replace a driver's stops with `nextOrder`, in their existing array slots so
+   other drivers' stops never shift. The length-mismatch fallback rebuilds the
+   list instead — it is the one path here that can change WHICH stops exist, so
+   the invariant suite checks stop conservation over every reorder. */
+export const reorderDriverBlock=(all,drvId,nextOrder)=>{
+  const slots=[];
+  all.forEach((e,i)=>{if(e&&e.driverId===drvId)slots.push(i);});
+  if(slots.length!==nextOrder.length)return[...all.filter(e=>!(e&&e.driverId===drvId)),...nextOrder];
+  const out=all.slice();
+  slots.forEach((idx,k)=>{out[idx]=nextOrder[k];});
+  return out;
+};
+
+/* The ▲▼ buttons: swap a stop with its neighbour inside the same (driver, load)
+   group, so a nudge can never jump a stop into another load. */
+export const applyMoveInDriver=(all,drvId,entryId,dir)=>{
+  if(!Array.isArray(all))return all;
+  const out=[...all];
+  const fromIdx=out.findIndex(e=>e&&e.id===entryId);
+  if(fromIdx<0)return all;
+  const moving=out[fromIdx];
+  if(moving.driverId!==drvId)return all;
+  const moveLoad=moving.loadNum||1;
+  const neighbors=[];
+  for(let i=0;i<out.length;i++){
+    const e=out[i];
+    if(e&&e.driverId===drvId&&(e.loadNum||1)===moveLoad)neighbors.push(i);
+  }
+  const targetPos=neighbors.indexOf(fromIdx)+dir;
+  if(targetPos<0||targetPos>=neighbors.length)return all;
+  const toIdx=neighbors[targetPos];
+  [out[fromIdx],out[toIdx]]=[out[toIdx],out[fromIdx]];
+  return out;
+};
+
+/* Route-planner Apply: impose an explicit order on a driver's stops. The id list
+   from the desktop RouteBuilder holds DELIVERIES only, so orderByIds strands the
+   auto-pickups at the end; rebuilding each affected customer puts them back in
+   front of their first delivery. */
+export const applyReorderDriver=(all,drvId,orderedIds,deps)=>{
+  if(!Array.isArray(all))return all;
+  const {rebuildPickups,orderByIds:obi}=deps||{};
+  if(typeof obi!=="function")return all;
+  const drvEntries=all.filter(e=>e&&e.driverId===drvId);
+  let out=reorderDriverBlock(all,drvId,obi(drvEntries,orderedIds));
+  if(typeof rebuildPickups==="function"){
+    [...new Set(drvEntries.filter(e=>e.stopType==="delivery").map(e=>e.customer))]
+      .forEach(c=>{out=rebuildPickups(out,c);});
+  }
+  return out;
+};
+
+/* Same-driver drag reorder: lift the grabbed stop out of the driver's block and
+   drop it at `toIdx`. Resolved by id, not the drag-start index, which can go
+   stale if a sync reorders the list mid-drag. */
+export const applyDropReorder=(all,drvId,srcId,srcIdxFallback,toIdx)=>{
+  if(!Array.isArray(all))return all;
+  const de=all.filter(e=>e&&e.driverId===drvId);
+  const srcIdx=srcId!=null?de.findIndex(e=>e.id===srcId):srcIdxFallback;
+  if(srcIdx<0||srcIdx>=de.length)return all;
+  const[moved]=de.splice(srcIdx,1);
+  de.splice(Math.min(Math.max(toIdx,0),de.length),0,moved);
+  return reorderDriverBlock(all,drvId,de);
+};

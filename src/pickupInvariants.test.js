@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { rebuildPickupsForPure, orderAutoPickupsFirst, applyReassign, applySetLoadNum, dedupeIds, dedupeAutoPickups, reapOrphanAutoPickups, normalizeOrder } from "./manifestLogic.js";
+import { rebuildPickupsForPure, orderAutoPickupsFirst, orderByIds, applyReassign, applySetLoadNum, applyMoveInDriver, applyReorderDriver, applyDropReorder, dedupeIds, dedupeAutoPickups, reapOrphanAutoPickups, normalizeOrder } from "./manifestLogic.js";
 import { PICKUP_SOURCES, MULTI_PICKUP, normLoc } from "./pickupConfig.js";
 
 /* ── Scenario sweep over the auto-pickup engine ───────────────────────────────
@@ -326,6 +326,115 @@ describe("manifest mutations — invariants hold across random dispatcher sessio
         reapOpts,
       );
       expect(ALL(back, back), `sync after session:\n  ${log.join("\n  ")}`).toEqual([]);
+    });
+  }
+});
+
+/* ── Full-board sessions, every operation ────────────────────────────────────
+   Adds the reorder paths — the ▲▼ nudges, drag reorder, and route-planner Apply
+   — to the mutation mix, and adds the invariant those paths can break that the
+   others cannot: a stop must never be LOST or DUPLICATED. reorderDriverBlock's
+   length-mismatch fallback rebuilds the driver's block from a list it was
+   handed, so a caller that passes a partial list silently drops the rest. */
+describe("manifest — every operation, invariants plus stop conservation", () => {
+  const rng = (seed) => () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
+  const reapOpts = {
+    multiSource: (c) => !!MULTI_PICKUP[c],
+    normLoc,
+    docksFor: (c) => docksFor(c).map((s) => s.label),
+  };
+
+  const board0 = () => {
+    const entries = [];
+    CUSTS.forEach((cust, ci) => {
+      [1, 2].forEach((drv) =>
+        entries.push(
+          del({ customer: cust, stop: `${cust} A d${drv}`, addr: `${cust}-A-${drv} St`, driverId: drv, loadNum: 1 }),
+          del({ customer: cust, stop: `${cust} B d${drv}`, addr: `${cust}-B-${drv} St`, driverId: drv, loadNum: (ci % 2) + 1 }),
+        ),
+      );
+    });
+    return entries;
+  };
+
+  /* Deliveries are real work — they may move, but they may never disappear or
+     double. Auto-pickups are derived, so they legitimately come and go. */
+  const delIds = (b) => b.filter((e) => e.stopType === "delivery").map((e) => e.id).sort();
+
+  for (let seed = 101; seed <= 130; seed++) {
+    it(`full session seed ${seed}`, () => {
+      const rand = rng(seed);
+      const d = deps({ driverLoadCount: { 1: 2, 2: 2, 3: 2 } });
+      const rebuildPickups = (all, cust) => rebuildPickupsForPure(all, cust, d);
+      const commit = (b) => orderAutoPickupsFirst(b, reapOpts);
+      let board = commit(rebuildAll(board0(), d));
+      const expected = delIds(board);
+      const log = [];
+
+      for (let step = 0; step < 25; step++) {
+        const stops = board.filter((e) => e.stopType === "delivery");
+        if (!stops.length) break;
+        const t = stops[Math.floor(rand() * stops.length)];
+        const drv = t.driverId || 1;
+        const r = rand();
+        let action;
+        if (r < 0.25) {
+          const to = [0, 1, 2, 3][Math.floor(rand() * 4)];
+          action = `reassign "${t.stop}" → drv ${to}`;
+          board = commit(applyReassign(board, t.id, to, undefined, { rebuildPickups }));
+        } else if (r < 0.45) {
+          const ln = 1 + Math.floor(rand() * 2);
+          action = `move "${t.stop}" → drv ${drv} load ${ln}`;
+          board = commit(applyReassign(board, t.id, drv, ln, { rebuildPickups }));
+        } else if (r < 0.6) {
+          const dir = rand() < 0.5 ? -1 : 1;
+          action = `nudge "${t.stop}" ${dir < 0 ? "up" : "down"}`;
+          /* EFFICACY: a nudge must actually move the stop one place within the
+             group the driver SEES — its own (driver, load). Checking only the
+             correctness invariants misses a nudge that swaps across a load
+             boundary: nothing breaks, but the stop doesn't move in its own group
+             and the button reads as dead. Position is measured in the rendered
+             group, so this catches "I clicked it and nothing happened". */
+          const groupOf = (b) =>
+            b.filter((e) => e.driverId === drv && (e.loadNum || 1) === (t.loadNum || 1)).map((e) => e.id);
+          const beforeG = groupOf(board);
+          const wasAt = beforeG.indexOf(t.id);
+          const partner = board.find((e) => e.id === beforeG[wasAt + dir]);
+          board = commit(applyMoveInDriver(board, drv, t.id, dir));
+          const nowAt = groupOf(board).indexOf(t.id);
+          const atEdge = (dir < 0 && wasAt === 0) || (dir > 0 && wasAt === beforeG.length - 1);
+          /* Swapping with an auto-pickup is legitimately undone by commit(): a
+             delivery cannot climb above the pickup that supplies it. Only assert
+             efficacy when the neighbour is another delivery. (The button doing
+             nothing in the pickup case is real, but it is a UX gap, not a
+             correctness one — flagged separately, not silently redefined here.) */
+          const partnerIsPickup = partner && partner.stopType === "pickup" && !partner.manualPickup;
+          if (!atEdge && wasAt >= 0 && !partnerIsPickup)
+            expect(nowAt, `nudge did not move the stop in its own load group — ${action}`).not.toBe(wasAt);
+        } else if (r < 0.8) {
+          const de = board.filter((e) => e.driverId === drv);
+          const toIdx = Math.floor(rand() * Math.max(de.length, 1));
+          action = `drag "${t.stop}" → slot ${toIdx} of drv ${drv}`;
+          board = commit(applyDropReorder(board, drv, t.id, 0, toIdx));
+        } else {
+          /* Route-planner Apply: a DELIVERY-ONLY id list, the shape that strands
+             auto-pickups and exercises the mismatch fallback. */
+          const ids = board.filter((e) => e.driverId === drv && e.stopType === "delivery").map((e) => e.id).reverse();
+          action = `route-apply drv ${drv} (${ids.length} deliveries, reversed)`;
+          board = commit(applyReorderDriver(board, drv, ids, { rebuildPickups, orderByIds }));
+        }
+        log.push(action);
+        const ctx = `after step ${step + 1}: ${action}\nsession:\n  ${log.join("\n  ")}`;
+        expect(delIds(board), `LOST/DUPLICATED STOP — ${ctx}`).toEqual(expected);
+        expect(ALL(board, board), ctx).toEqual([]);
+      }
+
+      const back = dedupeAutoPickups(
+        reapOrphanAutoPickups(normalizeOrder(dedupeIds(board), 1_700_000_000_000, reapOpts), reapOpts),
+        reapOpts,
+      );
+      expect(delIds(back), `stops lost in sync\n  ${log.join("\n  ")}`).toEqual(expected);
+      expect(ALL(back, back), `sync after session\n  ${log.join("\n  ")}`).toEqual([]);
     });
   }
 });
