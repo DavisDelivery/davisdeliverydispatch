@@ -62,7 +62,7 @@ inputMb4:{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"7px 10
 };
 import { useState, useCallback, useEffect, useRef, Fragment, Component } from "react";
 import { PICKUP_SOURCES, MULTI_PICKUP, normLoc as _normLoc } from "./pickupConfig.js";
-import { dedupeIds, dedupeAutoPickups, dedupeGhostDeliveries, dedupeDeliveries, reapOrphanAutoPickups, sanitizeEntry, _mergeEntryDriver, _mergeEntryDispatcher, buildMergedEntries, entrySig, makeTombFilter, makeDocTombFilter, mergeTombstones, vanishedAutoPickups, orderByIds, reconcileDriverRoster, applyDriverRemap, normDriverName, manualPickupCoversDock, allInRate, stripLiftgateFee, resequenceEntries, sortBySeq, normalizeOrder, orderAutoPickupsFirst, manualPickupOrigin, deliveryCollectedOffDock, rebuildPickupsForPure } from "./manifestLogic.js";
+import { dedupeIds, dedupeAutoPickups, dedupeGhostDeliveries, dedupeDeliveries, reapOrphanAutoPickups, sanitizeEntry, _mergeEntryDriver, _mergeEntryDispatcher, buildMergedEntries, entrySig, makeTombFilter, makeDocTombFilter, mergeTombstones, vanishedAutoPickups, orderByIds, reconcileDriverRoster, applyDriverRemap, normDriverName, manualPickupCoversDock, allInRate, stripLiftgateFee, resequenceEntries, sortBySeq, normalizeOrder, orderAutoPickupsFirst, manualPickupOrigin, deliveryCollectedOffDock, rebuildPickupsForPure, insertIdxForLoad, applyReassign, applySetLoadNum } from "./manifestLogic.js";
 import { diffOrderDocs, orderDocId, ordersParity } from "./ordersStore.js";
 
 const _SplitUI=({splitEntry,setSplitEntry})=>{const tw=splitEntry.totalWeight||0;const t1w=splitEntry.truck1Weight!==undefined?splitEntry.truck1Weight:Math.round(tw*(splitEntry.ratio/100));const t2w=tw-t1w;return(<><div style={_s.flexG6Mb6}><div style={_s.f1}><label style={_s.labelSm}>Total</label><input type="number" inputMode="numeric" value={tw||""} onChange={e=>{const newTw=parseInt(e.target.value)||0;setSplitEntry(p=>({...p,totalWeight:newTw,truck1Weight:Math.min(p.truck1Weight||Math.round(newTw/2),newTw)}));}} style={_s.splitTotal}/></div><div style={_s.f1}><label style={_s.labelBlue}>Truck 1</label><input type="number" inputMode="numeric" value={splitEntry.truck1Weight!==undefined?splitEntry.truck1Weight:""} onChange={e=>{const v=e.target.value;setSplitEntry(p=>({...p,truck1Weight:v===""?0:parseInt(v)||0}));}} style={_s.splitInput}/></div><div style={_s.f1}><label style={_s.labelGray}>Truck 2</label><div style={_s.splitT2}>{t2w.toLocaleString()}</div></div></div><input type="range" min={0} max={tw} step={100} value={t1w} onChange={e=>{const v=parseInt(e.target.value)||0;setSplitEntry(p=>({...p,truck1Weight:v}));}} style={_s.slider}/></>);};
@@ -4566,47 +4566,16 @@ const rmFromDriver=(id)=>{const entry=dl.find(e=>e.id===id);if(!entry)return;if(
 const reassign=(eid,did,newLoadNum)=>{
 const entry=dl.find(e=>e.id===eid);
 const oldDid=entry?.driverId;
-const oldLoad=entry?.loadNum||1;
 setLog(p=>{
-let all=[...(p[dk]||[])];
 const before=p[dk]||[];
-const idx=all.findIndex(e=>e.id===eid);
-if(idx<0)return p;
-const targetLoad=newLoadNum||oldLoad;
-const driverChanged=did!==oldDid;
-const loadChanged=newLoadNum&&newLoadNum!==oldLoad;
-/* Update the entry (driverId + optional loadNum). If driver or load changed,
-   splice it out and reinsert at the bottom of the target (driver, load) — this
-   matches the 'new stops land at the bottom' contract used by addDel and
-   assignInOrder. Without this step, reassigned entries stay at their original
-   array index, which often puts queue-assigned stops at position 1. */
-const updated={...all[idx],driverId:did,...(newLoadNum?{loadNum:newLoadNum}:{})};
-if(driverChanged||loadChanged){
-  all.splice(idx,1);
-  if(did>0){
-    const insertIdx=insertIdxForLoad(all,did,targetLoad);
-    all.splice(insertIdx,0,updated);
-  }else{
-    all.push(updated);
-  }
-}else{
-  all[idx]=updated;
-}
-if((driverChanged||loadChanged)&&(updated.stopType==="delivery"||(updated.stopType==="pickup"&&updated.manualPickup))){
-  /* A delivery move changes which driver/load needs an auto-pickup. A MANUAL
-     pickup move (including ✕ → Unassigned, which is a reassign to driver 0)
-     lifts the hasManualPU suppression on the load it left, so the auto pickup
-     must regenerate there. Either way, rebuild for this customer. */
-  all=rebuildPickupsFor(all,updated.customer);
-}
-/* rebuildPickupsFor nukes and recreates auto-pickups. When a reassign leaves
-   a driver with no deliveries for this customer, their auto-pickup is removed
-   and NOT recreated — correct. But that removed pickup is still in Firebase;
-   without a tombstone the next transactional save sees it FB-only and
-   resurrects it as an orphan card (the 'separate pickup card that should have
-   gone away' bug). Tombstone ONLY the vanished AUTO-PICKUPS — a reassign never
-   legitimately removes a delivery, so a delivery must never be tombstoned here
-   (that diff-based heuristic is what silently erased real deliveries). */
+const all=applyReassign(before,eid,did,newLoadNum,{rebuildPickups:rebuildPickupsFor});
+if(all===before)return p;
+/* rebuildPickupsFor nukes and recreates auto-pickups. When a reassign leaves a
+   driver with no deliveries for this customer, their auto-pickup is removed and
+   NOT recreated — correct. But it is still in Firebase; without a tombstone the
+   next transactional save sees it FB-only and resurrects it as an orphan card.
+   Tombstone ONLY vanished AUTO-PICKUPS — a reassign never legitimately removes
+   a delivery, and that diff-based heuristic is what once erased real ones. */
 const vanished=vanishedAutoPickups(before,all);
 if(vanished.length)tombstone(vanished);
 return{...p,[dk]:all};
@@ -4897,7 +4866,7 @@ const runBackupNow=async()=>{
     setBackupTestRunning(false);
   }
 };
-const setLoadNum=(eid,n)=>{setLog(p=>{const before=p[dk]||[];let all=before.map(e=>e.id===eid?{...e,loadNum:n}:e);const entry=all.find(e=>e.id===eid);if(entry&&entry.stopType==="delivery")all=rebuildPickupsFor(all,entry.customer);/* the old load's pickup vanished in the rebuild — tombstone it or the save merge resurrects it on the old load */const vanished=vanishedAutoPickups(before,all);if(vanished.length)tombstone(vanished);return{...p,[dk]:all};});};
+const setLoadNum=(eid,n)=>{setLog(p=>{const before=p[dk]||[];const all=applySetLoadNum(before,eid,n,{rebuildPickups:rebuildPickupsFor});/* the old load's pickup vanished in the rebuild — tombstone it or the save merge resurrects it on the old load */const vanished=vanishedAutoPickups(before,all);if(vanished.length)tombstone(vanished);return{...p,[dk]:all};});};
 
 const TRUCK_LIMITS={default:10000,heavy:13500};
 const[driverCapacity,setDriverCapacity]=useState(()=>lsGet("dd_driver_capacity",{})); /* {driverId: 10000|13500} */
@@ -5332,38 +5301,7 @@ const drvEntries=did=>{
     return (typeof e.note==="string"&&e.note.startsWith("Load order:"))?{...e,note:null}:e;
   });
 };
-/* Find the array index to splice-insert a new entry so that it lands at the
-   BOTTOM of the specified (driver, loadNum). If the load is empty for this
-   driver, inserts after the last stop of any lower load (keeps loads ordered).
-   If driver has no stops yet, inserts after the last entry of any driver.
-   Used by addDel, addQuoteWithPickup, assignInOrder so inserts are consistent
-   and never land in the middle or top of a load unexpectedly. */
-const insertIdxForLoad=(arr,drvId,loadNum)=>{
-  const ln=loadNum||1;
-  /* Prefer: last entry of (drvId, same loadNum) */
-  for(let i=arr.length-1;i>=0;i--){
-    if(arr[i].driverId===drvId&&(arr[i].loadNum||1)===ln)return i+1;
-  }
-  /* Fallback: last entry of (drvId, any smaller loadNum) — keeps loads in order */
-  for(let i=arr.length-1;i>=0;i--){
-    if(arr[i].driverId===drvId&&(arr[i].loadNum||1)<ln)return i+1;
-  }
-  /* Fallback: last entry of drvId on any load (new load above existing ones — rare) */
-  for(let i=arr.length-1;i>=0;i--){
-    if(arr[i].driverId===drvId)return i+1;
-  }
-  /* Driver has no entries yet — append at the end */
-  return arr.length;
-};
-/* `toLoad` — the load number of whatever was dropped ON (a stop, or an empty
-   load's placeholder). Without it a drop could only ever permute array
-   positions, and a load is a FIELD (`loadNum`), not a position: a stop dragged
-   from Load 1 onto Load 2 silently stayed on Load 1, and the empty-load box
-   reading "drag or assign stops here" wasn't a drop target at all — it had no
-   onDragOver, so the browser never fired a drop on it. Both now route through
-   reassign(), which already owns this move: it sets driver and load together,
-   lands the stop at the bottom of the target load, and rebuilds the auto-pickups
-   both loads need afterwards. */
+
 const handleDrop=(drvId,toIdx,toLoad)=>{
 if(!dragSrc){setDragSrc(null);setDragOver(null);return;}
 /* Resolve the grabbed stop up front — a cross-LOAD drop is a different

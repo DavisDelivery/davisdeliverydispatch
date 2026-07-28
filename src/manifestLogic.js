@@ -1208,3 +1208,87 @@ if(_orphanPus.length)tombstone(_orphanPus); /* auto-pickups only; pass entries f
 return all;
 };
 
+
+/* ── Manifest mutations ──────────────────────────────────────────────────────
+   The operations a dispatcher performs on a board. Extracted from App.jsx so
+   SEQUENCES of them can be fuzzed against the manifest invariants — a single
+   reassign being correct says nothing about a board that has had twenty
+   applied to it, and drift only shows up over a sequence. */
+
+/* Find the array index to splice-insert a new entry so that it lands at the
+   BOTTOM of the specified (driver, loadNum). If the load is empty for this
+   driver, inserts after the last stop of any lower load (keeps loads ordered).
+   If driver has no stops yet, inserts after the last entry of any driver.
+   Used by addDel, addQuoteWithPickup, assignInOrder so inserts are consistent
+   and never land in the middle or top of a load unexpectedly. */
+export const insertIdxForLoad=(arr,drvId,loadNum)=>{
+  const ln=loadNum||1;
+  /* Prefer: last entry of (drvId, same loadNum) */
+  for(let i=arr.length-1;i>=0;i--){
+    if(arr[i].driverId===drvId&&(arr[i].loadNum||1)===ln)return i+1;
+  }
+  /* Fallback: last entry of (drvId, any smaller loadNum) — keeps loads in order */
+  for(let i=arr.length-1;i>=0;i--){
+    if(arr[i].driverId===drvId&&(arr[i].loadNum||1)<ln)return i+1;
+  }
+  /* Fallback: last entry of drvId on any load (new load above existing ones — rare) */
+  for(let i=arr.length-1;i>=0;i--){
+    if(arr[i].driverId===drvId)return i+1;
+  }
+  /* Driver has no entries yet — append at the end */
+  return arr.length;
+};
+/* `toLoad` — the load number of whatever was dropped ON (a stop, or an empty
+   load's placeholder). Without it a drop could only ever permute array
+   positions, and a load is a FIELD (`loadNum`), not a position: a stop dragged
+   from Load 1 onto Load 2 silently stayed on Load 1, and the empty-load box
+   reading "drag or assign stops here" wasn't a drop target at all — it had no
+   onDragOver, so the browser never fired a drop on it. Both now route through
+   reassign(), which already owns this move: it sets driver and load together,
+   lands the stop at the bottom of the target load, and rebuilds the auto-pickups
+   both loads need afterwards. */
+
+/* Move an entry to a driver and (optionally) a load. `deps.rebuildPickups` is
+   the bound auto-pickup engine; it runs only when the move actually changed
+   something that invalidates a pickup, matching the original. */
+export const applyReassign=(all,eid,did,newLoadNum,deps)=>{
+  if(!Array.isArray(all))return all;
+  const {rebuildPickups}=deps||{};
+  const out=[...all];
+  const idx=out.findIndex(e=>e&&e.id===eid);
+  if(idx<0)return all;
+  const cur=out[idx];
+  /* Old driver/load read from the array being edited. The component version
+     read them off the display list, which is the same for these two fields and
+     one less thing to go stale mid-edit. */
+  const oldDid=cur.driverId,oldLoad=cur.loadNum||1;
+  const targetLoad=newLoadNum||oldLoad;
+  const driverChanged=did!==oldDid;
+  const loadChanged=!!newLoadNum&&newLoadNum!==oldLoad;
+  const updated={...cur,driverId:did,...(newLoadNum?{loadNum:newLoadNum}:{})};
+  if(driverChanged||loadChanged){
+    /* Splice out and reinsert at the bottom of the target (driver, load) — the
+       'new stops land at the bottom' contract shared with addDel. */
+    out.splice(idx,1);
+    if(did>0)out.splice(insertIdxForLoad(out,did,targetLoad),0,updated);
+    else out.push(updated);
+  }else{
+    out[idx]=updated;
+  }
+  if((driverChanged||loadChanged)&&(updated.stopType==="delivery"||(updated.stopType==="pickup"&&updated.manualPickup))
+     &&typeof rebuildPickups==="function"){
+    return rebuildPickups(out,updated.customer);
+  }
+  return out;
+};
+
+/* Change only an entry's load, in place. */
+export const applySetLoadNum=(all,eid,n,deps)=>{
+  if(!Array.isArray(all))return all;
+  const {rebuildPickups}=deps||{};
+  const out=all.map(e=>(e&&e.id===eid?{...e,loadNum:n}:e));
+  const entry=out.find(e=>e&&e.id===eid);
+  if(entry&&entry.stopType==="delivery"&&typeof rebuildPickups==="function")
+    return rebuildPickups(out,entry.customer);
+  return out;
+};

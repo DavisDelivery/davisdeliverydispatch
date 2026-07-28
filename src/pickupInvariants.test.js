@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { rebuildPickupsForPure, dedupeIds, dedupeAutoPickups, reapOrphanAutoPickups, normalizeOrder } from "./manifestLogic.js";
+import { rebuildPickupsForPure, orderAutoPickupsFirst, applyReassign, applySetLoadNum, dedupeIds, dedupeAutoPickups, reapOrphanAutoPickups, normalizeOrder } from "./manifestLogic.js";
 import { PICKUP_SOURCES, MULTI_PICKUP, normLoc } from "./pickupConfig.js";
 
 /* ── Scenario sweep over the auto-pickup engine ───────────────────────────────
@@ -251,4 +251,81 @@ describe("auto-pickup engine — survives the save/reload pipeline", () => {
       first.map((e) => `${e.stopType}:${e.stop}:${e.id}`),
     );
   });
+});
+
+/* ── Operation sequences ─────────────────────────────────────────────────────
+   A single reassign being correct says nothing about a board that has had
+   twenty applied to it. Drift accumulates: a card creeps one slot per rebuild,
+   a pickup is orphaned three moves after the move that stranded it. This
+   replays random dispatcher sessions — reassign between drivers, move between
+   loads, send back to unassigned — and checks every invariant after EVERY
+   action, so a failure names the exact step that broke the board. */
+describe("manifest mutations — invariants hold across random dispatcher sessions", () => {
+  /* Deterministic PRNG: a failure is reproducible from its seed. */
+  const rng = (seed) => () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
+  const reapOpts = {
+    multiSource: (c) => !!MULTI_PICKUP[c],
+    normLoc,
+    docksFor: (c) => docksFor(c).map((s) => s.label),
+  };
+
+  const startingBoard = () => {
+    const entries = [];
+    CUSTS.forEach((cust, ci) => {
+      [1, 2].forEach((drv) => {
+        entries.push(
+          del({ customer: cust, stop: `${cust} A d${drv}`, addr: `${cust}-A-${drv} St`, driverId: drv, loadNum: 1 }),
+          del({ customer: cust, stop: `${cust} B d${drv}`, addr: `${cust}-B-${drv} St`, driverId: drv, loadNum: (ci % 2) + 1 }),
+        );
+      });
+    });
+    return entries;
+  };
+
+  for (let seed = 1; seed <= 25; seed++) {
+    it(`session seed ${seed}`, () => {
+      const rand = rng(seed);
+      const d = deps({ driverLoadCount: { 1: 2, 2: 2, 3: 2 } });
+      const rebuildPickups = (all, cust) => rebuildPickupsForPure(all, cust, d);
+      /* Every mutation in the app goes through setLog, which applies
+         orderAutoPickupsFirst before the state lands. Model that here or the
+         harness reports precedence violations the app fixes in the same tick. */
+      const commit = (b) => orderAutoPickupsFirst(b, reapOpts);
+      let board = commit(rebuildAll(startingBoard(), d));
+      const log = [];
+
+      for (let step = 0; step < 20; step++) {
+        const movable = board.filter((e) => e.stopType === "delivery");
+        if (!movable.length) break;
+        const target = movable[Math.floor(rand() * movable.length)];
+        const pick = rand();
+        let action;
+        if (pick < 0.45) {
+          const drv = [0, 1, 2, 3][Math.floor(rand() * 4)];
+          action = `reassign "${target.stop}" → drv ${drv}`;
+          board = commit(applyReassign(board, target.id, drv, undefined, { rebuildPickups }));
+        } else if (pick < 0.8) {
+          const ln = 1 + Math.floor(rand() * 2);
+          const drv = target.driverId || 1;
+          action = `move "${target.stop}" → drv ${drv} load ${ln}`;
+          board = commit(applyReassign(board, target.id, drv, ln, { rebuildPickups }));
+        } else {
+          const ln = 1 + Math.floor(rand() * 2);
+          action = `setLoad "${target.stop}" → ${ln}`;
+          board = commit(applySetLoadNum(board, target.id, ln, { rebuildPickups }));
+        }
+        log.push(action);
+
+        const violations = ALL(board, board);
+        expect(violations, `after step ${step + 1}: ${action}\nsession:\n  ${log.join("\n  ")}`).toEqual([]);
+      }
+
+      /* And the finished board must survive a sync like any other. */
+      const back = dedupeAutoPickups(
+        reapOrphanAutoPickups(normalizeOrder(dedupeIds(board), 1_700_000_000_000, reapOpts), reapOpts),
+        reapOpts,
+      );
+      expect(ALL(back, back), `sync after session:\n  ${log.join("\n  ")}`).toEqual([]);
+    });
+  }
 });
