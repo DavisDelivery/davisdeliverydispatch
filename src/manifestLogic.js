@@ -505,6 +505,42 @@ export const manualPickupCoversDock=(e,loc,srcLabel,normLoc)=>{
   return !!supplier&&stopL.includes(supplier)&&stopL.includes(String(loc).toLowerCase());
 };
 
+/* Is this delivery's freight collected somewhere that ISN'T one of the
+   supplier's docks, with a manual pickup already scheduled there?
+
+   The grouping in rebuildPickupsFor resolves a delivery's `pickupFrom` against
+   PICKUP_SOURCES and, when nothing matches, falls back to puSrcs[0] — the
+   supplier's default dock. That fallback is right for a delivery that never
+   named a dock, and wrong for one that named a place the supplier doesn't own:
+   an MM Systems load collected at Southern Aluminum got bucketed under the
+   Pendergrass dock and grew a second pickup card there, on top of the manual
+   Southern Aluminum card that was already covering it. Because the delivery
+   itself was to Pendergrass, that phantom card told the driver to pick up and
+   deliver at the same address.
+
+   hasManualPU can't catch this: manualPickupCoversDock asks whether the manual
+   pickup covers the DOCK, and a pickup at Southern Aluminum plainly doesn't.
+   The question here is the other one — whether this delivery goes to a dock at
+   all. manualPickupOrigin can't catch it either; it bails when an auto card
+   exists on the load, which by then is the very card we should not have made.
+
+   Narrow on purpose — it only fires when the dispatcher stated the origin twice
+   over (a pickupFrom that matches no dock, AND a manual pickup sitting at that
+   same place on this driver+load), so a delivery that really does come off a
+   dock keeps its dock card. */
+export const deliveryCollectedOffDock=(e,puSrcs,entries,normLoc)=>{
+  if(!e||!e.pickupFrom||!Array.isArray(puSrcs)||!Array.isArray(entries))return false;
+  const nl=typeof normLoc==="function"?normLoc:(s)=>String(s||"").trim().toLowerCase();
+  const from=nl(e.pickupFrom);
+  if(!from)return false;
+  if(puSrcs.some(s=>s&&nl(s.label)===from))return false; /* names a real dock → normal dock flow */
+  const drv=e.driverId||0,ln=e.loadNum||1;
+  /* Same " → destination" suffix the insert-pickup form can leave on `stop`. */
+  return entries.some(p=>p&&p.stopType==="pickup"&&p.manualPickup&&p.customer===e.customer
+    &&(p.driverId||0)===drv&&(p.loadNum||1)===ln
+    &&nl(String(p.stop||"").split(/\s*→\s*/)[0])===from);
+};
+
 /* Where a delivery's load actually comes from when a MANUAL pickup on the same
    (driver, load) already says so. Returns that pickup's location, or null.
 

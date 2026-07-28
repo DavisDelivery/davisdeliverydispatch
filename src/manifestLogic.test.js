@@ -21,6 +21,7 @@ import {
   makeDocTombFilter,
   DOC_TOMBSTONE_TTL,
   manualPickupCoversDock,
+  deliveryCollectedOffDock,
   manualPickupOrigin,
   allInRate,
   stripLiftgateFee,
@@ -1537,5 +1538,50 @@ describe("manualPickupOrigin — a manual pickup already states the origin", () 
   it("no manual pickup at all -> null, so the dock prompt still appears", () => {
     const d = del({ id: "d1", customer: "Emser Tile", driverId: 5, loadNum: 1 });
     expect(manualPickupOrigin(d, [d])).toBeNull();
+  });
+});
+
+describe("deliveryCollectedOffDock", () => {
+  /* The real shape from Brent's Load 2: MM Systems freight collected at
+     Southern Aluminum, delivered to MM Systems' own Pendergrass address. */
+  const NL = (v) => {
+    if (!v || typeof v !== "string") return "";
+    const parts = v.split(/\s+[-–—]\s+/);
+    return parts[parts.length - 1].trim().toLowerCase();
+  };
+  const SRCS = [{ customer: "MM Systems", label: "MM Systems - Pendergrass" }];
+  const del = (o = {}) => ({ stopType: "delivery", customer: "MM Systems", driverId: 3, loadNum: 2, stop: "MM Systems – Pendergrass", pickupFrom: "Southern Aluminum – Lithia Springs", ...o });
+  const mpu = (o = {}) => ({ stopType: "pickup", manualPickup: true, customer: "MM Systems", driverId: 3, loadNum: 2, stop: "Southern Aluminum – Lithia Springs", ...o });
+
+  it("is true when pickupFrom names a non-dock place with a manual pickup there", () => {
+    expect(deliveryCollectedOffDock(del(), SRCS, [del(), mpu()], NL)).toBe(true);
+  });
+  it("is false with no manual pickup to back it up — the dispatcher only said it once", () => {
+    expect(deliveryCollectedOffDock(del(), SRCS, [del()], NL)).toBe(false);
+  });
+  it("is false when pickupFrom names a real dock, in any of its spellings", () => {
+    expect(deliveryCollectedOffDock(del({ pickupFrom: "Pendergrass" }), SRCS, [del(), mpu()], NL)).toBe(false);
+    expect(deliveryCollectedOffDock(del({ pickupFrom: "MM Systems - Pendergrass" }), SRCS, [del(), mpu()], NL)).toBe(false);
+  });
+  it("is false when the manual pickup is on another driver or load", () => {
+    expect(deliveryCollectedOffDock(del(), SRCS, [del(), mpu({ driverId: 9 })], NL)).toBe(false);
+    expect(deliveryCollectedOffDock(del(), SRCS, [del(), mpu({ loadNum: 1 })], NL)).toBe(false);
+  });
+  it("is false when the manual pickup is somewhere else entirely", () => {
+    expect(deliveryCollectedOffDock(del(), SRCS, [del(), mpu({ stop: "DCO Smyrna" })], NL)).toBe(false);
+  });
+  it("is false for another customer's manual pickup at the same place", () => {
+    expect(deliveryCollectedOffDock(del(), SRCS, [del(), mpu({ customer: "Emser Tile" })], NL)).toBe(false);
+  });
+  it("tolerates the insert-pickup form's ' → destination' suffix on stop", () => {
+    expect(deliveryCollectedOffDock(del(), SRCS, [del(), mpu({ stop: "Southern Aluminum – Lithia Springs → MM Systems" })], NL)).toBe(true);
+  });
+  it("is false with no pickupFrom at all — that's the normal dock fallback", () => {
+    expect(deliveryCollectedOffDock(del({ pickupFrom: "" }), SRCS, [del(), mpu()], NL)).toBe(false);
+  });
+  it("guards bad input", () => {
+    expect(deliveryCollectedOffDock(null, SRCS, [], NL)).toBe(false);
+    expect(deliveryCollectedOffDock(del(), null, [], NL)).toBe(false);
+    expect(deliveryCollectedOffDock(del(), SRCS, null, NL)).toBe(false);
   });
 });
