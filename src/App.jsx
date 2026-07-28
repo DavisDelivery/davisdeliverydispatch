@@ -61,7 +61,8 @@ greenBtn:{background:"#16a34a",color:"#fff",border:"none",borderRadius:8,padding
 inputMb4:{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"7px 10px",fontSize:12,outline:"none",marginBottom:4},
 };
 import { useState, useCallback, useEffect, useRef, Fragment, Component } from "react";
-import { dedupeIds, dedupeAutoPickups, dedupeGhostDeliveries, dedupeDeliveries, reapOrphanAutoPickups, sanitizeEntry, _mergeEntryDriver, _mergeEntryDispatcher, buildMergedEntries, entrySig, makeTombFilter, makeDocTombFilter, mergeTombstones, vanishedAutoPickups, orderByIds, reconcileDriverRoster, applyDriverRemap, normDriverName, manualPickupCoversDock, allInRate, stripLiftgateFee, resequenceEntries, sortBySeq, normalizeOrder, orderAutoPickupsFirst, manualPickupOrigin, deliveryCollectedOffDock } from "./manifestLogic.js";
+import { PICKUP_SOURCES, MULTI_PICKUP, normLoc as _normLoc } from "./pickupConfig.js";
+import { dedupeIds, dedupeAutoPickups, dedupeGhostDeliveries, dedupeDeliveries, reapOrphanAutoPickups, sanitizeEntry, _mergeEntryDriver, _mergeEntryDispatcher, buildMergedEntries, entrySig, makeTombFilter, makeDocTombFilter, mergeTombstones, vanishedAutoPickups, orderByIds, reconcileDriverRoster, applyDriverRemap, normDriverName, manualPickupCoversDock, allInRate, stripLiftgateFee, resequenceEntries, sortBySeq, normalizeOrder, orderAutoPickupsFirst, manualPickupOrigin, deliveryCollectedOffDock, rebuildPickupsForPure } from "./manifestLogic.js";
 import { diffOrderDocs, orderDocId, ordersParity } from "./ordersStore.js";
 
 const _SplitUI=({splitEntry,setSplitEntry})=>{const tw=splitEntry.totalWeight||0;const t1w=splitEntry.truck1Weight!==undefined?splitEntry.truck1Weight:Math.round(tw*(splitEntry.ratio/100));const t2w=tw-t1w;return(<><div style={_s.flexG6Mb6}><div style={_s.f1}><label style={_s.labelSm}>Total</label><input type="number" inputMode="numeric" value={tw||""} onChange={e=>{const newTw=parseInt(e.target.value)||0;setSplitEntry(p=>({...p,totalWeight:newTw,truck1Weight:Math.min(p.truck1Weight||Math.round(newTw/2),newTw)}));}} style={_s.splitTotal}/></div><div style={_s.f1}><label style={_s.labelBlue}>Truck 1</label><input type="number" inputMode="numeric" value={splitEntry.truck1Weight!==undefined?splitEntry.truck1Weight:""} onChange={e=>{const v=e.target.value;setSplitEntry(p=>({...p,truck1Weight:v===""?0:parseInt(v)||0}));}} style={_s.splitInput}/></div><div style={_s.f1}><label style={_s.labelGray}>Truck 2</label><div style={_s.splitT2}>{t2w.toLocaleString()}</div></div></div><input type="range" min={0} max={tw} step={100} value={t1w} onChange={e=>{const v=parseInt(e.target.value)||0;setSplitEntry(p=>({...p,truck1Weight:v}));}} style={_s.slider}/></>);};
@@ -1012,58 +1013,19 @@ const QUOTE_CUSTOMERS=[
 {name:"Traditions in Tile",pickups:[{label:"Alpharetta",addr:"3065 Trotters Parkway, Alpharetta, GA 30004"},{label:"Atlanta",addr:"1015 Chattahoochee Avenue NW, Atlanta, GA 30318"},{label:"Bogart",addr:"150 Trade Street, Bogart, GA 30622"}]},
 ];
 
-const PICKUP_SOURCES=[
-{customer:"Emser Tile",label:"Emser - Norcross",addr:"5470 Oakbrook Pkwy, Norcross, GA 30093"},
-{customer:"Emser Tile",label:"Emser - Roswell",addr:"250 Hembree Park Drive, Roswell, GA 30076"},
-{customer:"Florida Tile",label:"Florida Tile - Norcross",addr:"1455 Oakbrook Drive, Suite 100, Norcross, GA 30093"},
-{customer:"Specialty",label:"Specialty - Norcross",addr:"1275 Oakbrook Drive, Suite D, Norcross, GA 30093"},
-{customer:"IMETCO",label:"IMETCO - Norcross",addr:"4648 South Old Peachtree Road, Norcross, GA 30071"},
-{customer:"IMETCO",label:"Finishing Dynamics - Villa Rica",addr:"28 Andrews Way, Villa Rica, GA 30180"},
-{customer:"IMETCO",label:"Perfect Edge - Doraville",addr:"4264 Winters Chapel Road, Building F, Doraville, GA 30360"},
-{customer:"IMETCO",label:"Southern Aluminum - Lithia Springs",addr:"1401 Blairs Bridge Road, Lithia Springs, GA 30122"},
-{customer:"MM Systems",label:"MM Systems - Pendergrass",addr:"50 MM Way, Pendergrass, GA 30567"},
-{customer:"Perfect Edge",label:"Perfect Edge - Doraville",addr:"4264 Winters Chapel Road, Building F, Doraville, GA 30360"},
-{customer:"Crossville Studios",label:"Crossville - Norcross",addr:"1256 Oakbrook Drive, Suite F, Norcross, GA 30093"},
-{customer:"Traditions in Tile",label:"Traditions - Alpharetta",addr:"3065 Trotters Parkway, Alpharetta, GA 30004"},
-{customer:"Traditions in Tile",label:"Traditions - Atlanta",addr:"1015 Chattahoochee Avenue NW, Atlanta, GA 30318"},
-{customer:"Traditions in Tile",label:"Traditions - Bogart",addr:"150 Trade Street, Bogart, GA 30622"},
-{customer:"Prolex Flooring",label:"Prolex - Norcross",addr:"3044 Northwoods Circle, Norcross, GA 30071"},
-{customer:"Ceramic Tile Services",label:"Ceramic Tile - Gainesville",addr:"470 Woodsmill Road, Suite B, Gainesville, GA 30501"},
-{customer:"Woodbury Stamping",label:"Woodbury - Woodbury",addr:"29 Durand Street, Woodbury, GA 30293"},
-];
 
 const SHARED_STOPS=["Atlanta West - Lithia Springs","BEC - Alpharetta","Britts - Lawrenceville","D3 - Woodstock","DCO Lakes Pkwy","DCO Tech Dr","Hillman - Sugar Hill","NE Corner - Flowery Branch","Precision Flooring - Norcross","Premier - Suwanee","ProSource - Norcross","SE Commercial - Woodstock","Vanguard - Norcross"];
 
 function getBaseTier(mi){if(mi<=10)return 100;if(mi<=20)return 150;if(mi<=30)return 200;if(mi<=40)return 250;return 250+Math.ceil((mi-40)/10)*25;}
 
-/* Customers that ship from more than one physical pickup location. For these,
-   a manifest card MUST name the specific location (Alpharetta vs Atlanta,
-   Norcross vs Roswell) — "pickup from Traditions in Tile" alone tells the
-   driver nothing. Built from PICKUP_SOURCES so it stays in sync. */
-const MULTI_PICKUP=(()=>{
-  const byCust={};
-  PICKUP_SOURCES.forEach(s=>{(byCust[s.customer]=byCust[s.customer]||[]).push(s);});
-  const out={};
-  Object.entries(byCust).forEach(([c,arr])=>{if(arr.length>1)out[c]=arr;});
-  return out;
-})();
-/* Normalize a pickup-location value to a canonical token so the many stored
-   formats compare equal. Firestore data carries the same physical location
-   written several ways: "Norcross", "Emser - Norcross", "Emser Tile —
-   Norcross". They must all reduce to "norcross". Rule: take the part after
-   the last " - " or " — " separator (if any), lowercase, trim. A bare
-   "Norcross" stays "norcross"; "Emser - Norcross" -> "norcross". Returns ""
-   for null/empty. */
-const _normLoc=(v)=>{
-  if(!v||typeof v!=="string")return"";
-  const parts=v.split(/\s+[-–—]\s+/);/* hyphen, en-dash, em-dash — the same dock ships in all three */
-  return parts[parts.length-1].trim().toLowerCase();
-};
+
 /* Dock-aware orphan-pickup reaping: multi-source suppliers (MULTI_PICKUP) can
    carry one auto-pickup per dock on a (driver,load), so the reaper must match a
    pickup to a delivery at its OWN dock, not just same-customer. Passed to
    reapOrphanAutoPickups / buildMergedEntries at every ingest + save. */
-const _reapOpts={multiSource:(c)=>!!MULTI_PICKUP[c],normLoc:_normLoc};
+const _reapOpts={multiSource:(c)=>!!MULTI_PICKUP[c],normLoc:_normLoc,
+  /* Lets the reaper tell a real dock from a free-typed origin — see reapOrphanAutoPickups. */
+  docksFor:(c)=>PICKUP_SOURCES.filter(s=>s.customer===c).map(s=>s.label)};
 /* Given an entry, work out what pickup text to show and whether the location
    is still ambiguous (a multi-location customer with no specific location
    picked). Returns {text, ambiguous}. */
@@ -4552,151 +4514,12 @@ newEntries.forEach(e=>{if(e.stopType==="delivery"){writeAuditLog({action:"create
 showToast(`${stops.length} stops added`);setMultiSelect(false);setMultiChecked([]);
 };
 
-const rebuildPickupsFor=(all,cust)=>{
-const makeNote=(dels)=>{
-  if(!dels.length)return"";
-  /* Reverse to LIFO load order. Full list — no truncation. */
-  const names=dels.slice().reverse().map(e=>e.stop);
-  return "Load order: "+names.join(", ");
-};
-const puSrcs=PICKUP_SOURCES.filter(s=>s.customer===cust);
-if(!puSrcs.length)return all;
-const removedPUs=all.filter(e=>e.customer===cust&&e.stopType==="pickup"&&!e.manualPickup);
-/* Before removing the auto-pickups, remember WHERE each one sat so a rebuild
-   triggered by an unrelated change (e.g. adding a stop to another driver)
-   doesn't relocate a pickup the dispatcher manually positioned. For each
-   removed pickup, record the id of the very next entry after it in the array
-   (its "anchor"). On re-insert we place the reused pickup right before that
-   same anchor, preserving the manual order. Falls back to delivery-based
-   placement only for genuinely new pickups or when the anchor is gone. */
-const _puAnchorById={};
-const _removedIdSet=new Set(removedPUs.map(p=>p.id));
-removedPUs.forEach(p=>{
-  const idx=all.findIndex(e=>e.id===p.id);
-  if(idx>=0){
-    /* Anchor = next entry that is NOT itself an auto-pickup being removed in
-       this pass, so the anchor is a stable delivery (or other kept entry)
-       that will still be present after regeneration. */
-    const next=all.slice(idx+1).find(e=>e.id&&!_removedIdSet.has(e.id));
-    _puAnchorById[p.id]=next?next.id:null; /* null => was at end */
-  }
-});
-all=all.filter(e=>!(e.customer===cust&&e.stopType==="pickup"&&!e.manualPickup));
-/* Track which removed-pickup ids get reused by a regenerated pickup. Any
-   removed pickup whose id is NOT reused is genuinely gone — it must be
-   tombstoned, or the next transactional save sees it FB-only and resurrects
-   it as an orphan card. */
-const _reusedPuIds=new Set();
-const custDels=all.filter(e=>e.customer===cust&&e.stopType==="delivery");
-const byDriver={};
-custDels.forEach(e=>{if(e.driverId>0){if(!byDriver[e.driverId])byDriver[e.driverId]=[];byDriver[e.driverId].push(e);}});
-const cd=CUSTOMERS[cust];
-const puDueBy=(cust==="Specialty")?"Pickup 7:30 AM — Specialty":null;
-Object.entries(byDriver).forEach(([drvIdStr,dels])=>{
-const dId=Number(drvIdStr);
-const byLocLoad={};
-dels.forEach(e=>{
-  /* Freight collected off-dock (pickupFrom names somewhere the supplier doesn't
-     own, and a manual pickup is already scheduled there) needs no dock card —
-     without this the puSrcs[0] fallback below buckets it under the supplier's
-     default dock and generates a SECOND pickup for a delivery the manual card
-     already covers. See deliveryCollectedOffDock. */
-  if(deliveryCollectedOffDock(e,puSrcs,all,_normLoc))return;
-  /* Group deliveries under a pickup location deterministically, keyed on the
-     NORMALIZED location. A delivery's location is its own pickupFrom; when
-     absent, fall back to the first source label. selPickup (the volatile UI
-     toggle) is never used — that spawned ghost duplicates.
-
-     Critically the key uses _normLoc: the stored pickupFrom comes in several
-     formats for the same dock ("Norcross", "Emser - Norcross", "Emser Tile —
-     Norcross"). Keying on the raw string put those in different groups and
-     created a separate pickup card for each variant — more ghosts. _normLoc
-     collapses them to one. We still keep a clean display label (prefer the
-     matching source's short label) for the pickup's pickupFrom. */
-  const rawLoc=e.pickupFrom||puSrcs[0].label.split(" - ").pop();
-  const normLoc=_normLoc(rawLoc);
-  const matchSrc=puSrcs.find(s=>_normLoc(s.label)===normLoc)||puSrcs[0];
-  const loc=matchSrc.label.split(" - ").pop();
-  const ln=e.loadNum||1;
-  const key=normLoc+"::"+ln;
-  if(!byLocLoad[key])byLocLoad[key]={loc,loadNum:ln,dels:[]};
-  byLocLoad[key].dels.push(e);
-});
-/* hasMultiLoads should reflect this DRIVER's overall load usage, not just
-   this customer's. Otherwise a Florida Tile delivery on Load 2 would get a
-   Load 1 pickup if Brent's other Load 2 stops were for different customers.
-   Combines: (a) loads present in the new `all` state for this driver, and
-   (b) the explicit driverLoadCount setting (user may have added Load 2 via
-   the + Load button before moving any stops into it). */
-const loadsInAll=new Set(all.filter(e=>e.driverId===dId).map(e=>e.loadNum||1));
-const explicitLoads=driverLoadCount[dId]||1;
-const maxLoadSeen=loadsInAll.size>0?Math.max(...loadsInAll):1;
-const hasMultiLoads=loadsInAll.size>1||maxLoadSeen>1||explicitLoads>1;
-Object.values(byLocLoad).forEach(({loc,loadNum:ln,dels:locDels})=>{
-const puSrc=puSrcs.find(s=>s.label.includes(loc))||puSrcs[0];
-/* Scope the manual-pickup check to the same load AND the same dock. A manual
-   pickup only suppresses the auto dock card when it actually covers this dock
-   (manualPickupCoversDock) — a manual pickup somewhere else entirely (e.g. a
-   return pickup at "DCO Smyrna" scheduled for Emser Tile) must coexist with
-   the dock pickup. The old `!e.pickupFrom` clause let any dock-less manual
-   pickup silently erase the driver's real "Emser - Norcross" card and its
-   load-order note. */
-const hasManualPU=all.some(e=>e.customer===cust&&e.stopType==="pickup"&&e.manualPickup&&e.driverId===dId&&(e.loadNum||1)===ln&&manualPickupCoversDock(e,loc,puSrc.label,_normLoc));
-if(hasManualPU)return;
-const delWithPuDue=locDels.find(e=>e.pickupDueBy);
-const effectivePuDue=delWithPuDue?delWithPuDue.pickupDueBy:puDueBy;
-const existingPU=removedPUs.find(p=>p.driverId===dId&&p.stop===puSrc.label&&(p.loadNum||1)===(hasMultiLoads?ln:1));
-const puId=existingPU?existingPU.id:genId();
-if(existingPU)_reusedPuIds.add(existingPU.id);
-const puEntry={id:puId,customer:cust,stop:puSrc.label,baseRate:0,fuelPct:0,isHourly:false,
-note:makeNote(locDels),driverId:dId,addr:puSrc.addr,stopType:"pickup",priority:cd?.priority||false,
-instructions:existingPU?.instructions||"",status:existingPU?.status||null,arrivedAt:existingPU?.arrivedAt||null,departedAt:existingPU?.departedAt||null,eta:existingPU?.eta||null,photos:existingPU?.photos||[],signature:existingPU?.signature||null,
-dueBy:effectivePuDue,weight:0,loadNum:hasMultiLoads?ln:1,pickupFrom:loc};
-/* Placement priority:
-   1. If this pickup existed before (reused id) and we recorded an anchor,
-      re-insert it right before that same anchor entry — this preserves a
-      position the dispatcher set manually, so a rebuild caused by an
-      unrelated change elsewhere doesn't shuffle it.
-   2. Otherwise (new pickup, or anchor no longer present) fall back to
-      placing it before the first delivery from this location/load. */
-let placed=false;
-/* Anchor lookup is INDEPENDENT of the existingPU match. existingPU also gates
-   on loadNum (hasMultiLoads?ln:1); if that gate fails (e.g. load bookkeeping
-   shifted) we'd otherwise skip the anchor entirely and fall through to
-   firstDelIdx, snapping a manually-placed pickup back in front of its first
-   delivery — exactly the 'I moved them back to back and it reverted' bug.
-   Match the prior pickup by (driver, stop) so the recorded position is honored
-   regardless of the loadNum gate. */
-const priorPU=removedPUs.find(p=>p.driverId===dId&&p.stop===puSrc.label);
-if(priorPU&&Object.prototype.hasOwnProperty.call(_puAnchorById,priorPU.id)){
-  const anchorId=_puAnchorById[priorPU.id];
-  if(anchorId===null){/* pickup was at the array end — but an auto-pickup must
-    precede its own deliveries; leave it unplaced so the delivery-based fallback
-    below inserts it before its first delivery, instead of re-pinning it to the
-    bottom forever (the desktop RouteBuilder-Apply "pickup at bottom" bug). */}
-  else{
-    const ai=all.findIndex(e=>e.id===anchorId);
-    if(ai>=0){all.splice(ai,0,puEntry);placed=true;}
-  }
-}
-if(!placed){
-  const firstDelIdx=all.findIndex(e=>e.customer===cust&&e.stopType==="delivery"&&e.driverId===dId&&_normLoc(e.pickupFrom||loc)===_normLoc(loc)&&(e.loadNum||1)===ln);
-  if(firstDelIdx>=0){all.splice(firstDelIdx,0,puEntry);}
-  else{
-    const anyDelIdx=all.findIndex(e=>e.customer===cust&&e.stopType==="delivery"&&e.driverId===dId&&(e.loadNum||1)===ln);
-    if(anyDelIdx>=0)all.splice(anyDelIdx,0,puEntry);
-    else all.push(puEntry);
-  }
-}
-});
-});
-/* Tombstone any auto-pickup that was removed and not regenerated. Prevents
-   the transactional save's FB-only-append from resurrecting an orphan
-   pickup card after a reassign/delete/load-change empties a driver. */
-const _orphanPus=removedPUs.filter(p=>!_reusedPuIds.has(p.id));
-if(_orphanPus.length)tombstone(_orphanPus); /* auto-pickups only; pass entries for signatures */
-return all;
-};
+/* Thin binding over the extracted engine (see rebuildPickupsForPure in
+   manifestLogic.js). Everything this used to close over is passed explicitly,
+   which is what lets the scenario tests drive it. */
+const rebuildPickupsFor=(all,cust)=>rebuildPickupsForPure(all,cust,{
+  pickupSources:PICKUP_SOURCES,customers:CUSTOMERS,driverLoadCount,
+  genId,normLoc:_normLoc,onTombstone:tombstone});
 
 const deleteDel=(id)=>{
 const entry=dl.find(e=>e.id===id);
