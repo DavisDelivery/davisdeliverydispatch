@@ -505,6 +505,46 @@ export const manualPickupCoversDock=(e,loc,srcLabel,normLoc)=>{
   return !!supplier&&stopL.includes(supplier)&&stopL.includes(String(loc).toLowerCase());
 };
 
+/* Where a delivery's load actually comes from when a MANUAL pickup on the same
+   (driver, load) already says so. Returns that pickup's location, or null.
+
+   The multi-dock prompt is right to ask "Norcross or Roswell?" when the load
+   comes off one of the supplier's own docks and nobody has said which. It is
+   WRONG when the load doesn't come off a dock at all: a pallet collected at MTI
+   in Sugar Hill and delivered to Emser Norcross has no dock to choose, so the
+   card sat there demanding an answer with no correct one on offer — and one of
+   the two chips would have recorded a pickup that never happened.
+
+   The dispatcher already stated the origin by scheduling the manual pickup, so
+   read it instead of asking. Manual pickups store the LOCATION in `stop` and
+   the recipient in `customer` (the "For {customer}" card), so a delivery is
+   matched to one by its own customer.
+
+   Deliberately narrow, because a manual pickup elsewhere must not speak for a
+   load that really does come off a dock:
+     - an AUTO dock card on the same (driver, load) means the dock is knowable →
+       null, leave the prompt alone;
+     - two or more manual pickups → null, we genuinely can't say which supplies
+       this stop;
+     - a delivery that already names its dock never gets here (the caller
+       resolves that first). */
+export const manualPickupOrigin=(entry,entries)=>{
+  if(!entry||!Array.isArray(entries))return null;
+  if(entry.stopType==="pickup")return null;
+  const cust=entry.customer;
+  if(!cust)return null;
+  const drv=entry.driverId||0,ln=entry.loadNum||1;
+  const sameLoad=(e)=>e&&e.stopType==="pickup"&&e.customer===cust&&(e.driverId||0)===drv&&(e.loadNum||1)===ln;
+  if(entries.some(e=>sameLoad(e)&&!e.manualPickup))return null; /* a real dock card exists → the dock IS the origin */
+  const manual=entries.filter(e=>sameLoad(e)&&e.manualPickup);
+  if(manual.length!==1)return null;
+  const m=manual[0];
+  /* `stop` may carry a " → destination" suffix from the insert-pickup form; the
+     location is the part before it. */
+  const loc=String(m.stop||"").split(/\s*→\s*/)[0].trim()||String(m.pickupFrom||"").trim();
+  return loc||null;
+};
+
 /* ── Durable tombstones (delete propagation) ─────────────────────────────────
    The in-memory tombstones above live 90s on ONE device — long enough to keep a
    Firestore echo from resurrecting a just-deleted stop locally, but invisible to
