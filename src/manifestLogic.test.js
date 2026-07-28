@@ -21,6 +21,7 @@ import {
   makeDocTombFilter,
   DOC_TOMBSTONE_TTL,
   manualPickupCoversDock,
+  manualPickupOrigin,
   allInRate,
   stripLiftgateFee,
   resequenceEntries,
@@ -1465,5 +1466,76 @@ describe("REGRESSION: driver's phone listed the Emser pickup AFTER its delivery"
     expect(ids(viewA)).toEqual(ids(viewB));              /* one order, not two */
     expect(onLoad(viewA, 1)).toEqual(["p_l1", "d_dco"]); /* ...and it's the right one */
     expect(onLoad(viewA, 2)).toEqual(["p_l2", "d_gel"]);
+  });
+});
+
+/* ====================================================================== */
+/* manualPickupOrigin — don't demand a dock when the load isn't off a dock.
+
+   Reported: an unassigned "Emser - Norcross" delivery showed
+   "Pickup from Emser Tile — ⚠ pick location" with a "Set pickup: Norcross /
+   Roswell" chooser, while the manual pickup right above it on the board said
+   the load was collected at MTI in Sugar Hill. Neither chip was correct, and
+   either one would have recorded a pickup that never happened. */
+
+const manualPu = (o = {}) => pu({ manualPickup: true, ...o });
+
+describe("manualPickupOrigin — a manual pickup already states the origin", () => {
+  it("reads the origin off the manual pickup instead of demanding a dock", () => {
+    const d = del({ id: "d1", customer: "Emser Tile", stop: "Emser - Norcross", driverId: 0, loadNum: 1 });
+    const m = manualPu({ id: "m1", customer: "Emser Tile", stop: "MTI", driverId: 0, loadNum: 1 });
+    expect(manualPickupOrigin(d, [m, d])).toBe("MTI");
+  });
+
+  it("strips the ' → destination' suffix the insert-pickup form adds", () => {
+    const d = del({ id: "d1", customer: "Emser Tile", driverId: 0, loadNum: 1 });
+    const m = manualPu({ id: "m1", customer: "Emser Tile", stop: "MTI → Emser Norcross", driverId: 0, loadNum: 1 });
+    expect(manualPickupOrigin(d, [m, d])).toBe("MTI");
+  });
+
+  it("falls back to pickupFrom when the manual pickup has no stop", () => {
+    const d = del({ id: "d1", customer: "Emser Tile", driverId: 0, loadNum: 1 });
+    const m = manualPu({ id: "m1", customer: "Emser Tile", stop: "", pickupFrom: "MTI", driverId: 0, loadNum: 1 });
+    expect(manualPickupOrigin(d, [m, d])).toBe("MTI");
+  });
+
+  it("stays silent when a real dock card exists — that dock IS the origin", () => {
+    const d = del({ id: "d1", customer: "Emser Tile", driverId: 5, loadNum: 1 });
+    const dock = pu({ id: "p1", customer: "Emser Tile", stop: "Emser - Norcross", driverId: 5, loadNum: 1 });
+    const m = manualPu({ id: "m1", customer: "Emser Tile", stop: "MTI", driverId: 5, loadNum: 1 });
+    expect(manualPickupOrigin(d, [dock, m, d])).toBeNull();
+  });
+
+  it("stays silent with TWO manual pickups — we can't say which supplies the stop", () => {
+    const d = del({ id: "d1", customer: "Emser Tile", driverId: 5, loadNum: 1 });
+    const m1 = manualPu({ id: "m1", customer: "Emser Tile", stop: "MTI", driverId: 5, loadNum: 1 });
+    const m2 = manualPu({ id: "m2", customer: "Emser Tile", stop: "DCO Smyrna", driverId: 5, loadNum: 1 });
+    expect(manualPickupOrigin(d, [m1, m2, d])).toBeNull();
+  });
+
+  it("does not reach across drivers or loads", () => {
+    const d = del({ id: "d1", customer: "Emser Tile", driverId: 5, loadNum: 1 });
+    const otherDrv = manualPu({ id: "m1", customer: "Emser Tile", stop: "MTI", driverId: 7, loadNum: 1 });
+    const otherLoad = manualPu({ id: "m2", customer: "Emser Tile", stop: "MTI", driverId: 5, loadNum: 2 });
+    expect(manualPickupOrigin(d, [otherDrv, otherLoad, d])).toBeNull();
+  });
+
+  it("does not reach across customers", () => {
+    const d = del({ id: "d1", customer: "Emser Tile", driverId: 5, loadNum: 1 });
+    const m = manualPu({ id: "m1", customer: "Daltile", stop: "MTI", driverId: 5, loadNum: 1 });
+    expect(manualPickupOrigin(d, [m, d])).toBeNull();
+  });
+
+  it("never speaks for a pickup card, and tolerates missing inputs", () => {
+    const p = manualPu({ id: "p1", customer: "Emser Tile", stop: "MTI", driverId: 5, loadNum: 1 });
+    expect(manualPickupOrigin(p, [p])).toBeNull();
+    expect(manualPickupOrigin(null, [])).toBeNull();
+    expect(manualPickupOrigin(del({ customer: "Emser Tile" }), null)).toBeNull();
+    expect(manualPickupOrigin(del({ customer: "" }), [])).toBeNull();
+  });
+
+  it("no manual pickup at all -> null, so the dock prompt still appears", () => {
+    const d = del({ id: "d1", customer: "Emser Tile", driverId: 5, loadNum: 1 });
+    expect(manualPickupOrigin(d, [d])).toBeNull();
   });
 });

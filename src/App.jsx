@@ -61,7 +61,7 @@ greenBtn:{background:"#16a34a",color:"#fff",border:"none",borderRadius:8,padding
 inputMb4:{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"7px 10px",fontSize:12,outline:"none",marginBottom:4},
 };
 import { useState, useCallback, useEffect, useRef, Fragment, Component } from "react";
-import { dedupeIds, dedupeAutoPickups, dedupeGhostDeliveries, dedupeDeliveries, reapOrphanAutoPickups, sanitizeEntry, _mergeEntryDriver, _mergeEntryDispatcher, buildMergedEntries, entrySig, makeTombFilter, makeDocTombFilter, mergeTombstones, vanishedAutoPickups, orderByIds, reconcileDriverRoster, applyDriverRemap, normDriverName, manualPickupCoversDock, allInRate, stripLiftgateFee, resequenceEntries, sortBySeq, normalizeOrder, orderAutoPickupsFirst } from "./manifestLogic.js";
+import { dedupeIds, dedupeAutoPickups, dedupeGhostDeliveries, dedupeDeliveries, reapOrphanAutoPickups, sanitizeEntry, _mergeEntryDriver, _mergeEntryDispatcher, buildMergedEntries, entrySig, makeTombFilter, makeDocTombFilter, mergeTombstones, vanishedAutoPickups, orderByIds, reconcileDriverRoster, applyDriverRemap, normDriverName, manualPickupCoversDock, allInRate, stripLiftgateFee, resequenceEntries, sortBySeq, normalizeOrder, orderAutoPickupsFirst, manualPickupOrigin } from "./manifestLogic.js";
 import { diffOrderDocs, orderDocId, ordersParity } from "./ordersStore.js";
 
 const _SplitUI=({splitEntry,setSplitEntry})=>{const tw=splitEntry.totalWeight||0;const t1w=splitEntry.truck1Weight!==undefined?splitEntry.truck1Weight:Math.round(tw*(splitEntry.ratio/100));const t2w=tw-t1w;return(<><div style={_s.flexG6Mb6}><div style={_s.f1}><label style={_s.labelSm}>Total</label><input type="number" inputMode="numeric" value={tw||""} onChange={e=>{const newTw=parseInt(e.target.value)||0;setSplitEntry(p=>({...p,totalWeight:newTw,truck1Weight:Math.min(p.truck1Weight||Math.round(newTw/2),newTw)}));}} style={_s.splitTotal}/></div><div style={_s.f1}><label style={_s.labelBlue}>Truck 1</label><input type="number" inputMode="numeric" value={splitEntry.truck1Weight!==undefined?splitEntry.truck1Weight:""} onChange={e=>{const v=e.target.value;setSplitEntry(p=>({...p,truck1Weight:v===""?0:parseInt(v)||0}));}} style={_s.splitInput}/></div><div style={_s.f1}><label style={_s.labelGray}>Truck 2</label><div style={_s.splitT2}>{t2w.toLocaleString()}</div></div></div><input type="range" min={0} max={tw} step={100} value={t1w} onChange={e=>{const v=parseInt(e.target.value)||0;setSplitEntry(p=>({...p,truck1Weight:v}));}} style={_s.slider}/></>);};
@@ -1067,7 +1067,7 @@ const _reapOpts={multiSource:(c)=>!!MULTI_PICKUP[c],normLoc:_normLoc};
 /* Given an entry, work out what pickup text to show and whether the location
    is still ambiguous (a multi-location customer with no specific location
    picked). Returns {text, ambiguous}. */
-const resolvePickupLabel=(entry)=>{
+const resolvePickupLabel=(entry,siblings)=>{
   const pf=entry.pickupFrom;
   const cust=entry.customer;
   /* Which multi-pickup customer is this stop tied to? It can be named either
@@ -1085,6 +1085,12 @@ const resolvePickupLabel=(entry)=>{
       return pf===l.label||pf===shortLoc||pf.includes(shortLoc);
     });
     if(specific)return{text:pf.includes(" - ")?pf:(multiCust+" — "+pf),ambiguous:false};
+    /* No dock named — but a MANUAL pickup on this load may already say where the
+       load comes from (e.g. collected at MTI in Sugar Hill, delivered to Emser
+       Norcross). Asking "Norcross or Roswell?" there offers no correct answer,
+       and either chip would record a pickup that never happened. */
+    const manualSrc=manualPickupOrigin(entry,siblings);
+    if(manualSrc)return{text:manualSrc,ambiguous:false};
     return{text:multiCust+" — ⚠ pick location",ambiguous:true};
   }
   /* Single-location or no special handling — original behavior. */
@@ -2042,7 +2048,7 @@ function StopStatus({entry,compact}){
     {!departed&&mins>=30&&<span style={{fontSize:9.5,fontWeight:700,color:"#c4342a",background:"#fdeeec",border:"1px solid #f2c4bf",borderRadius:6,padding:"2px 7px"}}>{"\u23f1"} not departed</span>}
   </div>);
 }
-function ManifestStop({entry,eIdx,total,drivers,onMove,onReassign,onRemove,onDelete,onUpdateInstructions,onShipPlan,onRefNum,onDueBy,onWeight,onLoadNum,onRate,maxLoad,onDragStart,onDragOver,onDrop,isDragOver,isDragging,onLiftgate,onRemoveLiftgate,onSplit,onToggleFuel,driverLoadCounts,onPhotoClick,onSetPickup,compact}){
+function ManifestStop({entry,eIdx,total,drivers,siblings,onMove,onReassign,onRemove,onDelete,onUpdateInstructions,onShipPlan,onRefNum,onDueBy,onWeight,onLoadNum,onRate,maxLoad,onDragStart,onDragOver,onDrop,isDragOver,isDragging,onLiftgate,onRemoveLiftgate,onSplit,onToggleFuel,driverLoadCounts,onPhotoClick,onSetPickup,compact}){
 const[expanded,setExpanded]=useState(false);const[instrText,setInstrText]=useState(entry.instructions||"");const[dueByInput,setDueByInput]=useState(entry.dueBy||"");const[dueType,setDueType]=useState(entry.dueBy?(entry.dueBy.startsWith("After")?"after":"by"):"by");const[lastHour,setLastHour]=useState(()=>{if(entry.dueBy){const m=entry.dueBy.match(/(\d+(?::\d+)?\s*[AP]M)/);return m?m[1].replace(/:\d+/,""):""}return "";});
 const[showAssign,setShowAssign]=useState(false);
 const getInitials=(name)=>{const parts=name.split(" ");return parts.length>=2?(parts[0][0]+parts[1][0]).toUpperCase():name.slice(0,2).toUpperCase();};
@@ -2091,7 +2097,7 @@ style={{flex:1,minWidth:140,border:"1px solid #e7e5e4",borderRadius:6,padding:"3
    - Auto pickup (Emser/Florida/etc. where customer IS the supplier): 'Pickup from {customer}'
    - Delivery w/ fully-qualified pickupFrom (has ' - '): 'Pickup from {pickupFrom}' standalone
    - Delivery w/ short pickupFrom (e.g. 'Norcross'): 'Pickup from {customer} — {pickupFrom}'
-   - Delivery w/o pickupFrom: 'Pickup from {customer}' */const label=isManualPU?"For":(isPU&&cust==="IMETCO"?"Pickup for":"Pickup from");const _rp=isPU?{text:cust,ambiguous:false}:resolvePickupLabel(entry);return(<><span style={{fontSize:10,color:"#a8a29e"}}>{entry.weight>0?"·":""}</span><span style={{fontSize:10,color:"#78716c"}}>{label}</span><span style={{fontSize:10,color:_rp.ambiguous?"#dc2626":c.accent,fontWeight:_rp.ambiguous?700:600}}>{_rp.text}</span></>);})()}
+   - Delivery w/o pickupFrom: 'Pickup from {customer}' */const label=isManualPU?"For":(isPU&&cust==="IMETCO"?"Pickup for":"Pickup from");const _rp=isPU?{text:cust,ambiguous:false}:resolvePickupLabel(entry,siblings);return(<><span style={{fontSize:10,color:"#a8a29e"}}>{entry.weight>0?"·":""}</span><span style={{fontSize:10,color:"#78716c"}}>{label}</span><span style={{fontSize:10,color:_rp.ambiguous?"#dc2626":c.accent,fontWeight:_rp.ambiguous?700:600}}>{_rp.text}</span></>);})()}
 </div>}
 
 {/* Inline pickup-location picker — shown when the pickup is ambiguous (a
@@ -2099,7 +2105,7 @@ style={{flex:1,minWidth:140,border:"1px solid #e7e5e4",borderRadius:6,padding:"3
    the entry right on the card without an edit modal. */}
 {(()=>{
   if(entry.stopType==="pickup")return null;
-  const rp=resolvePickupLabel(entry);
+  const rp=resolvePickupLabel(entry,siblings);
   if(!rp.ambiguous||!onSetPickup)return null;
   const mc=MULTI_PICKUP[entry.customer]||MULTI_PICKUP[entry.pickupFrom];
   if(!mc)return null;
@@ -7544,7 +7550,7 @@ style={{background:isDrgOver?"#dcfce7":isDrgSrc?"#fef9c3":done?"#f0fdf4":onSite?
    - Auto pickup (Emser/Florida/etc. where customer IS the supplier): 'Pickup from {customer}'
    - Delivery w/ fully-qualified pickupFrom (has ' - '): 'Pickup from {pickupFrom}' standalone
    - Delivery w/ short pickupFrom (e.g. 'Norcross'): 'Pickup from {customer} — {pickupFrom}'
-   - Delivery w/o pickupFrom: 'Pickup from {customer}' */const label=isManualPU?"For":(isPU&&cust==="IMETCO"?"Pickup for":"Pickup from");const _rp=isPU?{text:cust,ambiguous:false}:resolvePickupLabel(entry);return(<><span style={{fontSize:10,color:"#a8a29e"}}>{entry.weight>0?"·":""}</span><span style={{fontSize:10,color:"#78716c"}}>{label}</span><span style={{fontSize:10,color:_rp.ambiguous?"#dc2626":c.accent,fontWeight:_rp.ambiguous?700:600}}>{_rp.text}</span></>);})()}
+   - Delivery w/o pickupFrom: 'Pickup from {customer}' */const label=isManualPU?"For":(isPU&&cust==="IMETCO"?"Pickup for":"Pickup from");const _rp=isPU?{text:cust,ambiguous:false}:resolvePickupLabel(entry,dl);return(<><span style={{fontSize:10,color:"#a8a29e"}}>{entry.weight>0?"·":""}</span><span style={{fontSize:10,color:"#78716c"}}>{label}</span><span style={{fontSize:10,color:_rp.ambiguous?"#dc2626":c.accent,fontWeight:_rp.ambiguous?700:600}}>{_rp.text}</span></>);})()}
 </div>
 {/* Load-order note for auto pickups ("Load order: A, B, C"). This card path
    never rendered entry.note, which is why the load order showed in the
@@ -7553,7 +7559,7 @@ style={{background:isDrgOver?"#dcfce7":isDrgSrc?"#fef9c3":done?"#f0fdf4":onSite?
 {entry.note&&entry.stopType==="pickup"&&<div style={{fontSize:10,color:"#2563eb",fontWeight:600,marginTop:2}}>{entry.note}</div>}
 {(()=>{
   if(entry.stopType==="pickup")return null;
-  const rp=resolvePickupLabel(entry);
+  const rp=resolvePickupLabel(entry,dl);
   if(!rp.ambiguous)return null;
   const mc=MULTI_PICKUP[entry.customer]||MULTI_PICKUP[entry.pickupFrom];
   if(!mc)return null;
@@ -7637,7 +7643,7 @@ style={{background:isDrgOver?"#dcfce7":isDrgSrc?"#fef9c3":done?"#f0fdf4":onSite?
    - Auto pickup (Emser/Florida/etc. where customer IS the supplier): 'Pickup from {customer}'
    - Delivery w/ fully-qualified pickupFrom (has ' - '): 'Pickup from {pickupFrom}' standalone
    - Delivery w/ short pickupFrom (e.g. 'Norcross'): 'Pickup from {customer} — {pickupFrom}'
-   - Delivery w/o pickupFrom: 'Pickup from {customer}' */const label=isManualPU?"For":(isPU&&cust==="IMETCO"?"Pickup for":"Pickup from");const _rp=isPU?{text:cust,ambiguous:false}:resolvePickupLabel(entry);return(<><span style={{fontSize:10,color:"#a8a29e"}}>{entry.weight>0?"·":""}</span><span style={{fontSize:10,color:"#78716c"}}>{label}</span><span style={{fontSize:10,color:_rp.ambiguous?"#dc2626":c.accent,fontWeight:_rp.ambiguous?700:600}}>{_rp.text}</span></>);})()}
+   - Delivery w/o pickupFrom: 'Pickup from {customer}' */const label=isManualPU?"For":(isPU&&cust==="IMETCO"?"Pickup for":"Pickup from");const _rp=isPU?{text:cust,ambiguous:false}:resolvePickupLabel(entry,dl);return(<><span style={{fontSize:10,color:"#a8a29e"}}>{entry.weight>0?"·":""}</span><span style={{fontSize:10,color:"#78716c"}}>{label}</span><span style={{fontSize:10,color:_rp.ambiguous?"#dc2626":c.accent,fontWeight:_rp.ambiguous?700:600}}>{_rp.text}</span></>);})()}
 </div>
 {/* Inline pickup-location picker for the Unassigned panel — same control
    ManifestStop has, but this render path (the desktop Unassigned card)
@@ -7646,7 +7652,7 @@ style={{background:isDrgOver?"#dcfce7":isDrgSrc?"#fef9c3":done?"#f0fdf4":onSite?
    Roswell (etc.) right here before assigning. */}
 {(()=>{
   if(entry.stopType==="pickup")return null;
-  const rp=resolvePickupLabel(entry);
+  const rp=resolvePickupLabel(entry,dl);
   if(!rp.ambiguous)return null;
   const mc=MULTI_PICKUP[entry.customer]||MULTI_PICKUP[entry.pickupFrom];
   if(!mc)return null;
@@ -8927,7 +8933,7 @@ return loadGroups.map(({loadNum:ln,stops:loadStops})=>(<div key={"mload-"+ln}>
 {loadStops.map((entry)=>{
 const eIdx=de.indexOf(entry);
 return(<div key={entry.id}>
-<ManifestStop entry={entry} eIdx={eIdx} total={de.length} drivers={drivers} onMove={dir=>moveInDriver(drv.id,entry.id,dir)} onReassign={did=>reassign(entry.id,did)} onRemove={()=>rmFromDriver(entry.id)} onDelete={()=>deleteDel(entry.id)} onUpdateInstructions={text=>updateInstructions(entry.id,text)} onShipPlan={val=>setShipPlan(entry.id,val)} onRefNum={val=>setRefNum(entry.id,val)} onToggleFuel={()=>toggleFuel(entry.id)} onDueBy={time=>setDueBy(entry.id,time)} onWeight={w=>setWeight(entry.id,w)} onLoadNum={n=>setLoadNum(entry.id,n)} onRate={r=>updateRate(entry.id,r)} onPhotoClick={setLightboxPhoto} onSetPickup={label=>setPickupFrom(entry.id,label)} compact={uiCompact} maxLoad={getMaxLoad(drv.id)}
+<ManifestStop entry={entry} siblings={dl} eIdx={eIdx} total={de.length} drivers={drivers} onMove={dir=>moveInDriver(drv.id,entry.id,dir)} onReassign={did=>reassign(entry.id,did)} onRemove={()=>rmFromDriver(entry.id)} onDelete={()=>deleteDel(entry.id)} onUpdateInstructions={text=>updateInstructions(entry.id,text)} onShipPlan={val=>setShipPlan(entry.id,val)} onRefNum={val=>setRefNum(entry.id,val)} onToggleFuel={()=>toggleFuel(entry.id)} onDueBy={time=>setDueBy(entry.id,time)} onWeight={w=>setWeight(entry.id,w)} onLoadNum={n=>setLoadNum(entry.id,n)} onRate={r=>updateRate(entry.id,r)} onPhotoClick={setLightboxPhoto} onSetPickup={label=>setPickupFrom(entry.id,label)} compact={uiCompact} maxLoad={getMaxLoad(drv.id)}
 onLiftgate={()=>{if(entry.isHourly){setEmH(p=>{const key=`${emDk}-emser`;const cur=p[key]||4;return{...p,[key]:cur+1};});setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===entry.id?{...e,liftgateApplied:true}:e)}));showToast("Liftgate +1 hr added");}else{manualLiftgate(entry.id);}}} onRemoveLiftgate={()=>removeLiftgate(entry.id)} onSplit={()=>setSplitEntry({id:entry.id,totalWeight:entry.weight||0,ratio:50,truck1Weight:Math.round((entry.weight||0)/2)})} driverLoadCounts={Object.fromEntries(drivers.map(d=>[d.id,getDriverLoadOptions(d.id)]))}
 isDragging={dragSrc?.drvId===drv.id&&dragSrc?.idx===eIdx} isDragOver={dragOver?.drvId===drv.id&&dragOver?.idx===eIdx} onDragStart={()=>setDragSrc({drvId:drv.id,idx:eIdx,id:entry.id})} onDragOver={()=>setDragOver({drvId:drv.id,idx:eIdx})} onDrop={()=>handleDrop(drv.id,eIdx)}/>
 {splitEntry?.id===entry.id&&<div style={{margin:"0 0 4px",background:"#eff6ff",border:"2px solid #2563eb",borderRadius:10,padding:12}}>
@@ -8947,7 +8953,7 @@ isDragging={dragSrc?.drvId===drv.id&&dragSrc?.idx===eIdx} isDragOver={dragOver?.
 onDragOver={e=>{e.preventDefault();if(!ua.length)setDragOver({drvId:0,idx:0});}}
 onDrop={()=>{if(dragSrc){handleDrop(0,ua.length);}}}
 style={{background:dragOver?.drvId===0?"#dcfce7":"#fff",border:dragOver?.drvId===0?"2px dashed #16a34a":"2px dashed #d6d3d1",borderRadius:14,padding:16,marginBottom:12,transition:"background 0.15s"}}><div style={{display:"flex",alignItems:"center",gap:8,marginBottom:ua.length?10:0}}><div style={{width:14,height:14,borderRadius:4,background:"#a8a29e"}}/><span style={{fontSize:15,fontWeight:700,color:"#78716c"}}>Unassigned</span><span style={{fontSize:12,color:"#a8a29e"}}>({ua.length})</span></div>
-{ua.map((entry,eIdx)=><div key={entry.id}><ManifestStop entry={entry} eIdx={eIdx} total={ua.length} drivers={drivers} onMove={dir=>moveInDriver(0,entry.id,dir)} onReassign={did=>reassign(entry.id,did)} onRemove={()=>deleteDel(entry.id)} onDelete={()=>deleteDel(entry.id)} onUpdateInstructions={text=>updateInstructions(entry.id,text)} onShipPlan={val=>setShipPlan(entry.id,val)} onRefNum={val=>setRefNum(entry.id,val)} onToggleFuel={()=>toggleFuel(entry.id)} onDueBy={time=>setDueBy(entry.id,time)} onWeight={w=>setWeight(entry.id,w)} onLoadNum={n=>setLoadNum(entry.id,n)} onRate={r=>updateRate(entry.id,r)} onPhotoClick={setLightboxPhoto} onSetPickup={label=>setPickupFrom(entry.id,label)} compact={uiCompact} maxLoad={1}
+{ua.map((entry,eIdx)=><div key={entry.id}><ManifestStop entry={entry} siblings={dl} eIdx={eIdx} total={ua.length} drivers={drivers} onMove={dir=>moveInDriver(0,entry.id,dir)} onReassign={did=>reassign(entry.id,did)} onRemove={()=>deleteDel(entry.id)} onDelete={()=>deleteDel(entry.id)} onUpdateInstructions={text=>updateInstructions(entry.id,text)} onShipPlan={val=>setShipPlan(entry.id,val)} onRefNum={val=>setRefNum(entry.id,val)} onToggleFuel={()=>toggleFuel(entry.id)} onDueBy={time=>setDueBy(entry.id,time)} onWeight={w=>setWeight(entry.id,w)} onLoadNum={n=>setLoadNum(entry.id,n)} onRate={r=>updateRate(entry.id,r)} onPhotoClick={setLightboxPhoto} onSetPickup={label=>setPickupFrom(entry.id,label)} compact={uiCompact} maxLoad={1}
 onLiftgate={()=>{if(entry.isHourly){setEmH(p=>{const key=`${emDk}-emser`;const cur=p[key]||4;return{...p,[key]:cur+1};});setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===entry.id?{...e,liftgateApplied:true}:e)}));showToast("Liftgate +1 hr added");}else{manualLiftgate(entry.id);}}} onRemoveLiftgate={()=>removeLiftgate(entry.id)} onSplit={()=>setSplitEntry({id:entry.id,totalWeight:entry.weight||0,ratio:50,truck1Weight:Math.round((entry.weight||0)/2)})} driverLoadCounts={Object.fromEntries(drivers.map(d=>[d.id,getDriverLoadOptions(d.id)]))}
 isDragging={dragSrc?.drvId===0&&dragSrc?.idx===eIdx} isDragOver={dragOver?.drvId===0&&dragOver?.idx===eIdx} onDragStart={()=>setDragSrc({drvId:0,idx:eIdx,id:entry.id})} onDragOver={()=>setDragOver({drvId:0,idx:eIdx})} onDrop={()=>handleDrop(0,eIdx)}/>
 {splitEntry?.id===entry.id&&<div style={{margin:"0 0 4px",background:"#eff6ff",border:"2px solid #2563eb",borderRadius:10,padding:12}}>
