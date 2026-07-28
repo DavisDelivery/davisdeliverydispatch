@@ -5526,8 +5526,28 @@ const insertIdxForLoad=(arr,drvId,loadNum)=>{
   /* Driver has no entries yet — append at the end */
   return arr.length;
 };
-const handleDrop=(drvId,toIdx)=>{
+/* `toLoad` — the load number of whatever was dropped ON (a stop, or an empty
+   load's placeholder). Without it a drop could only ever permute array
+   positions, and a load is a FIELD (`loadNum`), not a position: a stop dragged
+   from Load 1 onto Load 2 silently stayed on Load 1, and the empty-load box
+   reading "drag or assign stops here" wasn't a drop target at all — it had no
+   onDragOver, so the browser never fired a drop on it. Both now route through
+   reassign(), which already owns this move: it sets driver and load together,
+   lands the stop at the bottom of the target load, and rebuilds the auto-pickups
+   both loads need afterwards. */
+const handleDrop=(drvId,toIdx,toLoad)=>{
 if(!dragSrc){setDragSrc(null);setDragOver(null);return;}
+/* Resolve the grabbed stop up front — a cross-LOAD drop is a different
+   operation from a reorder, and needs the entry rather than just an index. */
+const _srcEnts=dl.filter(e=>e.driverId===dragSrc.drvId);
+const dragged=dragSrc.id!=null?_srcEnts.find(e=>e.id===dragSrc.id):_srcEnts[dragSrc.idx];
+const ln=toLoad?Number(toLoad):0;
+if(dragged&&ln&&((dragged.loadNum||1)!==ln||dragSrc.drvId!==drvId)){
+  reassign(dragged.id,drvId,ln);
+  const _tn=drvId===0?"Unassigned":((drivers.find(d=>d.id===drvId))?.name||"driver");
+  showToast(dragSrc.drvId===drvId?("Moved to Load "+ln):("Moved to "+_tn+" · Load "+ln));
+  setDragSrc(null);setDragOver(null);return;
+}
 if(dragSrc.drvId===drvId&&dragSrc.idx===toIdx){setDragSrc(null);setDragOver(null);return;}
 if(dragSrc.drvId===drvId){
 setLog(p=>{const all=[...(p[dk]||[])];const de=all.filter(e=>e.driverId===drvId);
@@ -7514,7 +7534,13 @@ return(<div key={"load-"+ln}>
 <span style={{fontSize:10,fontWeight:800,color:ln===1?"#2563eb":ln===2?"#d97706":"#7c3aed",letterSpacing:"0.05em"}}>LOAD {ln}</span>
 <div style={{flex:1,height:2,background:ln===1?"#2563eb":ln===2?"#d97706":"#7c3aed",borderRadius:1,opacity:0.4}}/>
 </div>}
-{loadStops.length===0&&hasMultiLoads&&<div style={{padding:"12px 10px",textAlign:"center",fontSize:11,color:"#a8a29e",background:"#fafaf9",border:"2px dashed #e7e5e4",borderRadius:8,marginBottom:4}}>No stops on Load {ln} — drag or assign stops here</div>}
+{loadStops.length===0&&hasMultiLoads&&<div
+/* A drop only fires when dragover calls preventDefault — this box invited a
+   drag ("drag or assign stops here") while silently rejecting every one. */
+onDragOver={ev=>{ev.preventDefault();setDragOver({drvId:drv.id,idx:-ln});}}
+onDragLeave={()=>setDragOver(null)}
+onDrop={()=>handleDrop(drv.id,de.length,ln)}
+style={{padding:"12px 10px",textAlign:"center",fontSize:11,color:dragOver?.drvId===drv.id&&dragOver?.idx===-ln?"#2563eb":"#a8a29e",background:dragOver?.drvId===drv.id&&dragOver?.idx===-ln?"#eff6ff":"#fafaf9",border:"2px dashed "+(dragOver?.drvId===drv.id&&dragOver?.idx===-ln?"#2563eb":"#e7e5e4"),borderRadius:8,marginBottom:4}}>No stops on Load {ln} — drag or assign stops here</div>}
 {loadStops.map((entry)=>{
 stopNum++;
 const eIdx=de.indexOf(entry);
@@ -7524,7 +7550,7 @@ const isDrgOver=dragOver?.drvId===drv.id&&dragOver?.idx===eIdx;
 return(<div key={entry.id}>
 <div draggable onDragStart={()=>setDragSrc({drvId:drv.id,idx:eIdx,id:entry.id})}
 onDragOver={ev=>{ev.preventDefault();setDragOver({drvId:drv.id,idx:eIdx});}}
-onDrop={()=>handleDrop(drv.id,eIdx)}
+onDrop={()=>handleDrop(drv.id,eIdx,ln)}
 style={{background:isDrgOver?"#dcfce7":isDrgSrc?"#fef9c3":done?"#f0fdf4":onSite?"#fffbeb":hasDue?"#fef2f2":isP?"#fef3c7":isPU?"#eff6ff":"#fff",border:isDrgOver?"2px dashed #16a34a":`1px solid ${done?"#bbf7d0":onSite?"#fde68a":hasDue?"#fca5a5":"#e7e5e4"}`,borderRadius:8,padding:uiCompact?"4px 8px":"8px 10px",marginBottom:0,borderLeft:`3px solid ${isPU?"#2563eb":isP?"#f59e0b":c.accent}`,opacity:isDrgSrc?0.4:done?0.6:1,cursor:"grab",transition:"background 0.1s"}}>
 <div style={_s.flexBtw}>
 <div style={_s.flexC4Mb2W}>
@@ -8929,13 +8955,17 @@ return loadGroups.map(({loadNum:ln,stops:loadStops})=>(<div key={"mload-"+ln}>
 <span style={{fontSize:10,fontWeight:800,color:ln===1?"#2563eb":ln===2?"#d97706":"#7c3aed",letterSpacing:"0.05em"}}>LOAD {ln}</span>
 <div style={{flex:1,height:2,background:ln===1?"#2563eb":ln===2?"#d97706":"#7c3aed",borderRadius:1,opacity:0.4}}/>
 </div>}
-{loadStops.length===0&&hasMultiLoads&&<div style={{padding:"12px 10px",textAlign:"center",fontSize:11,color:"#a8a29e",background:"#fafaf9",border:"2px dashed #e7e5e4",borderRadius:8,marginBottom:4}}>No stops on Load {ln}</div>}
+{loadStops.length===0&&hasMultiLoads&&<div
+onDragOver={ev=>{ev.preventDefault();setDragOver({drvId:drv.id,idx:-ln});}}
+onDragLeave={()=>setDragOver(null)}
+onDrop={()=>handleDrop(drv.id,de.length,ln)}
+style={{padding:"12px 10px",textAlign:"center",fontSize:11,color:dragOver?.drvId===drv.id&&dragOver?.idx===-ln?"#2563eb":"#a8a29e",background:dragOver?.drvId===drv.id&&dragOver?.idx===-ln?"#eff6ff":"#fafaf9",border:"2px dashed "+(dragOver?.drvId===drv.id&&dragOver?.idx===-ln?"#2563eb":"#e7e5e4"),borderRadius:8,marginBottom:4}}>No stops on Load {ln} — drag stops here</div>}
 {loadStops.map((entry)=>{
 const eIdx=de.indexOf(entry);
 return(<div key={entry.id}>
 <ManifestStop entry={entry} siblings={dl} eIdx={eIdx} total={de.length} drivers={drivers} onMove={dir=>moveInDriver(drv.id,entry.id,dir)} onReassign={did=>reassign(entry.id,did)} onRemove={()=>rmFromDriver(entry.id)} onDelete={()=>deleteDel(entry.id)} onUpdateInstructions={text=>updateInstructions(entry.id,text)} onShipPlan={val=>setShipPlan(entry.id,val)} onRefNum={val=>setRefNum(entry.id,val)} onToggleFuel={()=>toggleFuel(entry.id)} onDueBy={time=>setDueBy(entry.id,time)} onWeight={w=>setWeight(entry.id,w)} onLoadNum={n=>setLoadNum(entry.id,n)} onRate={r=>updateRate(entry.id,r)} onPhotoClick={setLightboxPhoto} onSetPickup={label=>setPickupFrom(entry.id,label)} compact={uiCompact} maxLoad={getMaxLoad(drv.id)}
 onLiftgate={()=>{if(entry.isHourly){setEmH(p=>{const key=`${emDk}-emser`;const cur=p[key]||4;return{...p,[key]:cur+1};});setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===entry.id?{...e,liftgateApplied:true}:e)}));showToast("Liftgate +1 hr added");}else{manualLiftgate(entry.id);}}} onRemoveLiftgate={()=>removeLiftgate(entry.id)} onSplit={()=>setSplitEntry({id:entry.id,totalWeight:entry.weight||0,ratio:50,truck1Weight:Math.round((entry.weight||0)/2)})} driverLoadCounts={Object.fromEntries(drivers.map(d=>[d.id,getDriverLoadOptions(d.id)]))}
-isDragging={dragSrc?.drvId===drv.id&&dragSrc?.idx===eIdx} isDragOver={dragOver?.drvId===drv.id&&dragOver?.idx===eIdx} onDragStart={()=>setDragSrc({drvId:drv.id,idx:eIdx,id:entry.id})} onDragOver={()=>setDragOver({drvId:drv.id,idx:eIdx})} onDrop={()=>handleDrop(drv.id,eIdx)}/>
+isDragging={dragSrc?.drvId===drv.id&&dragSrc?.idx===eIdx} isDragOver={dragOver?.drvId===drv.id&&dragOver?.idx===eIdx} onDragStart={()=>setDragSrc({drvId:drv.id,idx:eIdx,id:entry.id})} onDragOver={()=>setDragOver({drvId:drv.id,idx:eIdx})} onDrop={()=>handleDrop(drv.id,eIdx,ln)}/>
 {splitEntry?.id===entry.id&&<div style={{margin:"0 0 4px",background:"#eff6ff",border:"2px solid #2563eb",borderRadius:10,padding:12}}>
 <div style={_s.splitTitle}>✂ Split Shipment</div>
 {<_SplitUI splitEntry={splitEntry} setSplitEntry={setSplitEntry}/>}
