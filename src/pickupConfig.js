@@ -3,7 +3,11 @@
    instead of a hand-copied fixture that would drift out of sync with it. */
 
 export const PICKUP_SOURCES=[
-{customer:"Emser Tile",label:"Emser - Norcross",addr:"5470 Oakbrook Pkwy, Norcross, GA 30093"},
+/* `default:true` — where this supplier ships from unless told otherwise.
+   Emser runs almost everything out of Norcross, so an unspecified Emser load
+   resolves there instead of demanding a dock choice on every card. Docks
+   without the flag still prompt. */
+{customer:"Emser Tile",label:"Emser - Norcross",addr:"5470 Oakbrook Pkwy, Norcross, GA 30093",default:true},
 {customer:"Emser Tile",label:"Emser - Roswell",addr:"250 Hembree Park Drive, Roswell, GA 30076"},
 {customer:"Florida Tile",label:"Florida Tile - Norcross",addr:"1455 Oakbrook Drive, Suite 100, Norcross, GA 30093"},
 {customer:"Specialty",label:"Specialty - Norcross",addr:"1275 Oakbrook Drive, Suite D, Norcross, GA 30093"},

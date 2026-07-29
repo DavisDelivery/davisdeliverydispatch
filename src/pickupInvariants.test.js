@@ -396,20 +396,18 @@ describe("manifest — every operation, invariants plus stop conservation", () =
              and the button reads as dead. Position is measured in the rendered
              group, so this catches "I clicked it and nothing happened". */
           const groupOf = (b) =>
-            b.filter((e) => e.driverId === drv && (e.loadNum || 1) === (t.loadNum || 1)).map((e) => e.id);
+            b
+              .filter((e) => e.driverId === drv && (e.loadNum || 1) === (t.loadNum || 1) && e.stopType === "delivery")
+              .map((e) => e.id);
           const beforeG = groupOf(board);
           const wasAt = beforeG.indexOf(t.id);
-          const partner = board.find((e) => e.id === beforeG[wasAt + dir]);
           board = commit(applyMoveInDriver(board, drv, t.id, dir));
           const nowAt = groupOf(board).indexOf(t.id);
           const atEdge = (dir < 0 && wasAt === 0) || (dir > 0 && wasAt === beforeG.length - 1);
-          /* Swapping with an auto-pickup is legitimately undone by commit(): a
-             delivery cannot climb above the pickup that supplies it. Only assert
-             efficacy when the neighbour is another delivery. (The button doing
-             nothing in the pickup case is real, but it is a UX gap, not a
-             correctness one — flagged separately, not silently redefined here.) */
-          const partnerIsPickup = partner && partner.stopType === "pickup" && !partner.manualPickup;
-          if (!atEdge && wasAt >= 0 && !partnerIsPickup)
+          /* No pickup exemption any more: a nudge now steps OVER pickups and
+             swaps with the next delivery, so the only reason a stop may fail to
+             move is that it is already at the end of its group. */
+          if (!atEdge && wasAt >= 0)
             expect(nowAt, `nudge did not move the stop in its own load group — ${action}`).not.toBe(wasAt);
         } else if (r < 0.8) {
           const de = board.filter((e) => e.driverId === drv);
@@ -501,5 +499,94 @@ describe("pickup label — the contracts it actually owes", () => {
       });
       expect(labelChecks(board)).toEqual([]);
     });
+  });
+});
+
+/* ── Nominated default docks ─────────────────────────────────────────────────
+   A supplier may declare where its freight comes from unless told otherwise
+   (PICKUP_SOURCES `default:true`). Emser runs almost everything out of Norcross,
+   so an unspecified Emser load must resolve there rather than putting a red
+   "pick location" warning on every card. */
+describe("default dock", () => {
+  const emserDocks = docksFor("Emser Tile");
+  const norcross = emserDocks.find((s) => s.default);
+  const emserDel = (o = {}) => ({ id: genId(), stopType: "delivery", customer: "Emser Tile", stop: "Somewhere", driverId: 1, loadNum: 1, ...o });
+
+  it("nominates exactly one default for Emser Tile, and it is Norcross", () => {
+    expect(emserDocks.filter((s) => s.default)).toHaveLength(1);
+    expect(norcross.label).toBe("Emser - Norcross");
+  });
+
+  it("an Emser delivery with no dock named reads Norcross instead of prompting", () => {
+    const d = emserDel();
+    const { text, ambiguous, defaulted } = resolvePickupLabel(d, [d]);
+    expect(ambiguous).toBe(false);
+    expect(text).toBe("Emser - Norcross");
+    /* Flagged as defaulted so the card keeps offering the dock chips. */
+    expect(defaulted).toBe(true);
+  });
+
+  it("an explicit dock still wins over the default", () => {
+    const d = emserDel({ pickupFrom: "Emser - Roswell" });
+    const { text, ambiguous, defaulted } = resolvePickupLabel(d, [d]);
+    expect(ambiguous).toBe(false);
+    expect(text).toContain("Roswell");
+    expect(defaulted).toBeUndefined();
+  });
+
+  it("a manual pickup on the load still wins over the default", () => {
+    const d = emserDel();
+    const m = { id: genId(), stopType: "pickup", manualPickup: true, customer: "Emser Tile", stop: "MTI - Sugar Hill", driverId: 1, loadNum: 1 };
+    expect(resolvePickupLabel(d, [d, m]).text).toBe("MTI - Sugar Hill");
+  });
+
+  it("suppliers with no nominated default still prompt", () => {
+    const t = { id: genId(), stopType: "delivery", customer: "Traditions in Tile", stop: "Somewhere", driverId: 1, loadNum: 1 };
+    const { ambiguous, text } = resolvePickupLabel(t, [t]);
+    expect(ambiguous).toBe(true);
+    expect(text).toContain("pick location");
+  });
+
+  it("the generated pickup card names the same dock the label shows", () => {
+    const d = emserDel({ addr: "X St" });
+    const board = rebuildPickupsForPure([d], "Emser Tile", deps());
+    const pu = board.find((e) => e.stopType === "pickup");
+    expect(pu.stop).toBe("Emser - Norcross");
+    expect(normLoc(resolvePickupLabel(d, board).text)).toBe(normLoc(pu.stop));
+  });
+});
+
+/* ── Nudging steps over pickups ──────────────────────────────────────────────
+   Arrows reorder the dispatcher's stops. Pickups are placed by the engine, so a
+   nudge that swapped with one appeared to do nothing: the swap happened, then
+   the ordering pass put the pickup back above the deliveries it supplies. */
+describe("nudge steps over pickups", () => {
+  const mk = (id, o = {}) => ({ id, stopType: "delivery", customer: "Emser Tile", driverId: 1, loadNum: 1, stop: id, ...o });
+  const pu = (id) => ({ id, stopType: "pickup", customer: "Emser Tile", driverId: 1, loadNum: 1, stop: "Emser - Norcross" });
+
+  it("moves the first delivery under a pickup down past the next delivery", () => {
+    const board = [pu("P"), mk("A"), mk("B")];
+    const out = applyMoveInDriver(board, 1, "A", 1);
+    expect(out.map((e) => e.id)).toEqual(["P", "B", "A"]);
+  });
+
+  it("swaps with the next DELIVERY, stepping over a pickup between them", () => {
+    const board = [pu("P1"), mk("A"), pu("P2"), mk("B")];
+    const out = applyMoveInDriver(board, 1, "A", 1);
+    expect(out.filter((e) => e.stopType === "delivery").map((e) => e.id)).toEqual(["B", "A"]);
+  });
+
+  it("a delivery directly under its pickup can no longer be nudged above it", () => {
+    /* It is already first among deliveries, so up is a genuine no-op — but it is
+       a no-op because it is at the edge, not because a pickup blocked it. */
+    const board = [pu("P"), mk("A"), mk("B")];
+    expect(applyMoveInDriver(board, 1, "A", -1)).toBe(board);
+  });
+
+  it("never moves a stop out of its own load", () => {
+    const board = [mk("A"), mk("B", { loadNum: 2 }), mk("C")];
+    const out = applyMoveInDriver(board, 1, "A", 1);
+    out.forEach((e) => expect(e.loadNum).toBe(board.find((x) => x.id === e.id).loadNum));
+    expect(out.filter((e) => (e.loadNum || 1) === 1).map((e) => e.id)).toEqual(["C", "A"]);
   });
 });

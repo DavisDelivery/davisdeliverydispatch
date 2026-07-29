@@ -1115,9 +1115,12 @@ dels.forEach(e=>{
      created a separate pickup card for each variant — more ghosts. _normLoc
      collapses them to one. We still keep a clean display label (prefer the
      matching source's short label) for the pickup's pickupFrom. */
-  const rawLoc=e.pickupFrom||puSrcs[0].label.split(" - ").pop();
+  /* Fall back to the nominated default dock rather than whichever happens to be
+     listed first, so the generated card names the same dock the label shows. */
+  const _defSrc=puSrcs.find(s=>s.default)||puSrcs[0];
+  const rawLoc=e.pickupFrom||_defSrc.label.split(" - ").pop();
   const normLoc=_normLoc(rawLoc);
-  const matchSrc=puSrcs.find(s=>_normLoc(s.label)===normLoc)||puSrcs[0];
+  const matchSrc=puSrcs.find(s=>_normLoc(s.label)===normLoc)||_defSrc;
   const loc=matchSrc.label.split(" - ").pop();
   const ln=e.loadNum||1;
   const key=normLoc+"::"+ln;
@@ -1317,10 +1320,19 @@ export const applyMoveInDriver=(all,drvId,entryId,dir)=>{
   const moving=out[fromIdx];
   if(moving.driverId!==drvId)return all;
   const moveLoad=moving.loadNum||1;
+  /* Moving a DELIVERY swaps it with the next delivery, stepping over any pickup
+     between them. Swapping with a pickup instead made the arrow look broken: the
+     swap happened, then the ordering pass put the pickup back above the
+     deliveries it supplies, and the stop had not moved. Pickups are placed by
+     the engine, so they are not the dispatcher's to reorder — nudging a manual
+     pickup still walks the whole group. */
+  const stepOverPickups=moving.stopType==="delivery";
   const neighbors=[];
   for(let i=0;i<out.length;i++){
     const e=out[i];
-    if(e&&e.driverId===drvId&&(e.loadNum||1)===moveLoad)neighbors.push(i);
+    if(!e||e.driverId!==drvId||(e.loadNum||1)!==moveLoad)continue;
+    if(stepOverPickups&&e.stopType!=="delivery")continue;
+    neighbors.push(i);
   }
   const targetPos=neighbors.indexOf(fromIdx)+dir;
   if(targetPos<0||targetPos>=neighbors.length)return all;
@@ -1388,6 +1400,12 @@ export const resolvePickupLabel=(entry,siblings)=>{
        and either chip would record a pickup that never happened. */
     const manualSrc=manualPickupOrigin(entry,siblings);
     if(manualSrc)return{text:manualSrc,ambiguous:false};
+    /* A supplier may nominate a default dock. `defaulted` marks the difference
+       between "resolved because someone chose" and "resolved because this is
+       where it usually comes from" — the card still offers the dock chips on a
+       defaulted stop so switching to the other dock stays one click. */
+    const def=locs.find(l=>l.default);
+    if(def)return{text:def.label,ambiguous:false,defaulted:true};
     return{text:multiCust+" — ⚠ pick location",ambiguous:true};
   }
   /* Single-location or no special handling — original behavior. */

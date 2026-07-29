@@ -2030,12 +2030,12 @@ style={{flex:1,minWidth:140,border:"1px solid #e7e5e4",borderRadius:6,padding:"3
 {(()=>{
   if(entry.stopType==="pickup")return null;
   const rp=resolvePickupLabel(entry,siblings);
-  if(!rp.ambiguous||!onSetPickup)return null;
+  if((!rp.ambiguous&&!rp.defaulted)||!onSetPickup)return null;
   const mc=MULTI_PICKUP[entry.customer]||MULTI_PICKUP[entry.pickupFrom];
   if(!mc)return null;
   return(<div style={{marginTop:4,display:"flex",gap:4,flexWrap:"wrap",alignItems:"center"}}>
-    <span style={{fontSize:9,color:"#dc2626",fontWeight:700}}>Set pickup:</span>
-    {mc.map(l=>(<button key={l.label} onClick={e=>{e.stopPropagation();onSetPickup(l.label);}} style={{fontSize:10,fontWeight:700,padding:"3px 9px",borderRadius:6,border:"1px solid #fbbf24",background:"#fffbeb",color:"#92400e",cursor:"pointer"}}>{l.label.split(" - ").pop()}</button>))}
+    <span style={{fontSize:9,color:rp.ambiguous?"#dc2626":"#a8a29e",fontWeight:700}}>Set pickup:</span>
+    {mc.map(l=>(<button key={l.label} onClick={e=>{e.stopPropagation();onSetPickup(l.label);}} style={{fontSize:10,fontWeight:700,padding:"3px 9px",borderRadius:6,border:"1px solid "+(rp.ambiguous?"#fbbf24":"#e7e5e4"),background:rp.ambiguous?"#fffbeb":(_normLoc(l.label)===_normLoc(rp.text)?"#eff6ff":"#fafaf9"),color:rp.ambiguous?"#92400e":(_normLoc(l.label)===_normLoc(rp.text)?"#2563eb":"#78716c"),cursor:"pointer"}}>{l.label.split(" - ").pop()}</button>))}
   </div>);
 })()}
 
@@ -7293,12 +7293,12 @@ style={{background:isDrgOver?"#dcfce7":isDrgSrc?"#fef9c3":done?"#f0fdf4":onSite?
 {(()=>{
   if(entry.stopType==="pickup")return null;
   const rp=resolvePickupLabel(entry,dl);
-  if(!rp.ambiguous)return null;
+  if(!rp.ambiguous&&!rp.defaulted)return null;
   const mc=MULTI_PICKUP[entry.customer]||MULTI_PICKUP[entry.pickupFrom];
   if(!mc)return null;
   return(<div style={{marginTop:4,display:"flex",gap:4,flexWrap:"wrap",alignItems:"center"}}>
-    <span style={{fontSize:9,color:"#dc2626",fontWeight:700}}>Set pickup:</span>
-    {mc.map(l=>(<button key={l.label} onClick={e=>{e.stopPropagation();setPickupFrom(entry.id,l.label);}} style={{fontSize:10,fontWeight:700,padding:"3px 9px",borderRadius:6,border:"1px solid #fbbf24",background:"#fffbeb",color:"#92400e",cursor:"pointer"}}>{l.label.split(" - ").pop()}</button>))}
+    <span style={{fontSize:9,color:rp.ambiguous?"#dc2626":"#a8a29e",fontWeight:700}}>Set pickup:</span>
+    {mc.map(l=>(<button key={l.label} onClick={e=>{e.stopPropagation();setPickupFrom(entry.id,l.label);}} style={{fontSize:10,fontWeight:700,padding:"3px 9px",borderRadius:6,border:"1px solid "+(rp.ambiguous?"#fbbf24":"#e7e5e4"),background:rp.ambiguous?"#fffbeb":(_normLoc(l.label)===_normLoc(rp.text)?"#eff6ff":"#fafaf9"),color:rp.ambiguous?"#92400e":(_normLoc(l.label)===_normLoc(rp.text)?"#2563eb":"#78716c"),cursor:"pointer"}}>{l.label.split(" - ").pop()}</button>))}
   </div>);
 })()}
 {entry.customer==="Crossville Studios"&&<div style={{display:"flex",alignItems:"center",gap:4,marginTop:2}}>
@@ -7386,12 +7386,12 @@ style={{background:isDrgOver?"#dcfce7":isDrgSrc?"#fef9c3":done?"#f0fdf4":onSite?
 {(()=>{
   if(entry.stopType==="pickup")return null;
   const rp=resolvePickupLabel(entry,dl);
-  if(!rp.ambiguous)return null;
+  if(!rp.ambiguous&&!rp.defaulted)return null;
   const mc=MULTI_PICKUP[entry.customer]||MULTI_PICKUP[entry.pickupFrom];
   if(!mc)return null;
   return(<div style={{marginTop:4,display:"flex",gap:4,flexWrap:"wrap",alignItems:"center"}}>
-    <span style={{fontSize:9,color:"#dc2626",fontWeight:700}}>Set pickup:</span>
-    {mc.map(l=>(<button key={l.label} onClick={e=>{e.stopPropagation();setPickupFrom(entry.id,l.label);}} style={{fontSize:10,fontWeight:700,padding:"3px 9px",borderRadius:6,border:"1px solid #fbbf24",background:"#fffbeb",color:"#92400e",cursor:"pointer"}}>{l.label.split(" - ").pop()}</button>))}
+    <span style={{fontSize:9,color:rp.ambiguous?"#dc2626":"#a8a29e",fontWeight:700}}>Set pickup:</span>
+    {mc.map(l=>(<button key={l.label} onClick={e=>{e.stopPropagation();setPickupFrom(entry.id,l.label);}} style={{fontSize:10,fontWeight:700,padding:"3px 9px",borderRadius:6,border:"1px solid "+(rp.ambiguous?"#fbbf24":"#e7e5e4"),background:rp.ambiguous?"#fffbeb":(_normLoc(l.label)===_normLoc(rp.text)?"#eff6ff":"#fafaf9"),color:rp.ambiguous?"#92400e":(_normLoc(l.label)===_normLoc(rp.text)?"#2563eb":"#78716c"),cursor:"pointer"}}>{l.label.split(" - ").pop()}</button>))}
   </div>);
 })()}
 <div style={{display:"flex",gap:3,marginTop:4,alignItems:"center"}}>
