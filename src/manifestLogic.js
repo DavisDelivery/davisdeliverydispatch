@@ -1,3 +1,4 @@
+import { MULTI_PICKUP } from "./pickupConfig.js";
 /* manifestLogic.js — pure, side-effect-free manifest data logic.
 
    Extracted from App.jsx so it can be unit-tested in isolation (App.jsx loads
@@ -222,6 +223,7 @@ export const reapOrphanAutoPickups=(entries,opts)=>{
   if(!Array.isArray(entries))return entries;
   const multiSource=opts&&typeof opts.multiSource==="function"?opts.multiSource:()=>false;
   const normLoc=opts&&typeof opts.normLoc==="function"?opts.normLoc:(s)=>String(s||"").trim().toLowerCase();
+  const docksFor=opts&&typeof opts.docksFor==="function"?opts.docksFor:null;
   const gkey=(c,d,l)=>[c||"",d||0,l||1].join("|");
   /* Per (customer,driver,load): does a delivery exist, and — for multi-source —
      at which docks (wild = a delivery whose dock is unknown, covering all). */
@@ -233,7 +235,17 @@ export const reapOrphanAutoPickups=(entries,opts)=>{
     if(!g){g={docks:new Set(),wild:false};groups.set(k,g);}
     if(multiSource(e.customer)){
       const loc=normLoc(e.pickupFrom);
-      if(loc)g.docks.add(loc); else g.wild=true;
+      /* A pickupFrom naming a place this supplier has no dock at ("Southern
+         Aluminum - Lithia Springs" on an Emser stop, or anything free-typed) is
+         NOT a dock constraint. rebuildPickupsFor treats it as "no dock named"
+         and falls back to the supplier's first dock; if the reaper instead reads
+         it as a dock, the two disagree and it deletes the very card the
+         generator just made. The card is on the dispatcher's screen, then gone
+         after a sync — and gone on the driver's phone, which only ever sees
+         post-reap data. Treat unresolvable as wild, matching the generator.
+         Without docksFor the old behavior stands. */
+      const known=!loc||!docksFor||docksFor(e.customer).some(l=>normLoc(l)===loc);
+      if(loc&&known)g.docks.add(loc); else g.wild=true;
     }
   });
   let changed=false;
@@ -503,6 +515,42 @@ export const manualPickupCoversDock=(e,loc,srcLabel,normLoc)=>{
   const stopL=String(e.stop||"").toLowerCase();
   const supplier=String(srcLabel||"").split(" - ")[0].trim().toLowerCase();
   return !!supplier&&stopL.includes(supplier)&&stopL.includes(String(loc).toLowerCase());
+};
+
+/* Is this delivery's freight collected somewhere that ISN'T one of the
+   supplier's docks, with a manual pickup already scheduled there?
+
+   The grouping in rebuildPickupsFor resolves a delivery's `pickupFrom` against
+   PICKUP_SOURCES and, when nothing matches, falls back to puSrcs[0] — the
+   supplier's default dock. That fallback is right for a delivery that never
+   named a dock, and wrong for one that named a place the supplier doesn't own:
+   an MM Systems load collected at Southern Aluminum got bucketed under the
+   Pendergrass dock and grew a second pickup card there, on top of the manual
+   Southern Aluminum card that was already covering it. Because the delivery
+   itself was to Pendergrass, that phantom card told the driver to pick up and
+   deliver at the same address.
+
+   hasManualPU can't catch this: manualPickupCoversDock asks whether the manual
+   pickup covers the DOCK, and a pickup at Southern Aluminum plainly doesn't.
+   The question here is the other one — whether this delivery goes to a dock at
+   all. manualPickupOrigin can't catch it either; it bails when an auto card
+   exists on the load, which by then is the very card we should not have made.
+
+   Narrow on purpose — it only fires when the dispatcher stated the origin twice
+   over (a pickupFrom that matches no dock, AND a manual pickup sitting at that
+   same place on this driver+load), so a delivery that really does come off a
+   dock keeps its dock card. */
+export const deliveryCollectedOffDock=(e,puSrcs,entries,normLoc)=>{
+  if(!e||!e.pickupFrom||!Array.isArray(puSrcs)||!Array.isArray(entries))return false;
+  const nl=typeof normLoc==="function"?normLoc:(s)=>String(s||"").trim().toLowerCase();
+  const from=nl(e.pickupFrom);
+  if(!from)return false;
+  if(puSrcs.some(s=>s&&nl(s.label)===from))return false; /* names a real dock → normal dock flow */
+  const drv=e.driverId||0,ln=e.loadNum||1;
+  /* Same " → destination" suffix the insert-pickup form can leave on `stop`. */
+  return entries.some(p=>p&&p.stopType==="pickup"&&p.manualPickup&&p.customer===e.customer
+    &&(p.driverId||0)===drv&&(p.loadNum||1)===ln
+    &&nl(String(p.stop||"").split(/\s*→\s*/)[0])===from);
 };
 
 /* Where a delivery's load actually comes from when a MANUAL pickup on the same
@@ -987,3 +1035,381 @@ export const buildMergedEntries=(fbEntriesRaw,localEntriesRaw,{isDriver=false,ca
      transaction can't invent a reorder nobody asked for. */
   return normalizeOrder(reconciled,0,multiSource?{multiSource,normLoc}:undefined);
 };
+
+/* ── The auto-pickup engine ───────────────────────────────────────────────────
+   Lifted out of App.jsx verbatim so it can be driven by tests. It was the one
+   piece of genuinely intricate logic — dock matching, multi-load, manual-pickup
+   suppression, anchor-preserving placement, id reuse, tombstoning — with no
+   direct test coverage, because it closed over component state and could only
+   be reached by clicking. Both of the bugs found on 2026-07-28 lived in here.
+
+   The three closure dependencies are now injected via `deps`:
+     pickupSources   PICKUP_SOURCES (module constant in App.jsx)
+     customers       CUSTOMERS (module constant)
+     driverLoadCount component state: {driverId: loadCount}
+     genId           id minter (injectable so tests get stable ids)
+     normLoc         dock-label normalizer
+     onTombstone     side effect for auto-pickups that vanish in the rebuild
+
+   Behavior is unchanged — App.jsx keeps a thin wrapper that binds the deps. */
+export const rebuildPickupsForPure=(all,cust,deps)=>{
+const {pickupSources:PICKUP_SOURCES,customers:CUSTOMERS,driverLoadCount,genId,normLoc:_normLoc,onTombstone:tombstone}=deps;
+
+const makeNote=(dels)=>{
+  if(!dels.length)return"";
+  /* Reverse to LIFO load order. Full list — no truncation. */
+  const names=dels.slice().reverse().map(e=>e.stop);
+  return "Load order: "+names.join(", ");
+};
+const puSrcs=PICKUP_SOURCES.filter(s=>s.customer===cust);
+if(!puSrcs.length)return all;
+const removedPUs=all.filter(e=>e.customer===cust&&e.stopType==="pickup"&&!e.manualPickup);
+/* Before removing the auto-pickups, remember WHERE each one sat so a rebuild
+   triggered by an unrelated change (e.g. adding a stop to another driver)
+   doesn't relocate a pickup the dispatcher manually positioned. For each
+   removed pickup, record the id of the very next entry after it in the array
+   (its "anchor"). On re-insert we place the reused pickup right before that
+   same anchor, preserving the manual order. Falls back to delivery-based
+   placement only for genuinely new pickups or when the anchor is gone. */
+const _puAnchorById={};
+const _removedIdSet=new Set(removedPUs.map(p=>p.id));
+removedPUs.forEach(p=>{
+  const idx=all.findIndex(e=>e.id===p.id);
+  if(idx>=0){
+    /* Anchor = next entry that is NOT itself an auto-pickup being removed in
+       this pass, so the anchor is a stable delivery (or other kept entry)
+       that will still be present after regeneration. */
+    const next=all.slice(idx+1).find(e=>e.id&&!_removedIdSet.has(e.id));
+    _puAnchorById[p.id]=next?next.id:null; /* null => was at end */
+  }
+});
+all=all.filter(e=>!(e.customer===cust&&e.stopType==="pickup"&&!e.manualPickup));
+/* Track which removed-pickup ids get reused by a regenerated pickup. Any
+   removed pickup whose id is NOT reused is genuinely gone — it must be
+   tombstoned, or the next transactional save sees it FB-only and resurrects
+   it as an orphan card. */
+const _reusedPuIds=new Set();
+const custDels=all.filter(e=>e.customer===cust&&e.stopType==="delivery");
+const byDriver={};
+custDels.forEach(e=>{if(e.driverId>0){if(!byDriver[e.driverId])byDriver[e.driverId]=[];byDriver[e.driverId].push(e);}});
+const cd=CUSTOMERS[cust];
+const puDueBy=(cust==="Specialty")?"Pickup 7:30 AM — Specialty":null;
+Object.entries(byDriver).forEach(([drvIdStr,dels])=>{
+const dId=Number(drvIdStr);
+const byLocLoad={};
+dels.forEach(e=>{
+  /* Freight collected off-dock (pickupFrom names somewhere the supplier doesn't
+     own, and a manual pickup is already scheduled there) needs no dock card —
+     without this the puSrcs[0] fallback below buckets it under the supplier's
+     default dock and generates a SECOND pickup for a delivery the manual card
+     already covers. See deliveryCollectedOffDock. */
+  if(deliveryCollectedOffDock(e,puSrcs,all,_normLoc))return;
+  /* Group deliveries under a pickup location deterministically, keyed on the
+     NORMALIZED location. A delivery's location is its own pickupFrom; when
+     absent, fall back to the first source label. selPickup (the volatile UI
+     toggle) is never used — that spawned ghost duplicates.
+
+     Critically the key uses _normLoc: the stored pickupFrom comes in several
+     formats for the same dock ("Norcross", "Emser - Norcross", "Emser Tile —
+     Norcross"). Keying on the raw string put those in different groups and
+     created a separate pickup card for each variant — more ghosts. _normLoc
+     collapses them to one. We still keep a clean display label (prefer the
+     matching source's short label) for the pickup's pickupFrom. */
+  /* Fall back to the nominated default dock rather than whichever happens to be
+     listed first, so the generated card names the same dock the label shows. */
+  const _defSrc=puSrcs.find(s=>s.default)||puSrcs[0];
+  const rawLoc=e.pickupFrom||_defSrc.label.split(" - ").pop();
+  const normLoc=_normLoc(rawLoc);
+  const matchSrc=puSrcs.find(s=>_normLoc(s.label)===normLoc)||_defSrc;
+  const loc=matchSrc.label.split(" - ").pop();
+  const ln=e.loadNum||1;
+  const key=normLoc+"::"+ln;
+  if(!byLocLoad[key])byLocLoad[key]={loc,loadNum:ln,dels:[]};
+  byLocLoad[key].dels.push(e);
+});
+/* hasMultiLoads should reflect this DRIVER's overall load usage, not just
+   this customer's. Otherwise a Florida Tile delivery on Load 2 would get a
+   Load 1 pickup if Brent's other Load 2 stops were for different customers.
+   Combines: (a) loads present in the new `all` state for this driver, and
+   (b) the explicit driverLoadCount setting (user may have added Load 2 via
+   the + Load button before moving any stops into it). */
+const loadsInAll=new Set(all.filter(e=>e.driverId===dId).map(e=>e.loadNum||1));
+const explicitLoads=driverLoadCount[dId]||1;
+const maxLoadSeen=loadsInAll.size>0?Math.max(...loadsInAll):1;
+const hasMultiLoads=loadsInAll.size>1||maxLoadSeen>1||explicitLoads>1;
+Object.values(byLocLoad).forEach(({loc,loadNum:ln,dels:locDels})=>{
+const puSrc=puSrcs.find(s=>s.label.includes(loc))||puSrcs[0];
+/* Scope the manual-pickup check to the same load AND the same dock. A manual
+   pickup only suppresses the auto dock card when it actually covers this dock
+   (manualPickupCoversDock) — a manual pickup somewhere else entirely (e.g. a
+   return pickup at "DCO Smyrna" scheduled for Emser Tile) must coexist with
+   the dock pickup. The old `!e.pickupFrom` clause let any dock-less manual
+   pickup silently erase the driver's real "Emser - Norcross" card and its
+   load-order note. */
+const hasManualPU=all.some(e=>e.customer===cust&&e.stopType==="pickup"&&e.manualPickup&&e.driverId===dId&&(e.loadNum||1)===ln&&manualPickupCoversDock(e,loc,puSrc.label,_normLoc));
+if(hasManualPU)return;
+const delWithPuDue=locDels.find(e=>e.pickupDueBy);
+const effectivePuDue=delWithPuDue?delWithPuDue.pickupDueBy:puDueBy;
+const existingPU=removedPUs.find(p=>p.driverId===dId&&p.stop===puSrc.label&&(p.loadNum||1)===(hasMultiLoads?ln:1));
+const puId=existingPU?existingPU.id:genId();
+if(existingPU)_reusedPuIds.add(existingPU.id);
+const puEntry={id:puId,customer:cust,stop:puSrc.label,baseRate:0,fuelPct:0,isHourly:false,
+note:makeNote(locDels),driverId:dId,addr:puSrc.addr,stopType:"pickup",priority:cd?.priority||false,
+instructions:existingPU?.instructions||"",status:existingPU?.status||null,arrivedAt:existingPU?.arrivedAt||null,departedAt:existingPU?.departedAt||null,eta:existingPU?.eta||null,photos:existingPU?.photos||[],signature:existingPU?.signature||null,
+dueBy:effectivePuDue,weight:0,loadNum:hasMultiLoads?ln:1,pickupFrom:loc};
+/* Placement priority:
+   1. If this pickup existed before (reused id) and we recorded an anchor,
+      re-insert it right before that same anchor entry — this preserves a
+      position the dispatcher set manually, so a rebuild caused by an
+      unrelated change elsewhere doesn't shuffle it.
+   2. Otherwise (new pickup, or anchor no longer present) fall back to
+      placing it before the first delivery from this location/load. */
+let placed=false;
+/* Anchor lookup is INDEPENDENT of the existingPU match. existingPU also gates
+   on loadNum (hasMultiLoads?ln:1); if that gate fails (e.g. load bookkeeping
+   shifted) we'd otherwise skip the anchor entirely and fall through to
+   firstDelIdx, snapping a manually-placed pickup back in front of its first
+   delivery — exactly the 'I moved them back to back and it reverted' bug.
+   Match the prior pickup by (driver, stop) so the recorded position is honored
+   regardless of the loadNum gate. */
+/* Same load first. Matching on (driver, stop) alone means the Load 2 dock card
+   finds LOAD 1's pickup here and inherits its anchor — a Load 1 delivery — so
+   every rebuild splices Load 2's card into the Load 1 block, and the board
+   rearranges itself again on the next rebuild. Any two-load day with a docked
+   supplier hits it. The unfiltered match still stands as the FALLBACK, which is
+   what the paragraph above is about: when the loadNum gate on existingPU fails,
+   a manually-placed pickup must still be found rather than snapping back in
+   front of its first delivery. */
+const priorPU=removedPUs.find(p=>p.driverId===dId&&p.stop===puSrc.label&&(p.loadNum||1)===ln)
+            ||removedPUs.find(p=>p.driverId===dId&&p.stop===puSrc.label);
+if(priorPU&&Object.prototype.hasOwnProperty.call(_puAnchorById,priorPU.id)){
+  const anchorId=_puAnchorById[priorPU.id];
+  if(anchorId===null){/* pickup was at the array end — but an auto-pickup must
+    precede its own deliveries; leave it unplaced so the delivery-based fallback
+    below inserts it before its first delivery, instead of re-pinning it to the
+    bottom forever (the desktop RouteBuilder-Apply "pickup at bottom" bug). */}
+  else{
+    const ai=all.findIndex(e=>e.id===anchorId);
+    if(ai>=0){all.splice(ai,0,puEntry);placed=true;}
+  }
+}
+if(!placed){
+  const firstDelIdx=all.findIndex(e=>e.customer===cust&&e.stopType==="delivery"&&e.driverId===dId&&_normLoc(e.pickupFrom||loc)===_normLoc(loc)&&(e.loadNum||1)===ln);
+  if(firstDelIdx>=0){all.splice(firstDelIdx,0,puEntry);}
+  else{
+    const anyDelIdx=all.findIndex(e=>e.customer===cust&&e.stopType==="delivery"&&e.driverId===dId&&(e.loadNum||1)===ln);
+    if(anyDelIdx>=0)all.splice(anyDelIdx,0,puEntry);
+    else all.push(puEntry);
+  }
+}
+});
+});
+/* Tombstone any auto-pickup that was removed and not regenerated. Prevents
+   the transactional save's FB-only-append from resurrecting an orphan
+   pickup card after a reassign/delete/load-change empties a driver. */
+const _orphanPus=removedPUs.filter(p=>!_reusedPuIds.has(p.id));
+if(_orphanPus.length)tombstone(_orphanPus); /* auto-pickups only; pass entries for signatures */
+return all;
+};
+
+
+/* ── Manifest mutations ──────────────────────────────────────────────────────
+   The operations a dispatcher performs on a board. Extracted from App.jsx so
+   SEQUENCES of them can be fuzzed against the manifest invariants — a single
+   reassign being correct says nothing about a board that has had twenty
+   applied to it, and drift only shows up over a sequence. */
+
+/* Find the array index to splice-insert a new entry so that it lands at the
+   BOTTOM of the specified (driver, loadNum). If the load is empty for this
+   driver, inserts after the last stop of any lower load (keeps loads ordered).
+   If driver has no stops yet, inserts after the last entry of any driver.
+   Used by addDel, addQuoteWithPickup, assignInOrder so inserts are consistent
+   and never land in the middle or top of a load unexpectedly. */
+export const insertIdxForLoad=(arr,drvId,loadNum)=>{
+  const ln=loadNum||1;
+  /* Prefer: last entry of (drvId, same loadNum) */
+  for(let i=arr.length-1;i>=0;i--){
+    if(arr[i].driverId===drvId&&(arr[i].loadNum||1)===ln)return i+1;
+  }
+  /* Fallback: last entry of (drvId, any smaller loadNum) — keeps loads in order */
+  for(let i=arr.length-1;i>=0;i--){
+    if(arr[i].driverId===drvId&&(arr[i].loadNum||1)<ln)return i+1;
+  }
+  /* Fallback: last entry of drvId on any load (new load above existing ones — rare) */
+  for(let i=arr.length-1;i>=0;i--){
+    if(arr[i].driverId===drvId)return i+1;
+  }
+  /* Driver has no entries yet — append at the end */
+  return arr.length;
+};
+/* `toLoad` — the load number of whatever was dropped ON (a stop, or an empty
+   load's placeholder). Without it a drop could only ever permute array
+   positions, and a load is a FIELD (`loadNum`), not a position: a stop dragged
+   from Load 1 onto Load 2 silently stayed on Load 1, and the empty-load box
+   reading "drag or assign stops here" wasn't a drop target at all — it had no
+   onDragOver, so the browser never fired a drop on it. Both now route through
+   reassign(), which already owns this move: it sets driver and load together,
+   lands the stop at the bottom of the target load, and rebuilds the auto-pickups
+   both loads need afterwards. */
+
+/* Move an entry to a driver and (optionally) a load. `deps.rebuildPickups` is
+   the bound auto-pickup engine; it runs only when the move actually changed
+   something that invalidates a pickup, matching the original. */
+export const applyReassign=(all,eid,did,newLoadNum,deps)=>{
+  if(!Array.isArray(all))return all;
+  const {rebuildPickups}=deps||{};
+  const out=[...all];
+  const idx=out.findIndex(e=>e&&e.id===eid);
+  if(idx<0)return all;
+  const cur=out[idx];
+  /* Old driver/load read from the array being edited. The component version
+     read them off the display list, which is the same for these two fields and
+     one less thing to go stale mid-edit. */
+  const oldDid=cur.driverId,oldLoad=cur.loadNum||1;
+  const targetLoad=newLoadNum||oldLoad;
+  const driverChanged=did!==oldDid;
+  const loadChanged=!!newLoadNum&&newLoadNum!==oldLoad;
+  const updated={...cur,driverId:did,...(newLoadNum?{loadNum:newLoadNum}:{})};
+  if(driverChanged||loadChanged){
+    /* Splice out and reinsert at the bottom of the target (driver, load) — the
+       'new stops land at the bottom' contract shared with addDel. */
+    out.splice(idx,1);
+    if(did>0)out.splice(insertIdxForLoad(out,did,targetLoad),0,updated);
+    else out.push(updated);
+  }else{
+    out[idx]=updated;
+  }
+  if((driverChanged||loadChanged)&&(updated.stopType==="delivery"||(updated.stopType==="pickup"&&updated.manualPickup))
+     &&typeof rebuildPickups==="function"){
+    return rebuildPickups(out,updated.customer);
+  }
+  return out;
+};
+
+/* Change only an entry's load, in place. */
+export const applySetLoadNum=(all,eid,n,deps)=>{
+  if(!Array.isArray(all))return all;
+  const {rebuildPickups}=deps||{};
+  const out=all.map(e=>(e&&e.id===eid?{...e,loadNum:n}:e));
+  const entry=out.find(e=>e&&e.id===eid);
+  if(entry&&entry.stopType==="delivery"&&typeof rebuildPickups==="function")
+    return rebuildPickups(out,entry.customer);
+  return out;
+};
+
+/* Replace a driver's stops with `nextOrder`, in their existing array slots so
+   other drivers' stops never shift. The length-mismatch fallback rebuilds the
+   list instead — it is the one path here that can change WHICH stops exist, so
+   the invariant suite checks stop conservation over every reorder. */
+export const reorderDriverBlock=(all,drvId,nextOrder)=>{
+  const slots=[];
+  all.forEach((e,i)=>{if(e&&e.driverId===drvId)slots.push(i);});
+  if(slots.length!==nextOrder.length)return[...all.filter(e=>!(e&&e.driverId===drvId)),...nextOrder];
+  const out=all.slice();
+  slots.forEach((idx,k)=>{out[idx]=nextOrder[k];});
+  return out;
+};
+
+/* The ▲▼ buttons: swap a stop with its neighbour inside the same (driver, load)
+   group, so a nudge can never jump a stop into another load. */
+export const applyMoveInDriver=(all,drvId,entryId,dir)=>{
+  if(!Array.isArray(all))return all;
+  const out=[...all];
+  const fromIdx=out.findIndex(e=>e&&e.id===entryId);
+  if(fromIdx<0)return all;
+  const moving=out[fromIdx];
+  if(moving.driverId!==drvId)return all;
+  const moveLoad=moving.loadNum||1;
+  /* Moving a DELIVERY swaps it with the next delivery, stepping over any pickup
+     between them. Swapping with a pickup instead made the arrow look broken: the
+     swap happened, then the ordering pass put the pickup back above the
+     deliveries it supplies, and the stop had not moved. Pickups are placed by
+     the engine, so they are not the dispatcher's to reorder — nudging a manual
+     pickup still walks the whole group. */
+  const stepOverPickups=moving.stopType==="delivery";
+  const neighbors=[];
+  for(let i=0;i<out.length;i++){
+    const e=out[i];
+    if(!e||e.driverId!==drvId||(e.loadNum||1)!==moveLoad)continue;
+    if(stepOverPickups&&e.stopType!=="delivery")continue;
+    neighbors.push(i);
+  }
+  const targetPos=neighbors.indexOf(fromIdx)+dir;
+  if(targetPos<0||targetPos>=neighbors.length)return all;
+  const toIdx=neighbors[targetPos];
+  [out[fromIdx],out[toIdx]]=[out[toIdx],out[fromIdx]];
+  return out;
+};
+
+/* Route-planner Apply: impose an explicit order on a driver's stops. The id list
+   from the desktop RouteBuilder holds DELIVERIES only, so orderByIds strands the
+   auto-pickups at the end; rebuilding each affected customer puts them back in
+   front of their first delivery. */
+export const applyReorderDriver=(all,drvId,orderedIds,deps)=>{
+  if(!Array.isArray(all))return all;
+  const {rebuildPickups,orderByIds:obi}=deps||{};
+  if(typeof obi!=="function")return all;
+  const drvEntries=all.filter(e=>e&&e.driverId===drvId);
+  let out=reorderDriverBlock(all,drvId,obi(drvEntries,orderedIds));
+  if(typeof rebuildPickups==="function"){
+    [...new Set(drvEntries.filter(e=>e.stopType==="delivery").map(e=>e.customer))]
+      .forEach(c=>{out=rebuildPickups(out,c);});
+  }
+  return out;
+};
+
+/* Same-driver drag reorder: lift the grabbed stop out of the driver's block and
+   drop it at `toIdx`. Resolved by id, not the drag-start index, which can go
+   stale if a sync reorders the list mid-drag. */
+export const applyDropReorder=(all,drvId,srcId,srcIdxFallback,toIdx)=>{
+  if(!Array.isArray(all))return all;
+  const de=all.filter(e=>e&&e.driverId===drvId);
+  const srcIdx=srcId!=null?de.findIndex(e=>e.id===srcId):srcIdxFallback;
+  if(srcIdx<0||srcIdx>=de.length)return all;
+  const[moved]=de.splice(srcIdx,1);
+  de.splice(Math.min(Math.max(toIdx,0),de.length),0,moved);
+  return reorderDriverBlock(all,drvId,de);
+};
+
+/* ── What the driver actually reads ──────────────────────────────────────────
+   The text under a stop's address. Correct underlying data still misleads if
+   this renders the wrong origin, or demands a dock choice the board already
+   answers — the "⚠ pick location" prompt with no right answer. Extracted so the
+   label can be checked against the pickup cards on the same board. */
+export const resolvePickupLabel=(entry,siblings)=>{
+  const pf=entry.pickupFrom;
+  const cust=entry.customer;
+  /* Which multi-pickup customer is this stop tied to? It can be named either
+     in `customer` (e.g. a Traditions delivery) or carried in `pickupFrom`
+     (e.g. a Quote Delivery whose load originates at Traditions). */
+  let multiCust=null;
+  if(cust&&MULTI_PICKUP[cust])multiCust=cust;
+  else if(pf&&MULTI_PICKUP[pf])multiCust=pf;
+  if(multiCust){
+    const locs=MULTI_PICKUP[multiCust];
+    /* A specific location is present if pickupFrom names one of the source
+       labels, or the short location word inside them (Alpharetta/Atlanta). */
+    const specific=pf&&pf!==multiCust&&locs.some(l=>{
+      const shortLoc=l.label.split(" - ").pop();
+      return pf===l.label||pf===shortLoc||pf.includes(shortLoc);
+    });
+    if(specific)return{text:pf.includes(" - ")?pf:(multiCust+" — "+pf),ambiguous:false};
+    /* No dock named — but a MANUAL pickup on this load may already say where the
+       load comes from (e.g. collected at MTI in Sugar Hill, delivered to Emser
+       Norcross). Asking "Norcross or Roswell?" there offers no correct answer,
+       and either chip would record a pickup that never happened. */
+    const manualSrc=manualPickupOrigin(entry,siblings);
+    if(manualSrc)return{text:manualSrc,ambiguous:false};
+    /* A supplier may nominate a default dock. `defaulted` marks the difference
+       between "resolved because someone chose" and "resolved because this is
+       where it usually comes from" — the card still offers the dock chips on a
+       defaulted stop so switching to the other dock stays one click. */
+    const def=locs.find(l=>l.default);
+    if(def)return{text:def.label,ambiguous:false,defaulted:true};
+    return{text:multiCust+" — ⚠ pick location",ambiguous:true};
+  }
+  /* Single-location or no special handling — original behavior. */
+  if(pf&&pf.includes(" - "))return{text:pf,ambiguous:false};
+  return{text:cust+(pf?" — "+pf:""),ambiguous:false};
+};
+

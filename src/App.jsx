@@ -61,7 +61,8 @@ greenBtn:{background:"#16a34a",color:"#fff",border:"none",borderRadius:8,padding
 inputMb4:{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"7px 10px",fontSize:12,outline:"none",marginBottom:4},
 };
 import { useState, useCallback, useEffect, useRef, Fragment, Component } from "react";
-import { dedupeIds, dedupeAutoPickups, dedupeGhostDeliveries, dedupeDeliveries, reapOrphanAutoPickups, sanitizeEntry, _mergeEntryDriver, _mergeEntryDispatcher, buildMergedEntries, entrySig, makeTombFilter, makeDocTombFilter, mergeTombstones, vanishedAutoPickups, orderByIds, reconcileDriverRoster, applyDriverRemap, normDriverName, manualPickupCoversDock, allInRate, stripLiftgateFee, resequenceEntries, sortBySeq, normalizeOrder, orderAutoPickupsFirst, manualPickupOrigin } from "./manifestLogic.js";
+import { PICKUP_SOURCES, MULTI_PICKUP, normLoc as _normLoc } from "./pickupConfig.js";
+import { dedupeIds, dedupeAutoPickups, dedupeGhostDeliveries, dedupeDeliveries, reapOrphanAutoPickups, sanitizeEntry, _mergeEntryDriver, _mergeEntryDispatcher, buildMergedEntries, entrySig, makeTombFilter, makeDocTombFilter, mergeTombstones, vanishedAutoPickups, orderByIds, reconcileDriverRoster, applyDriverRemap, normDriverName, manualPickupCoversDock, allInRate, stripLiftgateFee, resequenceEntries, sortBySeq, normalizeOrder, orderAutoPickupsFirst, manualPickupOrigin, deliveryCollectedOffDock, rebuildPickupsForPure, insertIdxForLoad, applyReassign, applySetLoadNum, reorderDriverBlock as _reorderDriverBlock, applyMoveInDriver, applyReorderDriver, applyDropReorder, resolvePickupLabel } from "./manifestLogic.js";
 import { diffOrderDocs, orderDocId, ordersParity } from "./ordersStore.js";
 
 const _SplitUI=({splitEntry,setSplitEntry})=>{const tw=splitEntry.totalWeight||0;const t1w=splitEntry.truck1Weight!==undefined?splitEntry.truck1Weight:Math.round(tw*(splitEntry.ratio/100));const t2w=tw-t1w;return(<><div style={_s.flexG6Mb6}><div style={_s.f1}><label style={_s.labelSm}>Total</label><input type="number" inputMode="numeric" value={tw||""} onChange={e=>{const newTw=parseInt(e.target.value)||0;setSplitEntry(p=>({...p,totalWeight:newTw,truck1Weight:Math.min(p.truck1Weight||Math.round(newTw/2),newTw)}));}} style={_s.splitTotal}/></div><div style={_s.f1}><label style={_s.labelBlue}>Truck 1</label><input type="number" inputMode="numeric" value={splitEntry.truck1Weight!==undefined?splitEntry.truck1Weight:""} onChange={e=>{const v=e.target.value;setSplitEntry(p=>({...p,truck1Weight:v===""?0:parseInt(v)||0}));}} style={_s.splitInput}/></div><div style={_s.f1}><label style={_s.labelGray}>Truck 2</label><div style={_s.splitT2}>{t2w.toLocaleString()}</div></div></div><input type="range" min={0} max={tw} step={100} value={t1w} onChange={e=>{const v=parseInt(e.target.value)||0;setSplitEntry(p=>({...p,truck1Weight:v}));}} style={_s.slider}/></>);};
@@ -181,14 +182,6 @@ const _sameEntryContent=(a,b)=>{try{return JSON.stringify({...a,updatedAt:0})===
    another dispatcher's concurrent reorder. In-place keeps a drag down to the
    one stop that actually moved. Falls back to the old append shape if the set
    of stops changed (callers only ever permute, so that is belt-and-braces). */
-const _reorderDriverBlock=(all,drvId,nextOrder)=>{
-  const slots=[];
-  all.forEach((e,i)=>{if(e&&e.driverId===drvId)slots.push(i);});
-  if(slots.length!==nextOrder.length)return[...all.filter(e=>!(e&&e.driverId===drvId)),...nextOrder];
-  const out=all.slice();
-  slots.forEach((idx,k)=>{out[idx]=nextOrder[k];});
-  return out;
-};
 const genId=()=>{
   _idSeq=(_idSeq+1)%1000000;
   const t=Date.now().toString(36);
@@ -1012,91 +1005,22 @@ const QUOTE_CUSTOMERS=[
 {name:"Traditions in Tile",pickups:[{label:"Alpharetta",addr:"3065 Trotters Parkway, Alpharetta, GA 30004"},{label:"Atlanta",addr:"1015 Chattahoochee Avenue NW, Atlanta, GA 30318"},{label:"Bogart",addr:"150 Trade Street, Bogart, GA 30622"}]},
 ];
 
-const PICKUP_SOURCES=[
-{customer:"Emser Tile",label:"Emser - Norcross",addr:"5470 Oakbrook Pkwy, Norcross, GA 30093"},
-{customer:"Emser Tile",label:"Emser - Roswell",addr:"250 Hembree Park Drive, Roswell, GA 30076"},
-{customer:"Florida Tile",label:"Florida Tile - Norcross",addr:"1455 Oakbrook Drive, Suite 100, Norcross, GA 30093"},
-{customer:"Specialty",label:"Specialty - Norcross",addr:"1275 Oakbrook Drive, Suite D, Norcross, GA 30093"},
-{customer:"IMETCO",label:"IMETCO - Norcross",addr:"4648 South Old Peachtree Road, Norcross, GA 30071"},
-{customer:"IMETCO",label:"Finishing Dynamics - Villa Rica",addr:"28 Andrews Way, Villa Rica, GA 30180"},
-{customer:"IMETCO",label:"Perfect Edge - Doraville",addr:"4264 Winters Chapel Road, Building F, Doraville, GA 30360"},
-{customer:"IMETCO",label:"Southern Aluminum - Lithia Springs",addr:"1401 Blairs Bridge Road, Lithia Springs, GA 30122"},
-{customer:"MM Systems",label:"MM Systems - Pendergrass",addr:"50 MM Way, Pendergrass, GA 30567"},
-{customer:"Perfect Edge",label:"Perfect Edge - Doraville",addr:"4264 Winters Chapel Road, Building F, Doraville, GA 30360"},
-{customer:"Crossville Studios",label:"Crossville - Norcross",addr:"1256 Oakbrook Drive, Suite F, Norcross, GA 30093"},
-{customer:"Traditions in Tile",label:"Traditions - Alpharetta",addr:"3065 Trotters Parkway, Alpharetta, GA 30004"},
-{customer:"Traditions in Tile",label:"Traditions - Atlanta",addr:"1015 Chattahoochee Avenue NW, Atlanta, GA 30318"},
-{customer:"Traditions in Tile",label:"Traditions - Bogart",addr:"150 Trade Street, Bogart, GA 30622"},
-{customer:"Prolex Flooring",label:"Prolex - Norcross",addr:"3044 Northwoods Circle, Norcross, GA 30071"},
-{customer:"Ceramic Tile Services",label:"Ceramic Tile - Gainesville",addr:"470 Woodsmill Road, Suite B, Gainesville, GA 30501"},
-{customer:"Woodbury Stamping",label:"Woodbury - Woodbury",addr:"29 Durand Street, Woodbury, GA 30293"},
-];
 
 const SHARED_STOPS=["Atlanta West - Lithia Springs","BEC - Alpharetta","Britts - Lawrenceville","D3 - Woodstock","DCO Lakes Pkwy","DCO Tech Dr","Hillman - Sugar Hill","NE Corner - Flowery Branch","Precision Flooring - Norcross","Premier - Suwanee","ProSource - Norcross","SE Commercial - Woodstock","Vanguard - Norcross"];
 
 function getBaseTier(mi){if(mi<=10)return 100;if(mi<=20)return 150;if(mi<=30)return 200;if(mi<=40)return 250;return 250+Math.ceil((mi-40)/10)*25;}
 
-/* Customers that ship from more than one physical pickup location. For these,
-   a manifest card MUST name the specific location (Alpharetta vs Atlanta,
-   Norcross vs Roswell) — "pickup from Traditions in Tile" alone tells the
-   driver nothing. Built from PICKUP_SOURCES so it stays in sync. */
-const MULTI_PICKUP=(()=>{
-  const byCust={};
-  PICKUP_SOURCES.forEach(s=>{(byCust[s.customer]=byCust[s.customer]||[]).push(s);});
-  const out={};
-  Object.entries(byCust).forEach(([c,arr])=>{if(arr.length>1)out[c]=arr;});
-  return out;
-})();
-/* Normalize a pickup-location value to a canonical token so the many stored
-   formats compare equal. Firestore data carries the same physical location
-   written several ways: "Norcross", "Emser - Norcross", "Emser Tile —
-   Norcross". They must all reduce to "norcross". Rule: take the part after
-   the last " - " or " — " separator (if any), lowercase, trim. A bare
-   "Norcross" stays "norcross"; "Emser - Norcross" -> "norcross". Returns ""
-   for null/empty. */
-const _normLoc=(v)=>{
-  if(!v||typeof v!=="string")return"";
-  const parts=v.split(/\s+[-–—]\s+/);/* hyphen, en-dash, em-dash — the same dock ships in all three */
-  return parts[parts.length-1].trim().toLowerCase();
-};
+
 /* Dock-aware orphan-pickup reaping: multi-source suppliers (MULTI_PICKUP) can
    carry one auto-pickup per dock on a (driver,load), so the reaper must match a
    pickup to a delivery at its OWN dock, not just same-customer. Passed to
    reapOrphanAutoPickups / buildMergedEntries at every ingest + save. */
-const _reapOpts={multiSource:(c)=>!!MULTI_PICKUP[c],normLoc:_normLoc};
+const _reapOpts={multiSource:(c)=>!!MULTI_PICKUP[c],normLoc:_normLoc,
+  /* Lets the reaper tell a real dock from a free-typed origin — see reapOrphanAutoPickups. */
+  docksFor:(c)=>PICKUP_SOURCES.filter(s=>s.customer===c).map(s=>s.label)};
 /* Given an entry, work out what pickup text to show and whether the location
    is still ambiguous (a multi-location customer with no specific location
    picked). Returns {text, ambiguous}. */
-const resolvePickupLabel=(entry,siblings)=>{
-  const pf=entry.pickupFrom;
-  const cust=entry.customer;
-  /* Which multi-pickup customer is this stop tied to? It can be named either
-     in `customer` (e.g. a Traditions delivery) or carried in `pickupFrom`
-     (e.g. a Quote Delivery whose load originates at Traditions). */
-  let multiCust=null;
-  if(cust&&MULTI_PICKUP[cust])multiCust=cust;
-  else if(pf&&MULTI_PICKUP[pf])multiCust=pf;
-  if(multiCust){
-    const locs=MULTI_PICKUP[multiCust];
-    /* A specific location is present if pickupFrom names one of the source
-       labels, or the short location word inside them (Alpharetta/Atlanta). */
-    const specific=pf&&pf!==multiCust&&locs.some(l=>{
-      const shortLoc=l.label.split(" - ").pop();
-      return pf===l.label||pf===shortLoc||pf.includes(shortLoc);
-    });
-    if(specific)return{text:pf.includes(" - ")?pf:(multiCust+" — "+pf),ambiguous:false};
-    /* No dock named — but a MANUAL pickup on this load may already say where the
-       load comes from (e.g. collected at MTI in Sugar Hill, delivered to Emser
-       Norcross). Asking "Norcross or Roswell?" there offers no correct answer,
-       and either chip would record a pickup that never happened. */
-    const manualSrc=manualPickupOrigin(entry,siblings);
-    if(manualSrc)return{text:manualSrc,ambiguous:false};
-    return{text:multiCust+" — ⚠ pick location",ambiguous:true};
-  }
-  /* Single-location or no special handling — original behavior. */
-  if(pf&&pf.includes(" - "))return{text:pf,ambiguous:false};
-  return{text:cust+(pf?" — "+pf:""),ambiguous:false};
-};
 
 const CC={"Emser Tile":{bg:"#1e40af",accent:"#2563eb"},"Florida Tile":{bg:"#166534",accent:"#16a34a"},"Specialty":{bg:"#6b21a8",accent:"#9333ea"},"IMETCO":{bg:"#9a3412",accent:"#ea580c"},"MM Systems":{bg:"#075985",accent:"#0284c7"},"Perfect Edge":{bg:"#9f1239",accent:"#e11d48"},"Woodbury Stamping":{bg:"#3f3f46",accent:"#71717a"},"Quote Delivery":{bg:"#78350f",accent:"#d97706"},"One-Off Delivery":{bg:"#374151",accent:"#6b7280"}};
 const DCOL=["#2563eb","#16a34a","#ea580c","#9333ea"];
@@ -2106,12 +2030,12 @@ style={{flex:1,minWidth:140,border:"1px solid #e7e5e4",borderRadius:6,padding:"3
 {(()=>{
   if(entry.stopType==="pickup")return null;
   const rp=resolvePickupLabel(entry,siblings);
-  if(!rp.ambiguous||!onSetPickup)return null;
+  if((!rp.ambiguous&&!rp.defaulted)||!onSetPickup)return null;
   const mc=MULTI_PICKUP[entry.customer]||MULTI_PICKUP[entry.pickupFrom];
   if(!mc)return null;
   return(<div style={{marginTop:4,display:"flex",gap:4,flexWrap:"wrap",alignItems:"center"}}>
-    <span style={{fontSize:9,color:"#dc2626",fontWeight:700}}>Set pickup:</span>
-    {mc.map(l=>(<button key={l.label} onClick={e=>{e.stopPropagation();onSetPickup(l.label);}} style={{fontSize:10,fontWeight:700,padding:"3px 9px",borderRadius:6,border:"1px solid #fbbf24",background:"#fffbeb",color:"#92400e",cursor:"pointer"}}>{l.label.split(" - ").pop()}</button>))}
+    <span style={{fontSize:9,color:rp.ambiguous?"#dc2626":"#a8a29e",fontWeight:700}}>Set pickup:</span>
+    {mc.map(l=>(<button key={l.label} onClick={e=>{e.stopPropagation();onSetPickup(l.label);}} style={{fontSize:10,fontWeight:700,padding:"3px 9px",borderRadius:6,border:"1px solid "+(rp.ambiguous?"#fbbf24":"#e7e5e4"),background:rp.ambiguous?"#fffbeb":(_normLoc(l.label)===_normLoc(rp.text)?"#eff6ff":"#fafaf9"),color:rp.ambiguous?"#92400e":(_normLoc(l.label)===_normLoc(rp.text)?"#2563eb":"#78716c"),cursor:"pointer"}}>{l.label.split(" - ").pop()}</button>))}
   </div>);
 })()}
 
@@ -4552,145 +4476,12 @@ newEntries.forEach(e=>{if(e.stopType==="delivery"){writeAuditLog({action:"create
 showToast(`${stops.length} stops added`);setMultiSelect(false);setMultiChecked([]);
 };
 
-const rebuildPickupsFor=(all,cust)=>{
-const makeNote=(dels)=>{
-  if(!dels.length)return"";
-  /* Reverse to LIFO load order. Full list — no truncation. */
-  const names=dels.slice().reverse().map(e=>e.stop);
-  return "Load order: "+names.join(", ");
-};
-const puSrcs=PICKUP_SOURCES.filter(s=>s.customer===cust);
-if(!puSrcs.length)return all;
-const removedPUs=all.filter(e=>e.customer===cust&&e.stopType==="pickup"&&!e.manualPickup);
-/* Before removing the auto-pickups, remember WHERE each one sat so a rebuild
-   triggered by an unrelated change (e.g. adding a stop to another driver)
-   doesn't relocate a pickup the dispatcher manually positioned. For each
-   removed pickup, record the id of the very next entry after it in the array
-   (its "anchor"). On re-insert we place the reused pickup right before that
-   same anchor, preserving the manual order. Falls back to delivery-based
-   placement only for genuinely new pickups or when the anchor is gone. */
-const _puAnchorById={};
-const _removedIdSet=new Set(removedPUs.map(p=>p.id));
-removedPUs.forEach(p=>{
-  const idx=all.findIndex(e=>e.id===p.id);
-  if(idx>=0){
-    /* Anchor = next entry that is NOT itself an auto-pickup being removed in
-       this pass, so the anchor is a stable delivery (or other kept entry)
-       that will still be present after regeneration. */
-    const next=all.slice(idx+1).find(e=>e.id&&!_removedIdSet.has(e.id));
-    _puAnchorById[p.id]=next?next.id:null; /* null => was at end */
-  }
-});
-all=all.filter(e=>!(e.customer===cust&&e.stopType==="pickup"&&!e.manualPickup));
-/* Track which removed-pickup ids get reused by a regenerated pickup. Any
-   removed pickup whose id is NOT reused is genuinely gone — it must be
-   tombstoned, or the next transactional save sees it FB-only and resurrects
-   it as an orphan card. */
-const _reusedPuIds=new Set();
-const custDels=all.filter(e=>e.customer===cust&&e.stopType==="delivery");
-const byDriver={};
-custDels.forEach(e=>{if(e.driverId>0){if(!byDriver[e.driverId])byDriver[e.driverId]=[];byDriver[e.driverId].push(e);}});
-const cd=CUSTOMERS[cust];
-const puDueBy=(cust==="Specialty")?"Pickup 7:30 AM — Specialty":null;
-Object.entries(byDriver).forEach(([drvIdStr,dels])=>{
-const dId=Number(drvIdStr);
-const byLocLoad={};
-dels.forEach(e=>{
-  /* Group deliveries under a pickup location deterministically, keyed on the
-     NORMALIZED location. A delivery's location is its own pickupFrom; when
-     absent, fall back to the first source label. selPickup (the volatile UI
-     toggle) is never used — that spawned ghost duplicates.
-
-     Critically the key uses _normLoc: the stored pickupFrom comes in several
-     formats for the same dock ("Norcross", "Emser - Norcross", "Emser Tile —
-     Norcross"). Keying on the raw string put those in different groups and
-     created a separate pickup card for each variant — more ghosts. _normLoc
-     collapses them to one. We still keep a clean display label (prefer the
-     matching source's short label) for the pickup's pickupFrom. */
-  const rawLoc=e.pickupFrom||puSrcs[0].label.split(" - ").pop();
-  const normLoc=_normLoc(rawLoc);
-  const matchSrc=puSrcs.find(s=>_normLoc(s.label)===normLoc)||puSrcs[0];
-  const loc=matchSrc.label.split(" - ").pop();
-  const ln=e.loadNum||1;
-  const key=normLoc+"::"+ln;
-  if(!byLocLoad[key])byLocLoad[key]={loc,loadNum:ln,dels:[]};
-  byLocLoad[key].dels.push(e);
-});
-/* hasMultiLoads should reflect this DRIVER's overall load usage, not just
-   this customer's. Otherwise a Florida Tile delivery on Load 2 would get a
-   Load 1 pickup if Brent's other Load 2 stops were for different customers.
-   Combines: (a) loads present in the new `all` state for this driver, and
-   (b) the explicit driverLoadCount setting (user may have added Load 2 via
-   the + Load button before moving any stops into it). */
-const loadsInAll=new Set(all.filter(e=>e.driverId===dId).map(e=>e.loadNum||1));
-const explicitLoads=driverLoadCount[dId]||1;
-const maxLoadSeen=loadsInAll.size>0?Math.max(...loadsInAll):1;
-const hasMultiLoads=loadsInAll.size>1||maxLoadSeen>1||explicitLoads>1;
-Object.values(byLocLoad).forEach(({loc,loadNum:ln,dels:locDels})=>{
-const puSrc=puSrcs.find(s=>s.label.includes(loc))||puSrcs[0];
-/* Scope the manual-pickup check to the same load AND the same dock. A manual
-   pickup only suppresses the auto dock card when it actually covers this dock
-   (manualPickupCoversDock) — a manual pickup somewhere else entirely (e.g. a
-   return pickup at "DCO Smyrna" scheduled for Emser Tile) must coexist with
-   the dock pickup. The old `!e.pickupFrom` clause let any dock-less manual
-   pickup silently erase the driver's real "Emser - Norcross" card and its
-   load-order note. */
-const hasManualPU=all.some(e=>e.customer===cust&&e.stopType==="pickup"&&e.manualPickup&&e.driverId===dId&&(e.loadNum||1)===ln&&manualPickupCoversDock(e,loc,puSrc.label,_normLoc));
-if(hasManualPU)return;
-const delWithPuDue=locDels.find(e=>e.pickupDueBy);
-const effectivePuDue=delWithPuDue?delWithPuDue.pickupDueBy:puDueBy;
-const existingPU=removedPUs.find(p=>p.driverId===dId&&p.stop===puSrc.label&&(p.loadNum||1)===(hasMultiLoads?ln:1));
-const puId=existingPU?existingPU.id:genId();
-if(existingPU)_reusedPuIds.add(existingPU.id);
-const puEntry={id:puId,customer:cust,stop:puSrc.label,baseRate:0,fuelPct:0,isHourly:false,
-note:makeNote(locDels),driverId:dId,addr:puSrc.addr,stopType:"pickup",priority:cd?.priority||false,
-instructions:existingPU?.instructions||"",status:existingPU?.status||null,arrivedAt:existingPU?.arrivedAt||null,departedAt:existingPU?.departedAt||null,eta:existingPU?.eta||null,photos:existingPU?.photos||[],signature:existingPU?.signature||null,
-dueBy:effectivePuDue,weight:0,loadNum:hasMultiLoads?ln:1,pickupFrom:loc};
-/* Placement priority:
-   1. If this pickup existed before (reused id) and we recorded an anchor,
-      re-insert it right before that same anchor entry — this preserves a
-      position the dispatcher set manually, so a rebuild caused by an
-      unrelated change elsewhere doesn't shuffle it.
-   2. Otherwise (new pickup, or anchor no longer present) fall back to
-      placing it before the first delivery from this location/load. */
-let placed=false;
-/* Anchor lookup is INDEPENDENT of the existingPU match. existingPU also gates
-   on loadNum (hasMultiLoads?ln:1); if that gate fails (e.g. load bookkeeping
-   shifted) we'd otherwise skip the anchor entirely and fall through to
-   firstDelIdx, snapping a manually-placed pickup back in front of its first
-   delivery — exactly the 'I moved them back to back and it reverted' bug.
-   Match the prior pickup by (driver, stop) so the recorded position is honored
-   regardless of the loadNum gate. */
-const priorPU=removedPUs.find(p=>p.driverId===dId&&p.stop===puSrc.label);
-if(priorPU&&Object.prototype.hasOwnProperty.call(_puAnchorById,priorPU.id)){
-  const anchorId=_puAnchorById[priorPU.id];
-  if(anchorId===null){/* pickup was at the array end — but an auto-pickup must
-    precede its own deliveries; leave it unplaced so the delivery-based fallback
-    below inserts it before its first delivery, instead of re-pinning it to the
-    bottom forever (the desktop RouteBuilder-Apply "pickup at bottom" bug). */}
-  else{
-    const ai=all.findIndex(e=>e.id===anchorId);
-    if(ai>=0){all.splice(ai,0,puEntry);placed=true;}
-  }
-}
-if(!placed){
-  const firstDelIdx=all.findIndex(e=>e.customer===cust&&e.stopType==="delivery"&&e.driverId===dId&&_normLoc(e.pickupFrom||loc)===_normLoc(loc)&&(e.loadNum||1)===ln);
-  if(firstDelIdx>=0){all.splice(firstDelIdx,0,puEntry);}
-  else{
-    const anyDelIdx=all.findIndex(e=>e.customer===cust&&e.stopType==="delivery"&&e.driverId===dId&&(e.loadNum||1)===ln);
-    if(anyDelIdx>=0)all.splice(anyDelIdx,0,puEntry);
-    else all.push(puEntry);
-  }
-}
-});
-});
-/* Tombstone any auto-pickup that was removed and not regenerated. Prevents
-   the transactional save's FB-only-append from resurrecting an orphan
-   pickup card after a reassign/delete/load-change empties a driver. */
-const _orphanPus=removedPUs.filter(p=>!_reusedPuIds.has(p.id));
-if(_orphanPus.length)tombstone(_orphanPus); /* auto-pickups only; pass entries for signatures */
-return all;
-};
+/* Thin binding over the extracted engine (see rebuildPickupsForPure in
+   manifestLogic.js). Everything this used to close over is passed explicitly,
+   which is what lets the scenario tests drive it. */
+const rebuildPickupsFor=(all,cust)=>rebuildPickupsForPure(all,cust,{
+  pickupSources:PICKUP_SOURCES,customers:CUSTOMERS,driverLoadCount,
+  genId,normLoc:_normLoc,onTombstone:tombstone});
 
 const deleteDel=(id)=>{
 const entry=dl.find(e=>e.id===id);
@@ -4737,47 +4528,16 @@ const rmFromDriver=(id)=>{const entry=dl.find(e=>e.id===id);if(!entry)return;if(
 const reassign=(eid,did,newLoadNum)=>{
 const entry=dl.find(e=>e.id===eid);
 const oldDid=entry?.driverId;
-const oldLoad=entry?.loadNum||1;
 setLog(p=>{
-let all=[...(p[dk]||[])];
 const before=p[dk]||[];
-const idx=all.findIndex(e=>e.id===eid);
-if(idx<0)return p;
-const targetLoad=newLoadNum||oldLoad;
-const driverChanged=did!==oldDid;
-const loadChanged=newLoadNum&&newLoadNum!==oldLoad;
-/* Update the entry (driverId + optional loadNum). If driver or load changed,
-   splice it out and reinsert at the bottom of the target (driver, load) — this
-   matches the 'new stops land at the bottom' contract used by addDel and
-   assignInOrder. Without this step, reassigned entries stay at their original
-   array index, which often puts queue-assigned stops at position 1. */
-const updated={...all[idx],driverId:did,...(newLoadNum?{loadNum:newLoadNum}:{})};
-if(driverChanged||loadChanged){
-  all.splice(idx,1);
-  if(did>0){
-    const insertIdx=insertIdxForLoad(all,did,targetLoad);
-    all.splice(insertIdx,0,updated);
-  }else{
-    all.push(updated);
-  }
-}else{
-  all[idx]=updated;
-}
-if((driverChanged||loadChanged)&&(updated.stopType==="delivery"||(updated.stopType==="pickup"&&updated.manualPickup))){
-  /* A delivery move changes which driver/load needs an auto-pickup. A MANUAL
-     pickup move (including ✕ → Unassigned, which is a reassign to driver 0)
-     lifts the hasManualPU suppression on the load it left, so the auto pickup
-     must regenerate there. Either way, rebuild for this customer. */
-  all=rebuildPickupsFor(all,updated.customer);
-}
-/* rebuildPickupsFor nukes and recreates auto-pickups. When a reassign leaves
-   a driver with no deliveries for this customer, their auto-pickup is removed
-   and NOT recreated — correct. But that removed pickup is still in Firebase;
-   without a tombstone the next transactional save sees it FB-only and
-   resurrects it as an orphan card (the 'separate pickup card that should have
-   gone away' bug). Tombstone ONLY the vanished AUTO-PICKUPS — a reassign never
-   legitimately removes a delivery, so a delivery must never be tombstoned here
-   (that diff-based heuristic is what silently erased real deliveries). */
+const all=applyReassign(before,eid,did,newLoadNum,{rebuildPickups:rebuildPickupsFor});
+if(all===before)return p;
+/* rebuildPickupsFor nukes and recreates auto-pickups. When a reassign leaves a
+   driver with no deliveries for this customer, their auto-pickup is removed and
+   NOT recreated — correct. But it is still in Firebase; without a tombstone the
+   next transactional save sees it FB-only and resurrects it as an orphan card.
+   Tombstone ONLY vanished AUTO-PICKUPS — a reassign never legitimately removes
+   a delivery, and that diff-based heuristic is what once erased real ones. */
 const vanished=vanishedAutoPickups(before,all);
 if(vanished.length)tombstone(vanished);
 return{...p,[dk]:all};
@@ -5068,7 +4828,7 @@ const runBackupNow=async()=>{
     setBackupTestRunning(false);
   }
 };
-const setLoadNum=(eid,n)=>{setLog(p=>{const before=p[dk]||[];let all=before.map(e=>e.id===eid?{...e,loadNum:n}:e);const entry=all.find(e=>e.id===eid);if(entry&&entry.stopType==="delivery")all=rebuildPickupsFor(all,entry.customer);/* the old load's pickup vanished in the rebuild — tombstone it or the save merge resurrects it on the old load */const vanished=vanishedAutoPickups(before,all);if(vanished.length)tombstone(vanished);return{...p,[dk]:all};});};
+const setLoadNum=(eid,n)=>{setLog(p=>{const before=p[dk]||[];const all=applySetLoadNum(before,eid,n,{rebuildPickups:rebuildPickupsFor});/* the old load's pickup vanished in the rebuild — tombstone it or the save merge resurrects it on the old load */const vanished=vanishedAutoPickups(before,all);if(vanished.length)tombstone(vanished);return{...p,[dk]:all};});};
 
 const TRUCK_LIMITS={default:10000,heavy:13500};
 const[driverCapacity,setDriverCapacity]=useState(()=>lsGet("dd_driver_capacity",{})); /* {driverId: 10000|13500} */
@@ -5207,29 +4967,7 @@ useEffect(()=>{
    the previous/next entry that shares the same driver AND same load.
    Stable across any concurrent state changes and confined to the
    correct load group. */
-const moveInDriver=(drvId,entryId,dir)=>{
-  setLog(p=>{
-    const all=[...(p[dk]||[])];
-    const fromIdx=all.findIndex(e=>e.id===entryId);
-    if(fromIdx<0)return p;
-    const moving=all[fromIdx];
-    if(moving.driverId!==drvId)return p;
-    const moveLoad=moving.loadNum||1;
-    /* Find the neighbor inside the same (driver, load) group in the
-       direction the user clicked. dir is +1 (down) or -1 (up). */
-    const neighbors=[];
-    for(let i=0;i<all.length;i++){
-      const e=all[i];
-      if(e.driverId===drvId&&(e.loadNum||1)===moveLoad)neighbors.push(i);
-    }
-    const posInGroup=neighbors.indexOf(fromIdx);
-    const targetPos=posInGroup+dir;
-    if(targetPos<0||targetPos>=neighbors.length)return p;
-    const toIdx=neighbors[targetPos];
-    [all[fromIdx],all[toIdx]]=[all[toIdx],all[fromIdx]];
-    return{...p,[dk]:all};
-  });
-};
+const moveInDriver=(drvId,entryId,dir)=>{setLog(p=>{const all=applyMoveInDriver(p[dk]||[],drvId,entryId,dir);return all===(p[dk]||[])?p:{...p,[dk]:all};});};
 
 const[sortMenuDrv,setSortMenuDrv]=useState(null);
 const _sCoord=(e)=>{if(!e)return null;const addr=e.addr||getAddr(e.stop);return getCoords(addr);};
@@ -5503,31 +5241,20 @@ const drvEntries=did=>{
     return (typeof e.note==="string"&&e.note.startsWith("Load order:"))?{...e,note:null}:e;
   });
 };
-/* Find the array index to splice-insert a new entry so that it lands at the
-   BOTTOM of the specified (driver, loadNum). If the load is empty for this
-   driver, inserts after the last stop of any lower load (keeps loads ordered).
-   If driver has no stops yet, inserts after the last entry of any driver.
-   Used by addDel, addQuoteWithPickup, assignInOrder so inserts are consistent
-   and never land in the middle or top of a load unexpectedly. */
-const insertIdxForLoad=(arr,drvId,loadNum)=>{
-  const ln=loadNum||1;
-  /* Prefer: last entry of (drvId, same loadNum) */
-  for(let i=arr.length-1;i>=0;i--){
-    if(arr[i].driverId===drvId&&(arr[i].loadNum||1)===ln)return i+1;
-  }
-  /* Fallback: last entry of (drvId, any smaller loadNum) — keeps loads in order */
-  for(let i=arr.length-1;i>=0;i--){
-    if(arr[i].driverId===drvId&&(arr[i].loadNum||1)<ln)return i+1;
-  }
-  /* Fallback: last entry of drvId on any load (new load above existing ones — rare) */
-  for(let i=arr.length-1;i>=0;i--){
-    if(arr[i].driverId===drvId)return i+1;
-  }
-  /* Driver has no entries yet — append at the end */
-  return arr.length;
-};
-const handleDrop=(drvId,toIdx)=>{
+
+const handleDrop=(drvId,toIdx,toLoad)=>{
 if(!dragSrc){setDragSrc(null);setDragOver(null);return;}
+/* Resolve the grabbed stop up front — a cross-LOAD drop is a different
+   operation from a reorder, and needs the entry rather than just an index. */
+const _srcEnts=dl.filter(e=>e.driverId===dragSrc.drvId);
+const dragged=dragSrc.id!=null?_srcEnts.find(e=>e.id===dragSrc.id):_srcEnts[dragSrc.idx];
+const ln=toLoad?Number(toLoad):0;
+if(dragged&&ln&&((dragged.loadNum||1)!==ln||dragSrc.drvId!==drvId)){
+  reassign(dragged.id,drvId,ln);
+  const _tn=drvId===0?"Unassigned":((drivers.find(d=>d.id===drvId))?.name||"driver");
+  showToast(dragSrc.drvId===drvId?("Moved to Load "+ln):("Moved to "+_tn+" · Load "+ln));
+  setDragSrc(null);setDragOver(null);return;
+}
 if(dragSrc.drvId===drvId&&dragSrc.idx===toIdx){setDragSrc(null);setDragOver(null);return;}
 if(dragSrc.drvId===drvId){
 setLog(p=>{const all=[...(p[dk]||[])];const de=all.filter(e=>e.driverId===drvId);
@@ -5549,7 +5276,7 @@ showToast("Moved to "+targetName);
 }
 setDragSrc(null);setDragOver(null);
 };
-const reorderDriver=(drvId,orderedIds)=>{setLog(p=>{let all=[...(p[dk]||[])];const drvEntries2=all.filter(e=>e.driverId===drvId);all=_reorderDriverBlock(all,drvId,orderByIds(drvEntries2,orderedIds));/* orderByIds strands unlisted entries (auto-pickups) at the end when the caller passes a delivery-only id list (desktop RouteBuilder Apply); rebuild each affected customer's auto-pickups so they land before their first delivery. */const custs=new Set(drvEntries2.filter(e=>e.stopType==="delivery").map(e=>e.customer));custs.forEach(c=>{all=rebuildPickupsFor(all,c);});return{...p,[dk]:all};});showToast("Routes applied");};
+const reorderDriver=(drvId,orderedIds)=>{setLog(p=>({...p,[dk]:applyReorderDriver(p[dk]||[],drvId,orderedIds,{rebuildPickups:rebuildPickupsFor,orderByIds})}));showToast("Routes applied");};
 const getCustColor=cust=>CC[cust]||CC["One-Off Delivery"];
 
 const jumpToDate=dateStr=>{const target=new Date(dateStr+"T12:00:00");const now=_weekRefNow();const tD=target.getDay();const tM=new Date(target);tM.setDate(target.getDate()-(tD===0?6:tD-1));const nD=now.getDay();const nM=new Date(now);nM.setDate(now.getDate()-(nD===0?6:nD-1));tM.setHours(0,0,0,0);nM.setHours(0,0,0,0);const diff=Math.round((tM-nM)/(7*24*60*60*1000));const dayIdx=tD===0?6:tD-1;setWo(diff);setSd(Math.min(Math.max(dayIdx,0),4));setShowDatePicker(false);setView("manifest");};
@@ -7514,7 +7241,13 @@ return(<div key={"load-"+ln}>
 <span style={{fontSize:10,fontWeight:800,color:ln===1?"#2563eb":ln===2?"#d97706":"#7c3aed",letterSpacing:"0.05em"}}>LOAD {ln}</span>
 <div style={{flex:1,height:2,background:ln===1?"#2563eb":ln===2?"#d97706":"#7c3aed",borderRadius:1,opacity:0.4}}/>
 </div>}
-{loadStops.length===0&&hasMultiLoads&&<div style={{padding:"12px 10px",textAlign:"center",fontSize:11,color:"#a8a29e",background:"#fafaf9",border:"2px dashed #e7e5e4",borderRadius:8,marginBottom:4}}>No stops on Load {ln} — drag or assign stops here</div>}
+{loadStops.length===0&&hasMultiLoads&&<div
+/* A drop only fires when dragover calls preventDefault — this box invited a
+   drag ("drag or assign stops here") while silently rejecting every one. */
+onDragOver={ev=>{ev.preventDefault();setDragOver({drvId:drv.id,idx:-ln});}}
+onDragLeave={()=>setDragOver(null)}
+onDrop={()=>handleDrop(drv.id,de.length,ln)}
+style={{padding:"12px 10px",textAlign:"center",fontSize:11,color:dragOver?.drvId===drv.id&&dragOver?.idx===-ln?"#2563eb":"#a8a29e",background:dragOver?.drvId===drv.id&&dragOver?.idx===-ln?"#eff6ff":"#fafaf9",border:"2px dashed "+(dragOver?.drvId===drv.id&&dragOver?.idx===-ln?"#2563eb":"#e7e5e4"),borderRadius:8,marginBottom:4}}>No stops on Load {ln} — drag or assign stops here</div>}
 {loadStops.map((entry)=>{
 stopNum++;
 const eIdx=de.indexOf(entry);
@@ -7524,7 +7257,7 @@ const isDrgOver=dragOver?.drvId===drv.id&&dragOver?.idx===eIdx;
 return(<div key={entry.id}>
 <div draggable onDragStart={()=>setDragSrc({drvId:drv.id,idx:eIdx,id:entry.id})}
 onDragOver={ev=>{ev.preventDefault();setDragOver({drvId:drv.id,idx:eIdx});}}
-onDrop={()=>handleDrop(drv.id,eIdx)}
+onDrop={()=>handleDrop(drv.id,eIdx,ln)}
 style={{background:isDrgOver?"#dcfce7":isDrgSrc?"#fef9c3":done?"#f0fdf4":onSite?"#fffbeb":hasDue?"#fef2f2":isP?"#fef3c7":isPU?"#eff6ff":"#fff",border:isDrgOver?"2px dashed #16a34a":`1px solid ${done?"#bbf7d0":onSite?"#fde68a":hasDue?"#fca5a5":"#e7e5e4"}`,borderRadius:8,padding:uiCompact?"4px 8px":"8px 10px",marginBottom:0,borderLeft:`3px solid ${isPU?"#2563eb":isP?"#f59e0b":c.accent}`,opacity:isDrgSrc?0.4:done?0.6:1,cursor:"grab",transition:"background 0.1s"}}>
 <div style={_s.flexBtw}>
 <div style={_s.flexC4Mb2W}>
@@ -7560,12 +7293,12 @@ style={{background:isDrgOver?"#dcfce7":isDrgSrc?"#fef9c3":done?"#f0fdf4":onSite?
 {(()=>{
   if(entry.stopType==="pickup")return null;
   const rp=resolvePickupLabel(entry,dl);
-  if(!rp.ambiguous)return null;
+  if(!rp.ambiguous&&!rp.defaulted)return null;
   const mc=MULTI_PICKUP[entry.customer]||MULTI_PICKUP[entry.pickupFrom];
   if(!mc)return null;
   return(<div style={{marginTop:4,display:"flex",gap:4,flexWrap:"wrap",alignItems:"center"}}>
-    <span style={{fontSize:9,color:"#dc2626",fontWeight:700}}>Set pickup:</span>
-    {mc.map(l=>(<button key={l.label} onClick={e=>{e.stopPropagation();setPickupFrom(entry.id,l.label);}} style={{fontSize:10,fontWeight:700,padding:"3px 9px",borderRadius:6,border:"1px solid #fbbf24",background:"#fffbeb",color:"#92400e",cursor:"pointer"}}>{l.label.split(" - ").pop()}</button>))}
+    <span style={{fontSize:9,color:rp.ambiguous?"#dc2626":"#a8a29e",fontWeight:700}}>Set pickup:</span>
+    {mc.map(l=>(<button key={l.label} onClick={e=>{e.stopPropagation();setPickupFrom(entry.id,l.label);}} style={{fontSize:10,fontWeight:700,padding:"3px 9px",borderRadius:6,border:"1px solid "+(rp.ambiguous?"#fbbf24":"#e7e5e4"),background:rp.ambiguous?"#fffbeb":(_normLoc(l.label)===_normLoc(rp.text)?"#eff6ff":"#fafaf9"),color:rp.ambiguous?"#92400e":(_normLoc(l.label)===_normLoc(rp.text)?"#2563eb":"#78716c"),cursor:"pointer"}}>{l.label.split(" - ").pop()}</button>))}
   </div>);
 })()}
 {entry.customer==="Crossville Studios"&&<div style={{display:"flex",alignItems:"center",gap:4,marginTop:2}}>
@@ -7653,12 +7386,12 @@ style={{background:isDrgOver?"#dcfce7":isDrgSrc?"#fef9c3":done?"#f0fdf4":onSite?
 {(()=>{
   if(entry.stopType==="pickup")return null;
   const rp=resolvePickupLabel(entry,dl);
-  if(!rp.ambiguous)return null;
+  if(!rp.ambiguous&&!rp.defaulted)return null;
   const mc=MULTI_PICKUP[entry.customer]||MULTI_PICKUP[entry.pickupFrom];
   if(!mc)return null;
   return(<div style={{marginTop:4,display:"flex",gap:4,flexWrap:"wrap",alignItems:"center"}}>
-    <span style={{fontSize:9,color:"#dc2626",fontWeight:700}}>Set pickup:</span>
-    {mc.map(l=>(<button key={l.label} onClick={e=>{e.stopPropagation();setPickupFrom(entry.id,l.label);}} style={{fontSize:10,fontWeight:700,padding:"3px 9px",borderRadius:6,border:"1px solid #fbbf24",background:"#fffbeb",color:"#92400e",cursor:"pointer"}}>{l.label.split(" - ").pop()}</button>))}
+    <span style={{fontSize:9,color:rp.ambiguous?"#dc2626":"#a8a29e",fontWeight:700}}>Set pickup:</span>
+    {mc.map(l=>(<button key={l.label} onClick={e=>{e.stopPropagation();setPickupFrom(entry.id,l.label);}} style={{fontSize:10,fontWeight:700,padding:"3px 9px",borderRadius:6,border:"1px solid "+(rp.ambiguous?"#fbbf24":"#e7e5e4"),background:rp.ambiguous?"#fffbeb":(_normLoc(l.label)===_normLoc(rp.text)?"#eff6ff":"#fafaf9"),color:rp.ambiguous?"#92400e":(_normLoc(l.label)===_normLoc(rp.text)?"#2563eb":"#78716c"),cursor:"pointer"}}>{l.label.split(" - ").pop()}</button>))}
   </div>);
 })()}
 <div style={{display:"flex",gap:3,marginTop:4,alignItems:"center"}}>
@@ -8929,13 +8662,17 @@ return loadGroups.map(({loadNum:ln,stops:loadStops})=>(<div key={"mload-"+ln}>
 <span style={{fontSize:10,fontWeight:800,color:ln===1?"#2563eb":ln===2?"#d97706":"#7c3aed",letterSpacing:"0.05em"}}>LOAD {ln}</span>
 <div style={{flex:1,height:2,background:ln===1?"#2563eb":ln===2?"#d97706":"#7c3aed",borderRadius:1,opacity:0.4}}/>
 </div>}
-{loadStops.length===0&&hasMultiLoads&&<div style={{padding:"12px 10px",textAlign:"center",fontSize:11,color:"#a8a29e",background:"#fafaf9",border:"2px dashed #e7e5e4",borderRadius:8,marginBottom:4}}>No stops on Load {ln}</div>}
+{loadStops.length===0&&hasMultiLoads&&<div
+onDragOver={ev=>{ev.preventDefault();setDragOver({drvId:drv.id,idx:-ln});}}
+onDragLeave={()=>setDragOver(null)}
+onDrop={()=>handleDrop(drv.id,de.length,ln)}
+style={{padding:"12px 10px",textAlign:"center",fontSize:11,color:dragOver?.drvId===drv.id&&dragOver?.idx===-ln?"#2563eb":"#a8a29e",background:dragOver?.drvId===drv.id&&dragOver?.idx===-ln?"#eff6ff":"#fafaf9",border:"2px dashed "+(dragOver?.drvId===drv.id&&dragOver?.idx===-ln?"#2563eb":"#e7e5e4"),borderRadius:8,marginBottom:4}}>No stops on Load {ln} — drag stops here</div>}
 {loadStops.map((entry)=>{
 const eIdx=de.indexOf(entry);
 return(<div key={entry.id}>
 <ManifestStop entry={entry} siblings={dl} eIdx={eIdx} total={de.length} drivers={drivers} onMove={dir=>moveInDriver(drv.id,entry.id,dir)} onReassign={did=>reassign(entry.id,did)} onRemove={()=>rmFromDriver(entry.id)} onDelete={()=>deleteDel(entry.id)} onUpdateInstructions={text=>updateInstructions(entry.id,text)} onShipPlan={val=>setShipPlan(entry.id,val)} onRefNum={val=>setRefNum(entry.id,val)} onToggleFuel={()=>toggleFuel(entry.id)} onDueBy={time=>setDueBy(entry.id,time)} onWeight={w=>setWeight(entry.id,w)} onLoadNum={n=>setLoadNum(entry.id,n)} onRate={r=>updateRate(entry.id,r)} onPhotoClick={setLightboxPhoto} onSetPickup={label=>setPickupFrom(entry.id,label)} compact={uiCompact} maxLoad={getMaxLoad(drv.id)}
 onLiftgate={()=>{if(entry.isHourly){setEmH(p=>{const key=`${emDk}-emser`;const cur=p[key]||4;return{...p,[key]:cur+1};});setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===entry.id?{...e,liftgateApplied:true}:e)}));showToast("Liftgate +1 hr added");}else{manualLiftgate(entry.id);}}} onRemoveLiftgate={()=>removeLiftgate(entry.id)} onSplit={()=>setSplitEntry({id:entry.id,totalWeight:entry.weight||0,ratio:50,truck1Weight:Math.round((entry.weight||0)/2)})} driverLoadCounts={Object.fromEntries(drivers.map(d=>[d.id,getDriverLoadOptions(d.id)]))}
-isDragging={dragSrc?.drvId===drv.id&&dragSrc?.idx===eIdx} isDragOver={dragOver?.drvId===drv.id&&dragOver?.idx===eIdx} onDragStart={()=>setDragSrc({drvId:drv.id,idx:eIdx,id:entry.id})} onDragOver={()=>setDragOver({drvId:drv.id,idx:eIdx})} onDrop={()=>handleDrop(drv.id,eIdx)}/>
+isDragging={dragSrc?.drvId===drv.id&&dragSrc?.idx===eIdx} isDragOver={dragOver?.drvId===drv.id&&dragOver?.idx===eIdx} onDragStart={()=>setDragSrc({drvId:drv.id,idx:eIdx,id:entry.id})} onDragOver={()=>setDragOver({drvId:drv.id,idx:eIdx})} onDrop={()=>handleDrop(drv.id,eIdx,ln)}/>
 {splitEntry?.id===entry.id&&<div style={{margin:"0 0 4px",background:"#eff6ff",border:"2px solid #2563eb",borderRadius:10,padding:12}}>
 <div style={_s.splitTitle}>✂ Split Shipment</div>
 {<_SplitUI splitEntry={splitEntry} setSplitEntry={setSplitEntry}/>}
