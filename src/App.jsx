@@ -62,7 +62,7 @@ inputMb4:{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"7px 10
 };
 import { useState, useCallback, useEffect, useRef, Fragment, Component } from "react";
 import { PICKUP_SOURCES, MULTI_PICKUP, normLoc as _normLoc } from "./pickupConfig.js";
-import { dedupeIds, dedupeAutoPickups, dedupeGhostDeliveries, dedupeDeliveries, reapOrphanAutoPickups, sanitizeEntry, _mergeEntryDriver, _mergeEntryDispatcher, buildMergedEntries, entrySig, makeTombFilter, makeDocTombFilter, mergeTombstones, vanishedAutoPickups, orderByIds, reconcileDriverRoster, applyDriverRemap, normDriverName, manualPickupCoversDock, allInRate, stripLiftgateFee, resequenceEntries, sortBySeq, normalizeOrder, orderAutoPickupsFirst, manualPickupOrigin, deliveryCollectedOffDock, rebuildPickupsForPure, insertIdxForLoad, applyReassign, applySetLoadNum, reorderDriverBlock as _reorderDriverBlock, applyMoveInDriver, applyReorderDriver, applyDropReorder, resolvePickupLabel } from "./manifestLogic.js";
+import { dedupeIds, dedupeAutoPickups, dedupeGhostDeliveries, dedupeDeliveries, reapOrphanAutoPickups, sanitizeEntry, _mergeEntryDriver, _mergeEntryDispatcher, buildMergedEntries, entrySig, makeTombFilter, makeDocTombFilter, mergeTombstones, vanishedAutoPickups, orderByIds, reconcileDriverRoster, applyDriverRemap, normDriverName, manualPickupCoversDock, allInRate, stripLiftgateFee, resequenceEntries, sortBySeq, normalizeOrder, orderAutoPickupsFirst, manualPickupOrigin, deliveryCollectedOffDock, qualifyPickupName, rebuildPickupsForPure, insertIdxForLoad, applyReassign, applySetLoadNum, reorderDriverBlock as _reorderDriverBlock, applyMoveInDriver, applyReorderDriver, applyDropReorder, resolvePickupLabel } from "./manifestLogic.js";
 import { diffOrderDocs, orderDocId, ordersParity } from "./ordersStore.js";
 
 const _SplitUI=({splitEntry,setSplitEntry})=>{const tw=splitEntry.totalWeight||0;const t1w=splitEntry.truck1Weight!==undefined?splitEntry.truck1Weight:Math.round(tw*(splitEntry.ratio/100));const t2w=tw-t1w;return(<><div style={_s.flexG6Mb6}><div style={_s.f1}><label style={_s.labelSm}>Total</label><input type="number" inputMode="numeric" value={tw||""} onChange={e=>{const newTw=parseInt(e.target.value)||0;setSplitEntry(p=>({...p,totalWeight:newTw,truck1Weight:Math.min(p.truck1Weight||Math.round(newTw/2),newTw)}));}} style={_s.splitTotal}/></div><div style={_s.f1}><label style={_s.labelBlue}>Truck 1</label><input type="number" inputMode="numeric" value={splitEntry.truck1Weight!==undefined?splitEntry.truck1Weight:""} onChange={e=>{const v=e.target.value;setSplitEntry(p=>({...p,truck1Weight:v===""?0:parseInt(v)||0}));}} style={_s.splitInput}/></div><div style={_s.f1}><label style={_s.labelGray}>Truck 2</label><div style={_s.splitT2}>{t2w.toLocaleString()}</div></div></div><input type="range" min={0} max={tw} step={100} value={t1w} onChange={e=>{const v=parseInt(e.target.value)||0;setSplitEntry(p=>({...p,truck1Weight:v}));}} style={_s.slider}/></>);};
@@ -1005,6 +1005,16 @@ const QUOTE_CUSTOMERS=[
 {name:"Traditions in Tile",pickups:[{label:"Alpharetta",addr:"3065 Trotters Parkway, Alpharetta, GA 30004"},{label:"Atlanta",addr:"1015 Chattahoochee Avenue NW, Atlanta, GA 30318"},{label:"Bogart",addr:"150 Trade Street, Bogart, GA 30622"}]},
 ];
 
+/* Every customer name that can appear in saved history. A history FILTER has to
+   offer all of them: quote customers (Traditions in Tile, Crossville Studios,
+   Prolex Flooring, Ceramic Tile Gainesville ...) are a separate list from
+   CUSTOMERS, so a filter built from Object.keys(CUSTOMERS) silently omitted
+   them and their deliveries could not be filtered for at all - they sit in the
+   history either under their own name or under "Quote Delivery".
+   Creation pickers deliberately stay on CUSTOMERS: a one-off is tied to a
+   CONTRACT customer, a different question from "what is in my history". */
+const HISTORY_CUSTOMER_NAMES=[...Object.keys(CUSTOMERS),...QUOTE_CUSTOMERS.map(q=>q.name).sort((a,b)=>a.localeCompare(b)),"Quote Delivery","One-Off Delivery"];
+
 
 const SHARED_STOPS=["Atlanta West - Lithia Springs","BEC - Alpharetta","Britts - Lawrenceville","D3 - Woodstock","DCO Lakes Pkwy","DCO Tech Dr","Hillman - Sugar Hill","NE Corner - Flowery Branch","Precision Flooring - Norcross","Premier - Suwanee","ProSource - Norcross","SE Commercial - Woodstock","Vanguard - Norcross"];
 
@@ -1861,20 +1871,11 @@ const baseRateForManifest=liftgate?Math.max(0,total-75):total;
    in Tile etc.), store a fully-qualified pickupFrom — "Traditions - Alpharetta"
    — so the manifest card always names the specific location instead of a
    bare "Alpharetta" or, worse, just the customer name. */
-const _qualifiedPickup=(()=>{
-  if(!pickupName)return pickupName;
-  if(pickupName.includes(" - "))return pickupName;
-  const mp=MULTI_PICKUP[customerName];
-  if(mp){
-    const match=mp.find(l=>l.label.split(" - ").pop()===pickupName||l.label===pickupName);
-    if(match)return match.label;
-  }
-  return pickupName;
-})();
+const _qualifiedPickup=qualifyPickupName(pickupName,customerName,MULTI_PICKUP);
 if(pickupName&&originAddr&&onAddQuote){
-  onAddQuote(cust,{puStop:_qualifiedPickup,puAddr:originAddr,puNote:`Picking up for ${stopName}`+(notes.trim()?" | "+notes.trim():"")},{delStop:stopName,delAddr:destAddr,delRate:baseRateForManifest,delNote:"from "+_qualifiedPickup+" | "+finalNote,pickupFrom:_qualifiedPickup,delWeight:wt,delFuelPct:0,delLiftgate:liftgate},drvId);
+  onAddQuote(cust,{puStop:_qualifiedPickup,puAddr:originAddr,puNote:`Picking up for ${stopName}`+(notes.trim()?" | "+notes.trim():"")},{delStop:stopName,delAddr:destAddr,delRate:baseRateForManifest,delNote:"from "+_qualifiedPickup+" | "+finalNote,pickupFrom:_qualifiedPickup,pickupAddr:originAddr||null,delWeight:wt,delFuelPct:0,delLiftgate:liftgate},drvId);
 }else{
-  onAdd(cust,stopName,baseRateForManifest,drvId,{note:(_qualifiedPickup?"from "+_qualifiedPickup+" | ":"")+finalNote,addr:destAddr,stopType:"delivery",pickupFrom:_qualifiedPickup||null,weight:wt,fuelPct:0,liftgateApplied:liftgate,knownLiftgate:false,liftgateFee:liftgate?75:0});
+  onAdd(cust,stopName,baseRateForManifest,drvId,{note:(_qualifiedPickup?"from "+_qualifiedPickup+" | ":"")+finalNote,addr:destAddr,stopType:"delivery",pickupFrom:_qualifiedPickup||null,pickupAddr:originAddr||null,weight:wt,fuelPct:0,liftgateApplied:liftgate,knownLiftgate:false,liftgateFee:liftgate?75:0});
 }
 };
 return(
@@ -4279,16 +4280,7 @@ const wt=parseInt(q.weight)||0;
    customer for a multi-location quote is the quote customer itself, not a
    third-party vendor; pickupFor lookup matches on PICKUP_SOURCES. */
 const rawPU=q.pickupName||"";
-const qualifiedPU=(()=>{
-  if(!rawPU)return"";
-  if(rawPU.includes(" - "))return rawPU;
-  const mp=MULTI_PICKUP[cust];
-  if(mp){
-    const m=mp.find(l=>l.label.split(" - ").pop()===rawPU||l.label===rawPU);
-    if(m)return m.label;
-  }
-  return rawPU;
-})();
+const qualifiedPU=qualifyPickupName(rawPU,cust,MULTI_PICKUP);
 const targetDkEntries=()=>{
   const delEntry={id:genId(),customer:cust,stop:q.stop||"Quote Delivery",baseRate:q.rate||0,fuelPct:0,isHourly:false,note:q.note||(q.miles?q.miles+"mi":""),driverId:0,addr:q.addr||"",stopType:"delivery",priority:false,instructions:"BOL & Pictures must be sent back via Email",status:null,arrivedAt:null,departedAt:null,eta:null,photos:[],signature:null,dueBy:null,weight:wt,loadNum:1,pickupFrom:qualifiedPU||null,liftgateApplied:!!q.liftgate,knownLiftgate:false,liftgateFee:q.liftgate?75:0};
   /* q.rate is the all-in quoted total (base+fuel+LG). computeDay re-adds the
@@ -4395,7 +4387,7 @@ const addQuoteWithPickup=(cust,pu,del,drvId)=>{
 setLog(p=>{
 let all=[...(p[dk]||[])];
 const puEntry={id:genId(),customer:cust,stop:pu.puStop,baseRate:0,fuelPct:0,isHourly:false,note:pu.puNote,driverId:drvId,addr:pu.puAddr,stopType:"pickup",priority:false,instructions:"",status:null,arrivedAt:null,departedAt:null,eta:null,photos:[],signature:null,dueBy:null,weight:del.delWeight||0,loadNum:1,manualPickup:true};
-const delEntry={id:genId(),customer:cust,stop:del.delStop,baseRate:del.delRate,fuelPct:del.delFuelPct||0,isHourly:false,note:del.delNote,driverId:drvId,addr:del.delAddr,stopType:"delivery",priority:false,instructions:"BOL & Pictures must be sent back via Email",status:null,arrivedAt:null,departedAt:null,eta:null,photos:[],signature:null,dueBy:null,weight:del.delWeight||0,loadNum:1,pickupFrom:del.pickupFrom,liftgateApplied:!!del.delLiftgate,knownLiftgate:false,liftgateFee:del.delLiftgate?75:0};
+const delEntry={id:genId(),customer:cust,stop:del.delStop,baseRate:del.delRate,fuelPct:del.delFuelPct||0,isHourly:false,note:del.delNote,driverId:drvId,addr:del.delAddr,stopType:"delivery",priority:false,instructions:"BOL & Pictures must be sent back via Email",status:null,arrivedAt:null,departedAt:null,eta:null,photos:[],signature:null,dueBy:null,weight:del.delWeight||0,loadNum:1,pickupFrom:del.pickupFrom,pickupAddr:del.pickupAddr||null,liftgateApplied:!!del.delLiftgate,knownLiftgate:false,liftgateFee:del.delLiftgate?75:0};
 writeAuditLog({action:"create",customer:cust,stop:del.delStop,driverId:drvId,details:"quote | $"+del.delRate+(del.pickupFrom?" | from "+del.pickupFrom:"")+(del.delWeight?" | "+del.delWeight+" lbs":"")});
 if(drvId>0){const insertIdx=insertIdxForLoad(all,drvId,1);all.splice(insertIdx,0,puEntry,delEntry);}
 else{all.push(puEntry,delEntry);}
@@ -6765,7 +6757,7 @@ return(<div>
 <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"}}>
 <input value={histSearch} onChange={e=>setHistSearch(e.target.value)} placeholder="Search stops…" style={{border:"1px solid #d6d3d1",borderRadius:8,padding:"7px 12px",fontSize:13,outline:"none",minWidth:200}}/>
 <select value={histCustFilter} onChange={e=>setHistCustFilter(e.target.value)} style={{border:"1px solid #d6d3d1",borderRadius:8,padding:"7px 10px",fontSize:12,outline:"none",background:"#fff"}}>
-<option value="">All customers</option>{Object.keys(CUSTOMERS).map(c=><option key={c} value={c}>{c}</option>)}
+<option value="">All customers</option>{HISTORY_CUSTOMER_NAMES.map(c=><option key={c} value={c}>{c}</option>)}
 </select>
 <select value={histWeekRange} onChange={e=>setHistWeekRange(Number(e.target.value))} style={{border:"1px solid #d6d3d1",borderRadius:8,padding:"7px 10px",fontSize:12,outline:"none",background:"#fff"}}>
 <option value={2}>2 weeks</option><option value={4}>4 weeks</option><option value={8}>8 weeks</option><option value={12}>12 weeks</option><option value={26}>26 weeks</option><option value={52}>52 weeks</option><option value={999}>All Time</option>
@@ -6959,7 +6951,7 @@ else{showToast("Pick a weekday (Mon-Fri)");}
 <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap",alignItems:"center"}}>
 <input value={histSearch} onChange={e=>setHistSearch(e.target.value)} placeholder="Search stops, customers, addresses…" style={{border:"1px solid #d6d3d1",borderRadius:8,padding:"7px 12px",fontSize:13,outline:"none",flex:1,minWidth:200}}/>
 <select value={histCustFilter} onChange={e=>setHistCustFilter(e.target.value)} style={{border:"1px solid #d6d3d1",borderRadius:8,padding:"7px 10px",fontSize:12,outline:"none",background:"#fff"}}>
-<option value="">All customers</option>{Object.keys(CUSTOMERS).map(c=><option key={c} value={c}>{c}</option>)}
+<option value="">All customers</option>{HISTORY_CUSTOMER_NAMES.map(c=><option key={c} value={c}>{c}</option>)}
 </select>
 <select value={histDrvFilter} onChange={e=>setHistDrvFilter(e.target.value)} style={{border:"1px solid #d6d3d1",borderRadius:8,padding:"7px 10px",fontSize:12,outline:"none",background:"#fff"}}>
 <option value="">All drivers</option>{drivers.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}
@@ -6982,17 +6974,22 @@ else{showToast("Pick a weekday (Mon-Fri)");}
 <div style={{display:"flex",alignItems:"center",gap:4,flexWrap:"wrap"}}>
 {entry.stopType==="pickup"&&<span style={{fontSize:8,background:"#2563eb",color:"#fff",padding:"1px 4px",borderRadius:3,fontWeight:700}}>PU</span>}
 {entry.stopType!=="pickup"&&<span style={{fontSize:8,background:"#16a34a",color:"#fff",padding:"1px 4px",borderRadius:3,fontWeight:700}}>DEL</span>}
-<span style={{fontSize:11,color:c.accent,fontWeight:600}}>{entry.customer}</span>
-<span style={_s.truncate}>{entry.stop}</span>
-{entry.pickupFrom&&<span style={{fontSize:10,color:"#64748b",fontStyle:"italic"}}>· from {entry.pickupFrom}</span>}
+<span style={{fontSize:13,fontWeight:700,color:"#1c1917",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:"100%"}}>{entry.stop}</span>
 {hasPhotos&&<span style={{fontSize:9,background:"#dbeafe",color:"#2563eb",padding:"1px 4px",borderRadius:3,fontWeight:600}}>📷 {entry.photos.length}</span>}
 {entry.signature&&<span style={{fontSize:9,background:"#dcfce7",color:"#16a34a",padding:"1px 4px",borderRadius:3,fontWeight:600}}>✓ POD</span>}
 </div>
-{entry.addr&&<div style={{fontSize:10,color:"#a8a29e",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{entry.addr}</div>}
+<div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",marginTop:2}}><span style={{fontSize:10,fontWeight:700,color:c.accent,background:c.accent+"14",border:"1px solid "+c.accent+"40",padding:"1px 6px",borderRadius:4,whiteSpace:"nowrap"}}>{entry.customer}</span>{drv&&<span style={{display:"flex",alignItems:"center",gap:4,fontSize:10,color:"#57534e",fontWeight:600,whiteSpace:"nowrap"}}><span style={{width:7,height:7,borderRadius:999,background:DCOL[di]||"#78716c",flexShrink:0}}/>{drv.name}</span>}</div>{(entry.pickupFrom||entry.addr)&&<div style={{fontSize:10,color:"#a8a29e",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:2}}>{entry.pickupFrom&&(()=>{
+/* Qualify at RENDER time as well as on capture: existing rows already hold bare
+   names, and this names the branch without a data migration. When the entry
+   carries the pickup ADDRESS, append its town — that is the only thing that is
+   never ambiguous, and "which location did it come off" was the question. */
+const q=qualifyPickupName(entry.pickupFrom,entry.customer,MULTI_PICKUP);
+const town=(()=>{const p=String(entry.pickupAddr||"").split(",").map(x=>x.trim()).filter(Boolean);return p.length>=2?p[p.length-2].replace(/\s+[A-Z]{2}(\s+\d{5})?$/,"").trim():"";})();
+const showTown=town&&!q.toLowerCase().includes(town.toLowerCase());
+return<span style={{color:"#78716c",fontWeight:600}}>{q}{showTown?" ("+town+")":""}</span>;})()}{entry.pickupFrom&&entry.addr&&<span style={{margin:"0 5px",color:"#d6d3d1"}}>{"\u2192"}</span>}{entry.addr}</div>}
 {hasPhotos&&<div style={{display:"flex",gap:4,marginTop:4}}>{entry.photos.slice(0,5).map((p,pi)=><img key={pi} src={p} alt="" onClick={e=>{e.stopPropagation();setLightboxPhoto({src:p,stop:entry.stop,customer:entry.customer,dayName:entry.dayName,dayDate:entry.dayDate,signature:entry.signature});}} style={{width:40,height:40,objectFit:"cover",borderRadius:6,border:"1px solid #e7e5e4",cursor:"pointer"}}/>)}{entry.photos.length>5&&<div style={{width:40,height:40,borderRadius:6,background:"#f5f5f4",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,color:"#78716c"}}>+{entry.photos.length-5}</div>}</div>}
 </div>
 <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0,marginLeft:8}}>
-{drv&&<span style={{fontSize:9,background:DCOL[di]||"#78716c",color:"#fff",padding:"1px 4px",borderRadius:3,fontWeight:600}}>{drv.name.split(" ")[0]}</span>}
 {(()=>{const cu=CUSTOMERS[entry.customer];if(!cu||!cu.fuel_surcharge||cu.fuel_included)return null;if(entry.stopType==="pickup")return null;if(entry.fuelPct===0)return null;const pct=Math.round((entry.fuelPct||cu.fuel_surcharge)*100);return<span title={"Bill: add "+pct+"% fuel surcharge on top of line rate"} style={{fontSize:9,background:"#fffbeb",color:"#b45309",border:"1px solid #fde68a",padding:"1px 5px",borderRadius:4,fontWeight:700,letterSpacing:"0.02em"}}>+{pct}% FUEL</span>;})()}
 <InlineRate value={allInRate(entry)} isHourly={entry.isHourly} onSave={r=>updateRate(entry.id,r)}/>
 </div>
@@ -7644,28 +7641,28 @@ onAssignStop={mapActiveDrv?(stopId,drvId)=>{assignInOrder(stopId,mapActiveDrv,ma
 }
 
 {showDM&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:100,display:"flex",alignItems:"center",justifyContent:"center",padding:20}} onClick={()=>{if(editDrv&&editNm.trim()){driverChangeSource.current="local";driverSaveInFlight.current=true;setDrivers(p=>p.map(d=>d.id===editDrv?{...d,name:editNm.trim(),phone:editPh.trim()}:d));}setShowDM(false);setEditDrv(null);}}>
-<div style={{background:"#fff",borderRadius:20,width:"100%",maxWidth:420,maxHeight:"90vh",display:"flex",flexDirection:"column",overflow:"hidden"}} onClick={e=>e.stopPropagation()}>
+<div style={{background:"#fff",borderRadius:20,width:"100%",maxWidth:560,maxHeight:"90vh",display:"flex",flexDirection:"column",overflow:"hidden"}} onClick={e=>e.stopPropagation()}>
 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"20px 24px 12px 24px",borderBottom:"1px solid #f5f5f4",flexShrink:0}}><h3 style={{margin:0,fontSize:18,fontWeight:700}}>Manage Drivers</h3><button onClick={()=>{if(editDrv&&editNm.trim()){driverChangeSource.current="local";driverSaveInFlight.current=true;setDrivers(p=>p.map(d=>d.id===editDrv?{...d,name:editNm.trim(),phone:editPh.trim()}:d));}setShowDM(false);setEditDrv(null);}} style={_s.iconBtn}>{"\u2715"}</button></div>
-<div style={{padding:"4px 24px 24px 24px",overflowY:"auto",WebkitOverflowScrolling:"touch",flex:1}}>
-{drivers.map((d,i)=><div key={d.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 0",borderBottom:"1px solid #f5f5f4",opacity:d.active===false?0.55:1}}>
+<div style={{padding:"4px 20px 24px 20px",overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",flex:1}}>
+{drivers.map((d,i)=><div key={d.id} style={{display:"flex",alignItems:"center",flexWrap:"wrap",gap:8,padding:"10px 0",borderBottom:"1px solid #f5f5f4",opacity:d.active===false?0.55:1}}>
 <div style={{width:12,height:12,borderRadius:4,background:DCOL[i]||"#78716c",flexShrink:0}}/>
 {editDrv===d.id?<div style={{flex:1,display:"flex",flexDirection:"column",gap:6}}>
 <input value={editNm} onChange={e=>setEditNm(e.target.value)} autoFocus placeholder="Name" onBlur={()=>{setTimeout(()=>{if(editNm.trim())saveDrv(d.id);},200);}} style={{border:"1px solid #d6d3d1",borderRadius:8,padding:"6px 10px",fontSize:14,outline:"none"}}/>
 <div style={_s.flexG6}><input value={editPh} onChange={e=>setEditPh(e.target.value)} placeholder="Phone (optional)" onKeyDown={e=>e.key==="Enter"&&saveDrv(d.id)} onBlur={()=>{setTimeout(()=>saveDrv(d.id),100);}} style={{flex:1,border:"1px solid #d6d3d1",borderRadius:8,padding:"6px 10px",fontSize:13,outline:"none"}}/><button onClick={()=>saveDrv(d.id)} style={{background:"#16a34a",color:"#fff",border:"none",borderRadius:8,padding:"6px 12px",cursor:"pointer",fontSize:12,fontWeight:600}}>Save</button></div>
 </div>:<>
-<div style={_s.f1}><div style={{fontSize:15,fontWeight:600}}>{d.name}{d.active===false&&<span style={{fontSize:9,marginLeft:6,padding:"1px 6px",borderRadius:4,background:"#f5f5f4",color:"#78716c",fontWeight:700,letterSpacing:"0.04em"}}>HIDDEN</span>}</div>{d.phone&&<div style={_s.sub11}>{d.phone}</div>}</div>
-<button onClick={()=>setDriverActive(d.id,d.active===false)} title={d.active===false?"Show this driver in the current fleet":"Hide from daily assignment UI (history preserved)"} style={{background:d.active===false?"#f5f5f4":"#dcfce7",border:"1px solid "+(d.active===false?"#d6d3d1":"#86efac"),borderRadius:999,padding:"3px 10px",cursor:"pointer",fontSize:10,fontWeight:700,color:d.active===false?"#78716c":"#166534",display:"flex",alignItems:"center",gap:4}}><span style={{width:8,height:8,borderRadius:999,background:d.active===false?"#a8a29e":"#16a34a"}}/>{d.active===false?"OFF":"ON"}</button>
-<button onClick={()=>{const slug=getDriverSlug(d.name)+"-"+d.id;const url=`${window.location.origin}${window.location.pathname}#/driver/${slug}`;setShowLinkModal({name:d.name,url,phone:d.phone||""});}} style={{background:"#f0fdf4",border:"none",borderRadius:6,padding:"4px 8px",cursor:"pointer",fontSize:10,fontWeight:600,color:"#16a34a"}}>🔗 Link</button>
-<button onClick={()=>setDriverViewId(d.id)} style={{background:"#eff6ff",border:"none",borderRadius:6,padding:"4px 8px",cursor:"pointer",fontSize:10,fontWeight:600,color:"#2563eb"}}>View</button>
-<button onClick={()=>{setEditDrv(d.id);setEditNm(d.name);setEditPh(d.phone||"");}} style={{background:"#f5f5f4",border:"none",borderRadius:6,padding:"4px 10px",cursor:"pointer",fontSize:12}}>Edit</button>
-{drivers.length>1&&<button onClick={()=>rmDrv(d.id)} style={{background:"#fef2f2",border:"none",borderRadius:6,padding:"4px 10px",cursor:"pointer",fontSize:12,color:"#dc2626"}}>✕</button>}
+<div style={{flex:"1 1 130px",minWidth:0}}><div style={{display:"flex",alignItems:"center",gap:6,minWidth:0}}><span style={{fontSize:15,fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{d.name}</span>{d.active===false&&<span style={{fontSize:9,padding:"1px 6px",borderRadius:4,background:"#f5f5f4",color:"#78716c",fontWeight:700,letterSpacing:"0.04em",flexShrink:0}}>HIDDEN</span>}</div>{d.phone&&<div style={{..._s.sub11,whiteSpace:"nowrap"}}>{d.phone}</div>}</div>
+<div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0,marginLeft:"auto"}}><button onClick={()=>setDriverActive(d.id,d.active===false)} title={d.active===false?"Show this driver in the current fleet":"Hide from daily assignment UI (history preserved)"} style={{background:d.active===false?"#f5f5f4":"#dcfce7",border:"1px solid "+(d.active===false?"#d6d3d1":"#86efac"),borderRadius:999,padding:"3px 10px",cursor:"pointer",fontSize:10,fontWeight:700,color:d.active===false?"#78716c":"#166534",display:"flex",alignItems:"center",gap:4,flexShrink:0,whiteSpace:"nowrap"}}><span style={{width:8,height:8,borderRadius:999,background:d.active===false?"#a8a29e":"#16a34a"}}/>{d.active===false?"OFF":"ON"}</button>
+<button onClick={()=>{const slug=getDriverSlug(d.name)+"-"+d.id;const url=`${window.location.origin}${window.location.pathname}#/driver/${slug}`;setShowLinkModal({name:d.name,url,phone:d.phone||""});}} style={{background:"#f0fdf4",border:"none",borderRadius:6,padding:"4px 8px",cursor:"pointer",fontSize:10,fontWeight:600,color:"#16a34a",flexShrink:0,whiteSpace:"nowrap"}}>🔗 Link</button>
+<button onClick={()=>setDriverViewId(d.id)} style={{background:"#eff6ff",border:"none",borderRadius:6,padding:"4px 8px",cursor:"pointer",fontSize:10,fontWeight:600,color:"#2563eb",flexShrink:0}}>View</button>
+<button onClick={()=>{setEditDrv(d.id);setEditNm(d.name);setEditPh(d.phone||"");}} style={{background:"#f5f5f4",border:"none",borderRadius:6,padding:"4px 10px",cursor:"pointer",fontSize:12,flexShrink:0}}>Edit</button>
+{drivers.length>1&&<button onClick={()=>rmDrv(d.id)} style={{background:"#fef2f2",border:"none",borderRadius:6,padding:"4px 10px",cursor:"pointer",fontSize:12,color:"#dc2626",flexShrink:0}}>✕</button>}</div>
 </>}
 </div>)}
 <div style={{marginTop:12,padding:"10px 14px",background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:10}}>
 <div style={{fontSize:11,fontWeight:700,color:"#16a34a",marginBottom:6}}>Add Driver</div>
-<div style={{display:"flex",gap:6,alignItems:"center"}}>
-<input value={newDN} onChange={e=>setNewDN(e.target.value)} placeholder="Name" style={{flex:2,border:"1px solid #d6d3d1",borderRadius:8,padding:"6px 10px",fontSize:13,outline:"none"}}/>
-<input value={newDP} onChange={e=>setNewDP(e.target.value)} placeholder="Phone (opt)" style={{flex:2,border:"1px solid #d6d3d1",borderRadius:8,padding:"6px 10px",fontSize:13,outline:"none"}}/>
+<div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+<input value={newDN} onChange={e=>setNewDN(e.target.value)} placeholder="Name" style={{flex:"2 1 110px",minWidth:0,border:"1px solid #d6d3d1",borderRadius:8,padding:"6px 10px",fontSize:13,outline:"none"}}/>
+<input value={newDP} onChange={e=>setNewDP(e.target.value)} placeholder="Phone (opt)" style={{flex:"2 1 110px",minWidth:0,border:"1px solid #d6d3d1",borderRadius:8,padding:"6px 10px",fontSize:13,outline:"none"}}/>
 <button onClick={addDrvr} disabled={!newDN.trim()} style={{background:newDN.trim()?"#16a34a":"#d6d3d1",color:"#fff",border:"none",borderRadius:8,padding:"6px 12px",cursor:newDN.trim()?"pointer":"default",fontSize:12,fontWeight:600,flexShrink:0}}>Add</button>
 </div>
 
@@ -8400,7 +8397,7 @@ style={{marginTop:8,width:"100%",display:"flex",alignItems:"center",justifyConte
 {showDM&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:100,display:"flex",alignItems:"center",justifyContent:"center",padding:20}} onClick={()=>{if(editDrv&&editNm.trim()){driverChangeSource.current="local";driverSaveInFlight.current=true;setDrivers(p=>p.map(d=>d.id===editDrv?{...d,name:editNm.trim(),phone:editPh.trim()}:d));}setShowDM(false);setEditDrv(null);}}>
 <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:20,width:"100%",maxWidth:380,maxHeight:"90vh",display:"flex",flexDirection:"column",overflow:"hidden"}}>
 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"20px 24px 12px 24px",borderBottom:"1px solid #f5f5f4",flexShrink:0}}><h3 style={{margin:0,fontSize:18,fontWeight:700}}>Manage Drivers</h3><button onClick={()=>{if(editDrv&&editNm.trim()){driverChangeSource.current="local";driverSaveInFlight.current=true;setDrivers(p=>p.map(d=>d.id===editDrv?{...d,name:editNm.trim(),phone:editPh.trim()}:d));}setShowDM(false);setEditDrv(null);}} style={_s.iconBtn}>✕</button></div>
-<div style={{padding:"4px 24px 24px 24px",overflowY:"auto",WebkitOverflowScrolling:"touch",flex:1}}>
+<div style={{padding:"4px 20px 24px 20px",overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",flex:1}}>
 {drivers.map((d,i)=><div key={d.id} style={{display:"flex",flexDirection:"column",gap:8,padding:"10px 0",borderBottom:"1px solid #f5f5f4",opacity:d.active===false?0.55:1}}>
 <div style={{display:"flex",alignItems:"center",gap:10}}>
 <div style={{width:12,height:12,borderRadius:4,background:DCOL[i]||"#78716c",flexShrink:0}}/>
@@ -8408,15 +8405,15 @@ style={{marginTop:8,width:"100%",display:"flex",alignItems:"center",justifyConte
 <input value={editNm} onChange={e=>setEditNm(e.target.value)} autoFocus placeholder="Name" onBlur={()=>{setTimeout(()=>{if(editNm.trim())saveDrv(d.id);},200);}} style={{border:"1px solid #d6d3d1",borderRadius:8,padding:"6px 10px",fontSize:14,outline:"none"}}/>
 <div style={_s.flexG6}><input value={editPh} onChange={e=>setEditPh(e.target.value)} placeholder="Phone" onKeyDown={e=>e.key==="Enter"&&saveDrv(d.id)} onBlur={()=>{setTimeout(()=>saveDrv(d.id),100);}} style={{flex:1,border:"1px solid #d6d3d1",borderRadius:8,padding:"6px 10px",fontSize:13,outline:"none"}}/><button onClick={()=>saveDrv(d.id)} style={{background:"#16a34a",color:"#fff",border:"none",borderRadius:8,padding:"6px 12px",cursor:"pointer",fontSize:12,fontWeight:600}}>Save</button></div>
 </div>:<>
-<div style={{flex:1,minWidth:0}}><div style={{fontSize:15,fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{d.name}{d.active===false&&<span style={{fontSize:9,marginLeft:6,padding:"1px 6px",borderRadius:4,background:"#f5f5f4",color:"#78716c",fontWeight:700,letterSpacing:"0.04em"}}>HIDDEN</span>}</div>{d.phone&&<div style={_s.sub11}>{d.phone}</div>}</div>
+<div style={{flex:1,minWidth:0}}><div style={{display:"flex",alignItems:"center",gap:6,minWidth:0}}><span style={{fontSize:15,fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{d.name}</span>{d.active===false&&<span style={{fontSize:9,padding:"1px 6px",borderRadius:4,background:"#f5f5f4",color:"#78716c",fontWeight:700,letterSpacing:"0.04em",flexShrink:0}}>HIDDEN</span>}</div>{d.phone&&<div style={_s.sub11}>{d.phone}</div>}</div>
 <button onClick={()=>setDriverActive(d.id,d.active===false)} title={d.active===false?"Show this driver in the current fleet":"Hide from daily assignment UI (history preserved)"} style={{background:d.active===false?"#f5f5f4":"#dcfce7",border:"1px solid "+(d.active===false?"#d6d3d1":"#86efac"),borderRadius:999,padding:"3px 10px",cursor:"pointer",fontSize:10,fontWeight:700,color:d.active===false?"#78716c":"#166534",display:"flex",alignItems:"center",gap:4,flexShrink:0}}><span style={{width:8,height:8,borderRadius:999,background:d.active===false?"#a8a29e":"#16a34a"}}/>{d.active===false?"OFF":"ON"}</button>
 </>}
 </div>
 {editDrv!==d.id&&<div style={{display:"flex",gap:6,paddingLeft:22}}>
-<button onClick={()=>{const slug=getDriverSlug(d.name)+"-"+d.id;const url=`${window.location.origin}${window.location.pathname}#/driver/${slug}`;setShowLinkModal({name:d.name,url,phone:d.phone||""});}} style={{flex:1,background:"#f0fdf4",border:"none",borderRadius:6,padding:"6px 4px",cursor:"pointer",fontSize:11,fontWeight:600,color:"#16a34a"}}>🔗 Link</button>
-<button onClick={()=>setDriverViewId(d.id)} style={{flex:1,background:"#eff6ff",border:"none",borderRadius:6,padding:"6px 4px",cursor:"pointer",fontSize:11,fontWeight:600,color:"#2563eb"}}>View</button>
-<button onClick={()=>{setEditDrv(d.id);setEditNm(d.name);setEditPh(d.phone||"");}} style={{flex:1,background:"#f5f5f4",border:"none",borderRadius:6,padding:"6px 4px",cursor:"pointer",fontSize:11,fontWeight:600}}>Edit</button>
-{drivers.length>1&&<button onClick={()=>rmDrv(d.id)} style={{background:"#fef2f2",border:"none",borderRadius:6,padding:"6px 12px",cursor:"pointer",fontSize:11,fontWeight:600,color:"#dc2626"}}>✕</button>}
+<button onClick={()=>{const slug=getDriverSlug(d.name)+"-"+d.id;const url=`${window.location.origin}${window.location.pathname}#/driver/${slug}`;setShowLinkModal({name:d.name,url,phone:d.phone||""});}} style={{flex:1,minWidth:0,background:"#f0fdf4",border:"none",borderRadius:6,padding:"6px 4px",cursor:"pointer",fontSize:11,fontWeight:600,color:"#16a34a"}}>🔗 Link</button>
+<button onClick={()=>setDriverViewId(d.id)} style={{flex:1,minWidth:0,background:"#eff6ff",border:"none",borderRadius:6,padding:"6px 4px",cursor:"pointer",fontSize:11,fontWeight:600,color:"#2563eb"}}>View</button>
+<button onClick={()=>{setEditDrv(d.id);setEditNm(d.name);setEditPh(d.phone||"");}} style={{flex:1,minWidth:0,background:"#f5f5f4",border:"none",borderRadius:6,padding:"6px 4px",cursor:"pointer",fontSize:11,fontWeight:600}}>Edit</button>
+{drivers.length>1&&<button onClick={()=>rmDrv(d.id)} style={{background:"#fef2f2",border:"none",borderRadius:6,padding:"6px 12px",cursor:"pointer",fontSize:11,fontWeight:600,color:"#dc2626",flexShrink:0}}>✕</button>}
 </div>}
 </div>)}
 <div style={{marginTop:12,background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:10,padding:"10px 14px"}}>
@@ -8431,7 +8428,7 @@ style={{marginTop:8,width:"100%",display:"flex",alignItems:"center",justifyConte
 </div>);})}
 <p style={{fontSize:10,color:"#a8a29e",margin:"8px 0 0"}}>Driver PINs = last 4 digits of their phone number</p>
 </div>
-{<div style={{marginTop:12}}><div style={{display:"flex",gap:6,marginBottom:6}}><input value={newDN} onChange={e=>setNewDN(e.target.value)} placeholder="Driver name" style={{flex:1,border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 12px",fontSize:14,outline:"none"}}/></div><div style={_s.flexG6}><input value={newDP} onChange={e=>setNewDP(e.target.value)} placeholder="Phone number" type="tel" onKeyDown={e=>e.key==="Enter"&&addDrvr()} style={{flex:1,border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 12px",fontSize:14,outline:"none"}}/><button onClick={addDrvr} style={{background:(!newDN.trim()||!newDP.trim())?"#e7e5e4":"#1c1917",color:(!newDN.trim()||!newDP.trim())?"#a8a29e":"#fff",border:"none",borderRadius:8,padding:"8px 16px",cursor:"pointer",fontSize:13,fontWeight:600}}>Add</button></div>{newDN.trim()&&!newDP.trim()&&<p style={{fontSize:11,color:"#dc2626",margin:"4px 0 0"}}>Phone required</p>}</div>}
+{<div style={{marginTop:12}}><div style={{display:"flex",gap:6,marginBottom:6}}><input value={newDN} onChange={e=>setNewDN(e.target.value)} placeholder="Driver name" style={{flex:1,minWidth:0,border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 12px",fontSize:14,outline:"none"}}/></div><div style={_s.flexG6}><input value={newDP} onChange={e=>setNewDP(e.target.value)} placeholder="Phone number" type="tel" onKeyDown={e=>e.key==="Enter"&&addDrvr()} style={{flex:1,minWidth:0,border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 12px",fontSize:14,outline:"none"}}/><button onClick={addDrvr} style={{background:(!newDN.trim()||!newDP.trim())?"#e7e5e4":"#1c1917",color:(!newDN.trim()||!newDP.trim())?"#a8a29e":"#fff",border:"none",borderRadius:8,padding:"8px 16px",cursor:"pointer",fontSize:13,fontWeight:600,flexShrink:0}}>Add</button></div>{newDN.trim()&&!newDP.trim()&&<p style={{fontSize:11,color:"#dc2626",margin:"4px 0 0"}}>Phone required</p>}</div>}
 </div>
 </div>
 </div>}
@@ -9051,7 +9048,7 @@ return(
 <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap"}}>
 <select value={histCustFilter} onChange={e=>setHistCustFilter(e.target.value)} style={{flex:1,minWidth:120,border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px",fontSize:12,outline:"none",background:"#fff",color:histCustFilter?"#1c1917":"#a8a29e"}}>
 <option value="">All Customers</option>
-{Object.keys(CUSTOMERS).map(c=><option key={c} value={c}>{c}</option>)}
+{HISTORY_CUSTOMER_NAMES.map(c=><option key={c} value={c}>{c}</option>)}
 </select>
 <select value={histDrvFilter} onChange={e=>setHistDrvFilter(e.target.value)} style={{flex:1,minWidth:100,border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px",fontSize:12,outline:"none",background:"#fff",color:histDrvFilter?"#1c1917":"#a8a29e"}}>
 <option value="">All Drivers</option>
@@ -9260,20 +9257,25 @@ else{showToast("Pick a weekday (Mon-Fri)");}
 <div style={{display:"flex",alignItems:"center",gap:4,flexWrap:"wrap"}}>
 {entry.stopType==="pickup"&&<span style={{fontSize:8,background:"#2563eb",color:"#fff",padding:"1px 4px",borderRadius:3,fontWeight:700}}>PU</span>}
 {entry.stopType!=="pickup"&&<span style={{fontSize:8,background:"#16a34a",color:"#fff",padding:"1px 4px",borderRadius:3,fontWeight:700}}>DEL</span>}
-<span style={{fontSize:11,color:c.accent,fontWeight:600}}>{entry.customer}</span>
-<span style={_s.truncate}>{entry.stop}</span>
-{entry.pickupFrom&&<span style={{fontSize:10,color:"#64748b",fontStyle:"italic"}}>· from {entry.pickupFrom}</span>}
+<span style={{fontSize:13,fontWeight:700,color:"#1c1917",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:"100%"}}>{entry.stop}</span>
 {hasPhotos&&<span style={{fontSize:9,background:"#dbeafe",color:"#2563eb",padding:"1px 4px",borderRadius:3,fontWeight:600}}>{"📷"}{entry.photos.length}</span>}
 {entry.signature&&<span style={{fontSize:9,background:"#dcfce7",color:"#16a34a",padding:"1px 4px",borderRadius:3,fontWeight:600}}>{"✓"} POD</span>}
 </div>
-{entry.addr&&<div style={{fontSize:10,color:"#a8a29e",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{entry.addr}</div>}
+<div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",marginTop:2}}><span style={{fontSize:10,fontWeight:700,color:c.accent,background:c.accent+"14",border:"1px solid "+c.accent+"40",padding:"1px 6px",borderRadius:4,whiteSpace:"nowrap"}}>{entry.customer}</span>{drv&&<span style={{display:"flex",alignItems:"center",gap:4,fontSize:10,color:"#57534e",fontWeight:600,whiteSpace:"nowrap"}}><span style={{width:7,height:7,borderRadius:999,background:DCOL[di]||"#78716c",flexShrink:0}}/>{drv.name}</span>}</div>{(entry.pickupFrom||entry.addr)&&<div style={{fontSize:10,color:"#a8a29e",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:2}}>{entry.pickupFrom&&(()=>{
+/* Qualify at RENDER time as well as on capture: existing rows already hold bare
+   names, and this names the branch without a data migration. When the entry
+   carries the pickup ADDRESS, append its town — that is the only thing that is
+   never ambiguous, and "which location did it come off" was the question. */
+const q=qualifyPickupName(entry.pickupFrom,entry.customer,MULTI_PICKUP);
+const town=(()=>{const p=String(entry.pickupAddr||"").split(",").map(x=>x.trim()).filter(Boolean);return p.length>=2?p[p.length-2].replace(/\s+[A-Z]{2}(\s+\d{5})?$/,"").trim():"";})();
+const showTown=town&&!q.toLowerCase().includes(town.toLowerCase());
+return<span style={{color:"#78716c",fontWeight:600}}>{q}{showTown?" ("+town+")":""}</span>;})()}{entry.pickupFrom&&entry.addr&&<span style={{margin:"0 5px",color:"#d6d3d1"}}>{"\u2192"}</span>}{entry.addr}</div>}
 {hasPhotos&&<div style={{display:"flex",gap:4,marginTop:4}}>
 {entry.photos.slice(0,4).map((p,pi)=><img key={pi} src={p} alt="" onClick={e=>{e.stopPropagation();setLightboxPhoto({src:p,stop:entry.stop,customer:entry.customer,dayName:entry.dayName,dayDate:entry.dayDate,signature:entry.signature});}} style={{width:36,height:36,objectFit:"cover",borderRadius:6,border:"1px solid #e7e5e4",cursor:"pointer"}}/>)}
 {entry.photos.length>4&&<div style={{width:36,height:36,borderRadius:6,background:"#f5f5f4",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,color:"#78716c"}}>+{entry.photos.length-4}</div>}
 </div>}
 </div>
 <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0,marginLeft:6}}>
-{drv&&<span style={{fontSize:9,background:DCOL[di]||"#78716c",color:"#fff",padding:"1px 4px",borderRadius:3,fontWeight:600}}>{drv.name.charAt(0)}</span>}
 {(()=>{const cu=CUSTOMERS[entry.customer];if(!cu||!cu.fuel_surcharge||cu.fuel_included)return null;if(entry.stopType==="pickup")return null;if(entry.fuelPct===0)return null;const pct=Math.round((entry.fuelPct||cu.fuel_surcharge)*100);return<span title={"Bill: add "+pct+"% fuel surcharge on top of line rate"} style={{fontSize:9,background:"#fffbeb",color:"#b45309",border:"1px solid #fde68a",padding:"1px 5px",borderRadius:4,fontWeight:700,letterSpacing:"0.02em"}}>+{pct}% FUEL</span>;})()}
 <InlineRate value={allInRate(entry)} isHourly={entry.isHourly} onSave={r=>updateRate(entry.id,r)}/>
 </div>

@@ -22,6 +22,7 @@ import {
   DOC_TOMBSTONE_TTL,
   manualPickupCoversDock,
   deliveryCollectedOffDock,
+  qualifyPickupName,
   manualPickupOrigin,
   allInRate,
   stripLiftgateFee,
@@ -1583,5 +1584,60 @@ describe("deliveryCollectedOffDock", () => {
     expect(deliveryCollectedOffDock(null, SRCS, [], NL)).toBe(false);
     expect(deliveryCollectedOffDock(del(), null, [], NL)).toBe(false);
     expect(deliveryCollectedOffDock(del(), SRCS, null, NL)).toBe(false);
+  });
+});
+
+describe("qualifyPickupName", () => {
+  /* The real shape: Traditions ships from three branches, Emser from two, and
+     several suppliers all have a "Norcross". */
+  const MP = {
+    "Traditions in Tile": [
+      { label: "Traditions - Alpharetta" },
+      { label: "Traditions - Atlanta" },
+      { label: "Traditions - Bogart" },
+    ],
+    "Emser Tile": [{ label: "Emser - Norcross" }, { label: "Emser - Roswell" }],
+    IMETCO: [{ label: "IMETCO - Norcross" }, { label: "Southern Aluminum - Lithia Springs" }],
+  };
+
+  it("qualifies a bare branch against the delivery's own customer", () => {
+    expect(qualifyPickupName("Atlanta", "Traditions in Tile", MP)).toBe("Traditions - Atlanta");
+  });
+
+  it("qualifies for a Quote Delivery, whose customer owns no docks at all", () => {
+    /* The bug: MULTI_PICKUP["Quote Delivery"] is undefined, so the old lookup
+       missed and stored a bare name — the row could not say which branch. */
+    expect(qualifyPickupName("Bogart", "Quote Delivery", MP)).toBe("Traditions - Bogart");
+  });
+
+  it("leaves an already-qualified name alone", () => {
+    expect(qualifyPickupName("Traditions - Atlanta", "Quote Delivery", MP)).toBe("Traditions - Atlanta");
+  });
+
+  it("refuses to guess when several suppliers share a location name", () => {
+    /* Emser and IMETCO both have a Norcross. Picking one would put a confident
+       wrong address on a driver's card. */
+    expect(qualifyPickupName("Norcross", "Quote Delivery", MP)).toBe("Norcross");
+  });
+
+  it("still resolves a shared name when the delivery's customer owns one", () => {
+    expect(qualifyPickupName("Norcross", "Emser Tile", MP)).toBe("Emser - Norcross");
+    expect(qualifyPickupName("Norcross", "IMETCO", MP)).toBe("IMETCO - Norcross");
+  });
+
+  it("matches a full label as well as the short branch", () => {
+    expect(qualifyPickupName("Southern Aluminum - Lithia Springs", "Quote Delivery", MP)).toBe("Southern Aluminum - Lithia Springs");
+  });
+
+  it("leaves an unknown place untouched", () => {
+    expect(qualifyPickupName("MLW Warehouse", "Quote Delivery", MP)).toBe("MLW Warehouse");
+    expect(qualifyPickupName("Traditions In Tile", "Quote Delivery", MP)).toBe("Traditions In Tile");
+  });
+
+  it("guards empty and bad input", () => {
+    expect(qualifyPickupName("", "X", MP)).toBe("");
+    expect(qualifyPickupName(null, "X", MP)).toBe("");
+    expect(qualifyPickupName("  Atlanta  ", "Traditions in Tile", MP)).toBe("Traditions - Atlanta");
+    expect(qualifyPickupName("Atlanta", "X", null)).toBe("Atlanta");
   });
 });

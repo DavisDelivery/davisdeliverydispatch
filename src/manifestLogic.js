@@ -1413,3 +1413,30 @@ export const resolvePickupLabel=(entry,siblings)=>{
   return{text:cust+(pf?" — "+pf:""),ambiguous:false};
 };
 
+
+/* Turn a bare pickup location into one that names its supplier: "Alpharetta" ->
+   "Traditions - Alpharetta". A history row reading "from Traditions In Tile"
+   cannot tell you which of Alpharetta / Atlanta / Bogart the freight came off.
+
+   Both call sites used to resolve against MULTI_PICKUP[the DELIVERY's customer].
+   That works for a Traditions delivery and fails for a Quote Delivery collected
+   at Traditions: its customer is "Quote Delivery", which owns no docks, so the
+   lookup missed and the bare name was stored. Hence the same board showing
+   "from Traditions - Atlanta" on one row and "from Traditions In Tile" on the
+   next.
+
+   Order matters. The delivery's OWN customer wins first, so a short name
+   resolves to their branch. Only then do we look across suppliers, and only
+   when exactly one owns a location by that name — "Norcross" belongs to Emser,
+   Florida Tile, Specialty, IMETCO, Crossville and Prolex alike, and guessing
+   between them would put a confident wrong address on a driver's card. */
+export const qualifyPickupName=(rawPU,customerName,multiPickup)=>{
+  const raw=String(rawPU==null?"":rawPU).trim();
+  if(!raw||raw.includes(" - "))return raw;
+  const hit=(locs)=>Array.isArray(locs)?locs.find(l=>l&&(l.label===raw||String(l.label||"").split(" - ").pop()===raw)):null;
+  const mine=hit(multiPickup&&multiPickup[customerName]);
+  if(mine)return mine.label;
+  let found=null,owners=0;
+  Object.values(multiPickup||{}).forEach(locs=>{const m=hit(locs);if(m){owners++;if(!found)found=m;}});
+  return owners===1?found.label:raw;
+};
