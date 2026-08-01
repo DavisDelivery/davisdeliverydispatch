@@ -1005,6 +1005,16 @@ const QUOTE_CUSTOMERS=[
 {name:"Traditions in Tile",pickups:[{label:"Alpharetta",addr:"3065 Trotters Parkway, Alpharetta, GA 30004"},{label:"Atlanta",addr:"1015 Chattahoochee Avenue NW, Atlanta, GA 30318"},{label:"Bogart",addr:"150 Trade Street, Bogart, GA 30622"}]},
 ];
 
+/* Every customer name that can appear in saved history. A history FILTER has to
+   offer all of them: quote customers (Traditions in Tile, Crossville Studios,
+   Prolex Flooring, Ceramic Tile Gainesville ...) are a separate list from
+   CUSTOMERS, so a filter built from Object.keys(CUSTOMERS) silently omitted
+   them and their deliveries could not be filtered for at all - they sit in the
+   history either under their own name or under "Quote Delivery".
+   Creation pickers deliberately stay on CUSTOMERS: a one-off is tied to a
+   CONTRACT customer, a different question from "what is in my history". */
+const HISTORY_CUSTOMER_NAMES=[...Object.keys(CUSTOMERS),...QUOTE_CUSTOMERS.map(q=>q.name).sort((a,b)=>a.localeCompare(b)),"Quote Delivery","One-Off Delivery"];
+
 
 const SHARED_STOPS=["Atlanta West - Lithia Springs","BEC - Alpharetta","Britts - Lawrenceville","D3 - Woodstock","DCO Lakes Pkwy","DCO Tech Dr","Hillman - Sugar Hill","NE Corner - Flowery Branch","Precision Flooring - Norcross","Premier - Suwanee","ProSource - Norcross","SE Commercial - Woodstock","Vanguard - Norcross"];
 
@@ -6765,7 +6775,7 @@ return(<div>
 <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"}}>
 <input value={histSearch} onChange={e=>setHistSearch(e.target.value)} placeholder="Search stops…" style={{border:"1px solid #d6d3d1",borderRadius:8,padding:"7px 12px",fontSize:13,outline:"none",minWidth:200}}/>
 <select value={histCustFilter} onChange={e=>setHistCustFilter(e.target.value)} style={{border:"1px solid #d6d3d1",borderRadius:8,padding:"7px 10px",fontSize:12,outline:"none",background:"#fff"}}>
-<option value="">All customers</option>{Object.keys(CUSTOMERS).map(c=><option key={c} value={c}>{c}</option>)}
+<option value="">All customers</option>{HISTORY_CUSTOMER_NAMES.map(c=><option key={c} value={c}>{c}</option>)}
 </select>
 <select value={histWeekRange} onChange={e=>setHistWeekRange(Number(e.target.value))} style={{border:"1px solid #d6d3d1",borderRadius:8,padding:"7px 10px",fontSize:12,outline:"none",background:"#fff"}}>
 <option value={2}>2 weeks</option><option value={4}>4 weeks</option><option value={8}>8 weeks</option><option value={12}>12 weeks</option><option value={26}>26 weeks</option><option value={52}>52 weeks</option><option value={999}>All Time</option>
@@ -6959,7 +6969,7 @@ else{showToast("Pick a weekday (Mon-Fri)");}
 <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap",alignItems:"center"}}>
 <input value={histSearch} onChange={e=>setHistSearch(e.target.value)} placeholder="Search stops, customers, addresses…" style={{border:"1px solid #d6d3d1",borderRadius:8,padding:"7px 12px",fontSize:13,outline:"none",flex:1,minWidth:200}}/>
 <select value={histCustFilter} onChange={e=>setHistCustFilter(e.target.value)} style={{border:"1px solid #d6d3d1",borderRadius:8,padding:"7px 10px",fontSize:12,outline:"none",background:"#fff"}}>
-<option value="">All customers</option>{Object.keys(CUSTOMERS).map(c=><option key={c} value={c}>{c}</option>)}
+<option value="">All customers</option>{HISTORY_CUSTOMER_NAMES.map(c=><option key={c} value={c}>{c}</option>)}
 </select>
 <select value={histDrvFilter} onChange={e=>setHistDrvFilter(e.target.value)} style={{border:"1px solid #d6d3d1",borderRadius:8,padding:"7px 10px",fontSize:12,outline:"none",background:"#fff"}}>
 <option value="">All drivers</option>{drivers.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}
@@ -6982,17 +6992,14 @@ else{showToast("Pick a weekday (Mon-Fri)");}
 <div style={{display:"flex",alignItems:"center",gap:4,flexWrap:"wrap"}}>
 {entry.stopType==="pickup"&&<span style={{fontSize:8,background:"#2563eb",color:"#fff",padding:"1px 4px",borderRadius:3,fontWeight:700}}>PU</span>}
 {entry.stopType!=="pickup"&&<span style={{fontSize:8,background:"#16a34a",color:"#fff",padding:"1px 4px",borderRadius:3,fontWeight:700}}>DEL</span>}
-<span style={{fontSize:11,color:c.accent,fontWeight:600}}>{entry.customer}</span>
-<span style={_s.truncate}>{entry.stop}</span>
-{entry.pickupFrom&&<span style={{fontSize:10,color:"#64748b",fontStyle:"italic"}}>· from {entry.pickupFrom}</span>}
+<span style={{fontSize:13,fontWeight:700,color:"#1c1917",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:"100%"}}>{entry.stop}</span>
 {hasPhotos&&<span style={{fontSize:9,background:"#dbeafe",color:"#2563eb",padding:"1px 4px",borderRadius:3,fontWeight:600}}>📷 {entry.photos.length}</span>}
 {entry.signature&&<span style={{fontSize:9,background:"#dcfce7",color:"#16a34a",padding:"1px 4px",borderRadius:3,fontWeight:600}}>✓ POD</span>}
 </div>
-{entry.addr&&<div style={{fontSize:10,color:"#a8a29e",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{entry.addr}</div>}
+<div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",marginTop:2}}><span style={{fontSize:10,fontWeight:700,color:c.accent,background:c.accent+"14",border:"1px solid "+c.accent+"40",padding:"1px 6px",borderRadius:4,whiteSpace:"nowrap"}}>{entry.customer}</span>{drv&&<span style={{display:"flex",alignItems:"center",gap:4,fontSize:10,color:"#57534e",fontWeight:600,whiteSpace:"nowrap"}}><span style={{width:7,height:7,borderRadius:999,background:DCOL[di]||"#78716c",flexShrink:0}}/>{drv.name}</span>}</div>{(entry.pickupFrom||entry.addr)&&<div style={{fontSize:10,color:"#a8a29e",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:2}}>{entry.pickupFrom&&<span style={{color:"#78716c",fontWeight:600}}>{entry.pickupFrom}</span>}{entry.pickupFrom&&entry.addr&&<span style={{margin:"0 5px",color:"#d6d3d1"}}>{"\u2192"}</span>}{entry.addr}</div>}
 {hasPhotos&&<div style={{display:"flex",gap:4,marginTop:4}}>{entry.photos.slice(0,5).map((p,pi)=><img key={pi} src={p} alt="" onClick={e=>{e.stopPropagation();setLightboxPhoto({src:p,stop:entry.stop,customer:entry.customer,dayName:entry.dayName,dayDate:entry.dayDate,signature:entry.signature});}} style={{width:40,height:40,objectFit:"cover",borderRadius:6,border:"1px solid #e7e5e4",cursor:"pointer"}}/>)}{entry.photos.length>5&&<div style={{width:40,height:40,borderRadius:6,background:"#f5f5f4",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,color:"#78716c"}}>+{entry.photos.length-5}</div>}</div>}
 </div>
 <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0,marginLeft:8}}>
-{drv&&<span style={{fontSize:9,background:DCOL[di]||"#78716c",color:"#fff",padding:"1px 4px",borderRadius:3,fontWeight:600}}>{drv.name.split(" ")[0]}</span>}
 {(()=>{const cu=CUSTOMERS[entry.customer];if(!cu||!cu.fuel_surcharge||cu.fuel_included)return null;if(entry.stopType==="pickup")return null;if(entry.fuelPct===0)return null;const pct=Math.round((entry.fuelPct||cu.fuel_surcharge)*100);return<span title={"Bill: add "+pct+"% fuel surcharge on top of line rate"} style={{fontSize:9,background:"#fffbeb",color:"#b45309",border:"1px solid #fde68a",padding:"1px 5px",borderRadius:4,fontWeight:700,letterSpacing:"0.02em"}}>+{pct}% FUEL</span>;})()}
 <InlineRate value={allInRate(entry)} isHourly={entry.isHourly} onSave={r=>updateRate(entry.id,r)}/>
 </div>
@@ -9051,7 +9058,7 @@ return(
 <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap"}}>
 <select value={histCustFilter} onChange={e=>setHistCustFilter(e.target.value)} style={{flex:1,minWidth:120,border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px",fontSize:12,outline:"none",background:"#fff",color:histCustFilter?"#1c1917":"#a8a29e"}}>
 <option value="">All Customers</option>
-{Object.keys(CUSTOMERS).map(c=><option key={c} value={c}>{c}</option>)}
+{HISTORY_CUSTOMER_NAMES.map(c=><option key={c} value={c}>{c}</option>)}
 </select>
 <select value={histDrvFilter} onChange={e=>setHistDrvFilter(e.target.value)} style={{flex:1,minWidth:100,border:"1px solid #d6d3d1",borderRadius:8,padding:"8px 10px",fontSize:12,outline:"none",background:"#fff",color:histDrvFilter?"#1c1917":"#a8a29e"}}>
 <option value="">All Drivers</option>
@@ -9260,20 +9267,17 @@ else{showToast("Pick a weekday (Mon-Fri)");}
 <div style={{display:"flex",alignItems:"center",gap:4,flexWrap:"wrap"}}>
 {entry.stopType==="pickup"&&<span style={{fontSize:8,background:"#2563eb",color:"#fff",padding:"1px 4px",borderRadius:3,fontWeight:700}}>PU</span>}
 {entry.stopType!=="pickup"&&<span style={{fontSize:8,background:"#16a34a",color:"#fff",padding:"1px 4px",borderRadius:3,fontWeight:700}}>DEL</span>}
-<span style={{fontSize:11,color:c.accent,fontWeight:600}}>{entry.customer}</span>
-<span style={_s.truncate}>{entry.stop}</span>
-{entry.pickupFrom&&<span style={{fontSize:10,color:"#64748b",fontStyle:"italic"}}>· from {entry.pickupFrom}</span>}
+<span style={{fontSize:13,fontWeight:700,color:"#1c1917",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:"100%"}}>{entry.stop}</span>
 {hasPhotos&&<span style={{fontSize:9,background:"#dbeafe",color:"#2563eb",padding:"1px 4px",borderRadius:3,fontWeight:600}}>{"📷"}{entry.photos.length}</span>}
 {entry.signature&&<span style={{fontSize:9,background:"#dcfce7",color:"#16a34a",padding:"1px 4px",borderRadius:3,fontWeight:600}}>{"✓"} POD</span>}
 </div>
-{entry.addr&&<div style={{fontSize:10,color:"#a8a29e",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{entry.addr}</div>}
+<div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",marginTop:2}}><span style={{fontSize:10,fontWeight:700,color:c.accent,background:c.accent+"14",border:"1px solid "+c.accent+"40",padding:"1px 6px",borderRadius:4,whiteSpace:"nowrap"}}>{entry.customer}</span>{drv&&<span style={{display:"flex",alignItems:"center",gap:4,fontSize:10,color:"#57534e",fontWeight:600,whiteSpace:"nowrap"}}><span style={{width:7,height:7,borderRadius:999,background:DCOL[di]||"#78716c",flexShrink:0}}/>{drv.name}</span>}</div>{(entry.pickupFrom||entry.addr)&&<div style={{fontSize:10,color:"#a8a29e",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginTop:2}}>{entry.pickupFrom&&<span style={{color:"#78716c",fontWeight:600}}>{entry.pickupFrom}</span>}{entry.pickupFrom&&entry.addr&&<span style={{margin:"0 5px",color:"#d6d3d1"}}>{"\u2192"}</span>}{entry.addr}</div>}
 {hasPhotos&&<div style={{display:"flex",gap:4,marginTop:4}}>
 {entry.photos.slice(0,4).map((p,pi)=><img key={pi} src={p} alt="" onClick={e=>{e.stopPropagation();setLightboxPhoto({src:p,stop:entry.stop,customer:entry.customer,dayName:entry.dayName,dayDate:entry.dayDate,signature:entry.signature});}} style={{width:36,height:36,objectFit:"cover",borderRadius:6,border:"1px solid #e7e5e4",cursor:"pointer"}}/>)}
 {entry.photos.length>4&&<div style={{width:36,height:36,borderRadius:6,background:"#f5f5f4",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,color:"#78716c"}}>+{entry.photos.length-4}</div>}
 </div>}
 </div>
 <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0,marginLeft:6}}>
-{drv&&<span style={{fontSize:9,background:DCOL[di]||"#78716c",color:"#fff",padding:"1px 4px",borderRadius:3,fontWeight:600}}>{drv.name.charAt(0)}</span>}
 {(()=>{const cu=CUSTOMERS[entry.customer];if(!cu||!cu.fuel_surcharge||cu.fuel_included)return null;if(entry.stopType==="pickup")return null;if(entry.fuelPct===0)return null;const pct=Math.round((entry.fuelPct||cu.fuel_surcharge)*100);return<span title={"Bill: add "+pct+"% fuel surcharge on top of line rate"} style={{fontSize:9,background:"#fffbeb",color:"#b45309",border:"1px solid #fde68a",padding:"1px 5px",borderRadius:4,fontWeight:700,letterSpacing:"0.02em"}}>+{pct}% FUEL</span>;})()}
 <InlineRate value={allInRate(entry)} isHourly={entry.isHourly} onSave={r=>updateRate(entry.id,r)}/>
 </div>
