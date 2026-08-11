@@ -62,7 +62,7 @@ inputMb4:{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"7px 10
 };
 import { useState, useCallback, useEffect, useRef, Fragment, Component } from "react";
 import { PICKUP_SOURCES, MULTI_PICKUP, normLoc as _normLoc } from "./pickupConfig.js";
-import { dedupeIds, dedupeAutoPickups, dedupeGhostDeliveries, dedupeDeliveries, reapOrphanAutoPickups, sanitizeEntry, _mergeEntryDriver, _mergeEntryDispatcher, buildMergedEntries, entrySig, makeTombFilter, makeDocTombFilter, mergeTombstones, vanishedAutoPickups, orderByIds, reconcileDriverRoster, applyDriverRemap, normDriverName, manualPickupCoversDock, allInRate, stripLiftgateFee, resequenceEntries, sortBySeq, normalizeOrder, orderAutoPickupsFirst, manualPickupOrigin, deliveryCollectedOffDock, qualifyPickupName, rebuildPickupsForPure, insertIdxForLoad, applyReassign, applySetLoadNum, reorderDriverBlock as _reorderDriverBlock, applyMoveInDriver, applyReorderDriver, applyDropReorder, resolvePickupLabel, finishingDynamicsFlag, FD_FLAG_COLORS, fdCutoffMins, fmtClock } from "./manifestLogic.js";
+import { dedupeIds, dedupeAutoPickups, dedupeGhostDeliveries, dedupeDeliveries, reapOrphanAutoPickups, sanitizeEntry, _mergeEntryDriver, _mergeEntryDispatcher, buildMergedEntries, entrySig, makeTombFilter, makeDocTombFilter, mergeTombstones, vanishedAutoPickups, orderByIds, reconcileDriverRoster, applyDriverRemap, normDriverName, manualPickupCoversDock, allInRate, stripLiftgateFee, resequenceEntries, sortBySeq, normalizeOrder, orderAutoPickupsFirst, manualPickupOrigin, deliveryCollectedOffDock, qualifyPickupName, rebuildPickupsForPure, insertIdxForLoad, applyReassign, applySetLoadNum, reorderDriverBlock as _reorderDriverBlock, applyMoveInDriver, applyReorderDriver, applyDropReorder, resolvePickupLabel, finishingDynamicsFlag, FD_FLAG_COLORS, fdCutoffMins, fmtClock, visibleTruckDriverIds } from "./manifestLogic.js";
 import { diffOrderDocs, orderDocId, ordersParity } from "./ordersStore.js";
 import { FDFlag, useMinuteTick } from "./FDFlag.jsx";
 
@@ -1498,6 +1498,7 @@ if(hideLabels){
   map.setOptions({styles:baseStyles});
 }
 },[hideLabels,mapReady]);
+const truckDrvKey=[...visibleTruckDriverIds(drivers,stops)].sort((a,b)=>a-b).join(",");
 useEffect(()=>{
 const map=mapInstanceRef.current;
 if(!map||!mapReady||!driverLocs)return;
@@ -1509,7 +1510,13 @@ if(!map||!mapReady||!driverLocs)return;
 const markerMap=driverMarkersRef.current;
 const seenIds=new Set();
 
+/* Iterate the FULL roster, not a filtered copy: `di` is the driver's
+   canonical index and it picks the colour (DCOL[di]) that the chips above the
+   map are already using. Filtering the array would renumber it and recolour
+   every truck. */
+const showTruck=new Set(truckDrvKey?truckDrvKey.split(",").map(Number):[]);
 drivers.forEach((drv,di)=>{
+  if(!showTruck.has(drv.id))return;
   const loc=driverLocs[drv.id];
   if(!loc||loc.lat==null||loc.lng==null)return;
   seenIds.add(drv.id);
@@ -1563,7 +1570,7 @@ markerMap.forEach((entry,did)=>{
     markerMap.delete(did);
   }
 });
-},[driverLocs,drivers,mapReady]);
+},[driverLocs,drivers,truckDrvKey,mapReady]);
 
 return(
 <div style={{position:"relative",borderRadius:14,overflow:"hidden",border:"1px solid #d6d3d1",boxShadow:"0 2px 12px rgba(0,0,0,0.08)",height:typeof height==="string"&&height.includes("%")?height:undefined}}>{showSearch&&(
@@ -7519,7 +7526,7 @@ onAssignStop={mapActiveDrv?(stopId,drvId)=>{assignInOrder(stopId,mapActiveDrv,ma
 </div>
 <span style={{fontSize:9,color:"#a8a29e",fontWeight:500}}>1 min polling</span>
 </div>
-{drivers.filter(d=>d.id<=3).map((drv,di)=>{
+{visibleDrivers.map(d=>({d,di:drivers.findIndex(x=>x.id===d.id)})).map(({d:drv,di})=>{
   const loc=driverLocs[drv.id];
   const on=gpsEnabled[drv.id]!==false;
   const col=DCOL[di]||BRAND.main;

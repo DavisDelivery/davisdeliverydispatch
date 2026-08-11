@@ -1553,3 +1553,25 @@ export const FD_FLAG_COLORS={
   soon:{bg:"#f59e0b",fg:"#fff",bd:"#d97706"},
   late:{bg:"#dc2626",fg:"#fff",bd:"#b91c1c"},
 };
+
+/* Which drivers get a live truck pin on the map.
+
+   Same rule the rest of the board runs on (see `visibleDrivers` in App.jsx): a
+   driver toggled OFF in Manage Drivers is out of the current fleet, UNLESS
+   they are carrying stops on the board being shown — hiding the truck of
+   someone who is actually out running stops would be worse than showing one
+   too many.
+
+   `active===false` is the only value that hides. undefined and true both count
+   as active, so drivers on the roster before the field existed keep working.
+
+   Motive reports the whole fleet, and every vehicle whose driver name matches
+   anyone on the roster used to paint a pin. That is how a four-driver day ended
+   up with seven trucks on the map. */
+export const visibleTruckDriverIds=(drivers,stops)=>{
+  const onBoard=new Set();
+  (stops||[]).forEach(s=>{const id=s&&s.driverId;if(typeof id==="number"&&id>0)onBoard.add(id);});
+  const out=new Set();
+  (drivers||[]).forEach(d=>{if(d&&(d.active!==false||onBoard.has(d.id)))out.add(d.id);});
+  return out;
+};
