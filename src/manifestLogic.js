@@ -1440,3 +1440,161 @@ export const qualifyPickupName=(rawPU,customerName,multiPickup)=>{
   Object.values(multiPickup||{}).forEach(locs=>{const m=hit(locs);if(m){owners++;if(!found)found=m;}});
   return owners===1?found.label:raw;
 };
+
+/* ── Finishing Dynamics dock cutoff ─────────────────────────────────────────
+   Villa Rica stops taking and releasing freight at 3:00 PM Monday–Thursday and
+   2:00 PM on Friday. A truck that rolls up after that gets turned away and the
+   load rides back to the yard, so the board flags any Finishing Dynamics stop
+   with the day's cutoff instead of letting the dispatcher hear about it from
+   the driver at 3:15.
+
+   The index is the board's own `sd` — 0=Mon … 4=Fri. The board never renders a
+   weekend, so there is no Sat/Sun entry and no invented weekend policy: an
+   index outside 0–4 simply has no cutoff and raises no flag. */
+export const FD_CUTOFF_BY_DAY=[15*60,15*60,15*60,15*60,14*60];
+
+export const fdCutoffMins=(dayIdx)=>{
+  /* Strictly a number: Number(null) and Number("") are both 0, and coercing a
+     missing day into Monday would quietly stamp the wrong cutoff. */
+  if(typeof dayIdx!=="number"||!Number.isInteger(dayIdx))return null;
+  return dayIdx>=0&&dayIdx<FD_CUTOFF_BY_DAY.length?FD_CUTOFF_BY_DAY[dayIdx]:null;
+};
+
+/* 900 → "3:00 PM". Kept here so the badge, the tooltip and the AI prompt all
+   spell the cutoff the same way. */
+export const fmtClock=(mins)=>{
+  const m=Math.max(0,Math.round(Number(mins)||0));
+  const h24=Math.floor(m/60)%24,mm=m%60;
+  const ap=h24>=12?"PM":"AM";
+  const h12=h24%12===0?12:h24%12;
+  return h12+":"+String(mm).padStart(2,"0")+" "+ap;
+};
+
+/* Does this stop actually put a truck at the Villa Rica dock?
+
+   Four shapes reach the board and all four count:
+     - the auto pickup dock  "Finishing Dynamics - Villa Rica"
+     - IMETCO's named runs   "IMETCO to Finishing Dynamics" (delivering INTO the
+       dock), "Finishing Dynamics to IMETCO" and "Round Trip IMETCO &
+       Finishing Dynamics" (collecting FROM it)
+     - a delivery whose pickupFrom points at the dock
+     - a one-off/quote typed with the Villa Rica address
+
+   IMETCO's board shortens the dock to its city ("Villa Rica" via
+   IMETCO_PICKUP_MAP), so that spelling is matched too — but only for IMETCO, so
+   an unrelated customer with a Villa Rica address doesn't inherit IMETCO's
+   dock hours. */
+const _fdName=(v)=>typeof v==="string"&&v.toLowerCase().includes("finishing dynamics");
+export const touchesFinishingDynamics=(entry)=>{
+  if(!entry)return false;
+  if(_fdName(entry.stop)||_fdName(entry.pickupFrom))return true;
+  const addr=(String(entry.addr||"")+" "+String(entry.pickupAddr||"")).toLowerCase();
+  if(addr.includes("28 andrews way"))return true;
+  if(entry.customer==="IMETCO"&&String(entry.pickupFrom||"").trim().toLowerCase()==="villa rica")return true;
+  return false;
+};
+
+/* The flag itself. Pure: everything time-dependent arrives as an argument so
+   the suite can drive it to any minute of any weekday.
+
+   opts.dayIdx   the board's `sd` for the day being displayed (0=Mon … 4=Fri)
+   opts.now      epoch ms, only consulted when isToday
+   opts.isToday  is the displayed day the actual calendar day? A Thursday board
+                 opened on Tuesday still shows the 3:00 PM cutoff, but "you have
+                 40 minutes" would be a lie, so urgency is today-only.
+   opts.warnLead minutes before the cutoff that "info" escalates to "soon"
+
+   Returns null when there is nothing to say — not a Finishing Dynamics stop, no
+   cutoff for that day, or the stop is already departed (it made it; a red badge
+   on a finished stop is just noise). */
+export const finishingDynamicsFlag=(entry,opts)=>{
+  const o=opts||{};
+  if(!touchesFinishingDynamics(entry))return null;
+  const cutoff=fdCutoffMins(o.dayIdx);
+  if(cutoff==null)return null;
+  if(entry&&entry.status==="departed")return null;
+  const cutoffText=fmtClock(cutoff);
+  const base={cutoff,cutoffText};
+  if(!o.isToday)return{...base,level:"info",text:"FD CLOSES "+cutoffText,minsLeft:null,
+    title:"Finishing Dynamics closes at "+cutoffText+" on this day (3:00 PM Mon–Thu, 2:00 PM Fri)."};
+  const nowMs=typeof o.now==="number"?o.now:Date.now();
+  const nowD=new Date(nowMs);
+  const nowMins=nowD.getHours()*60+nowD.getMinutes();
+  const minsLeft=cutoff-nowMins;
+  if(minsLeft<=0)return{...base,level:"late",minsLeft,text:"PAST FD "+cutoffText+" CUTOFF",
+    title:"Finishing Dynamics closed at "+cutoffText+". This stop will not be worked today."};
+
+  /* A live ETA can miss the cutoff while the clock still looks fine — a 3:20
+     arrival at 2:35 is the case worth catching, because it is still early
+     enough to resequence the load. */
+  const etaMins=parseInt(entry&&entry.eta,10);
+  if(Number.isFinite(etaMins)&&etaMins>0){
+    const setAt=typeof entry.etaSetAt==="number"?entry.etaSetAt:nowMs;
+    const arrD=new Date(setAt+etaMins*60000);
+    const arrMins=arrD.getHours()*60+arrD.getMinutes();
+    const sameDay=arrD.getFullYear()===nowD.getFullYear()&&arrD.getMonth()===nowD.getMonth()&&arrD.getDate()===nowD.getDate();
+    if(sameDay&&arrMins>cutoff)return{...base,level:"late",minsLeft,etaMins:arrMins,
+      text:"ETA "+fmtClock(arrMins)+" — MISSES FD "+cutoffText,
+      title:"ETA is "+fmtClock(arrMins)+", after the "+cutoffText+" Finishing Dynamics cutoff. Reorder the load or it comes back."};
+  }
+
+  const warnLead=Number.isFinite(o.warnLead)?o.warnLead:90;
+  if(minsLeft<=warnLead)return{...base,level:"soon",minsLeft,
+    text:"FD CLOSES "+cutoffText+" · "+minsLeft+"m",
+    title:minsLeft+" minutes left before Finishing Dynamics closes at "+cutoffText+"."};
+  return{...base,level:"info",minsLeft,text:"FD CLOSES "+cutoffText,
+    title:"Finishing Dynamics closes at "+cutoffText+" (3:00 PM Mon–Thu, 2:00 PM Fri)."};
+};
+
+/* Badge palette, kept next to the levels that name it so a new level can't
+   silently render untinted. */
+export const FD_FLAG_COLORS={
+  info:{bg:"#fef3c7",fg:"#92400e",bd:"#fde68a"},
+  soon:{bg:"#f59e0b",fg:"#fff",bd:"#d97706"},
+  late:{bg:"#dc2626",fg:"#fff",bd:"#b91c1c"},
+};
+
+/* Which drivers get a live truck pin on the map.
+
+   Same rule the rest of the board runs on (see `visibleDrivers` in App.jsx): a
+   driver toggled OFF in Manage Drivers is out of the current fleet, UNLESS
+   they are carrying stops on the board being shown — hiding the truck of
+   someone who is actually out running stops would be worse than showing one
+   too many.
+
+   `active===false` is the only value that hides. undefined and true both count
+   as active, so drivers on the roster before the field existed keep working.
+
+   Motive reports the whole fleet, and every vehicle whose driver name matches
+   anyone on the roster used to paint a pin. That is how a four-driver day ended
+   up with seven trucks on the map. */
+export const visibleTruckDriverIds=(drivers,stops)=>{
+  const onBoard=new Set();
+  (stops||[]).forEach(s=>{const id=s&&s.driverId;if(typeof id==="number"&&id>0)onBoard.add(id);});
+  const out=new Set();
+  (drivers||[]).forEach(d=>{if(d&&(d.active!==false||onBoard.has(d.id)))out.add(d.id);});
+  return out;
+};
+
+/* Display order for the Manage Drivers list.
+
+   The current fleet comes first, in roster order — that order is meaningful, it
+   picks each driver's colour (DCOL[i]) and their column on the board, so it is
+   never re-sorted. Everyone hidden follows, alphabetically by the name as
+   displayed. On a twenty-name roster with three actives, insertion order means
+   reading the whole list to find someone.
+
+   Returns {d, i} pairs, NOT a reordered driver array: `i` is the driver's
+   canonical index in `drivers`, and the colour swatch has to keep using it or
+   the modal would show a different colour than the board. */
+export const orderRosterRows=(drivers)=>{
+  const rows=(drivers||[]).map((d,i)=>({d,i}));
+  const isActive=(r)=>!!r.d&&r.d.active!==false;
+  const nameOf=(r)=>String((r.d&&r.d.name)||"");
+  const hidden=rows.filter(r=>!isActive(r));
+  hidden.sort((a,b)=>{
+    const c=nameOf(a).trim().localeCompare(nameOf(b).trim(),undefined,{sensitivity:"base",numeric:true});
+    return c!==0?c:a.i-b.i; /* same name twice — fall back to roster order so it never jitters */
+  });
+  return rows.filter(isActive).concat(hidden);
+};

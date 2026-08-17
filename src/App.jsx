@@ -62,8 +62,9 @@ inputMb4:{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"7px 10
 };
 import { useState, useCallback, useEffect, useRef, Fragment, Component } from "react";
 import { PICKUP_SOURCES, MULTI_PICKUP, normLoc as _normLoc } from "./pickupConfig.js";
-import { dedupeIds, dedupeAutoPickups, dedupeGhostDeliveries, dedupeDeliveries, reapOrphanAutoPickups, sanitizeEntry, _mergeEntryDriver, _mergeEntryDispatcher, buildMergedEntries, entrySig, makeTombFilter, makeDocTombFilter, mergeTombstones, vanishedAutoPickups, orderByIds, reconcileDriverRoster, applyDriverRemap, normDriverName, manualPickupCoversDock, allInRate, stripLiftgateFee, resequenceEntries, sortBySeq, normalizeOrder, orderAutoPickupsFirst, manualPickupOrigin, deliveryCollectedOffDock, qualifyPickupName, rebuildPickupsForPure, insertIdxForLoad, applyReassign, applySetLoadNum, reorderDriverBlock as _reorderDriverBlock, applyMoveInDriver, applyReorderDriver, applyDropReorder, resolvePickupLabel } from "./manifestLogic.js";
+import { dedupeIds, dedupeAutoPickups, dedupeGhostDeliveries, dedupeDeliveries, reapOrphanAutoPickups, sanitizeEntry, _mergeEntryDriver, _mergeEntryDispatcher, buildMergedEntries, entrySig, makeTombFilter, makeDocTombFilter, mergeTombstones, vanishedAutoPickups, orderByIds, reconcileDriverRoster, applyDriverRemap, normDriverName, manualPickupCoversDock, allInRate, stripLiftgateFee, resequenceEntries, sortBySeq, normalizeOrder, orderAutoPickupsFirst, manualPickupOrigin, deliveryCollectedOffDock, qualifyPickupName, rebuildPickupsForPure, insertIdxForLoad, applyReassign, applySetLoadNum, reorderDriverBlock as _reorderDriverBlock, applyMoveInDriver, applyReorderDriver, applyDropReorder, resolvePickupLabel, finishingDynamicsFlag, FD_FLAG_COLORS, fdCutoffMins, fmtClock, visibleTruckDriverIds, orderRosterRows } from "./manifestLogic.js";
 import { diffOrderDocs, orderDocId, ordersParity } from "./ordersStore.js";
+import { FDFlag, useMinuteTick } from "./FDFlag.jsx";
 
 const _SplitUI=({splitEntry,setSplitEntry})=>{const tw=splitEntry.totalWeight||0;const t1w=splitEntry.truck1Weight!==undefined?splitEntry.truck1Weight:Math.round(tw*(splitEntry.ratio/100));const t2w=tw-t1w;return(<><div style={_s.flexG6Mb6}><div style={_s.f1}><label style={_s.labelSm}>Total</label><input type="number" inputMode="numeric" value={tw||""} onChange={e=>{const newTw=parseInt(e.target.value)||0;setSplitEntry(p=>({...p,totalWeight:newTw,truck1Weight:Math.min(p.truck1Weight||Math.round(newTw/2),newTw)}));}} style={_s.splitTotal}/></div><div style={_s.f1}><label style={_s.labelBlue}>Truck 1</label><input type="number" inputMode="numeric" value={splitEntry.truck1Weight!==undefined?splitEntry.truck1Weight:""} onChange={e=>{const v=e.target.value;setSplitEntry(p=>({...p,truck1Weight:v===""?0:parseInt(v)||0}));}} style={_s.splitInput}/></div><div style={_s.f1}><label style={_s.labelGray}>Truck 2</label><div style={_s.splitT2}>{t2w.toLocaleString()}</div></div></div><input type="range" min={0} max={tw} step={100} value={t1w} onChange={e=>{const v=parseInt(e.target.value)||0;setSplitEntry(p=>({...p,truck1Weight:v}));}} style={_s.slider}/></>);};
 
@@ -966,6 +967,7 @@ const DEFAULT_INSTRUCTIONS={
   "Southern Aluminum to IMETCO":"Requires Ship Plan # — Pickup at Southern Aluminum, deliver to IMETCO (4648 S Old Peachtree Rd, Norcross)",
   "Finishing Dynamics to IMETCO":"⚠ Get an updated Ship Plan # from driver before departing. Photo BOL required. — Pickup at Finishing Dynamics, deliver to IMETCO (4648 S Old Peachtree Rd, Norcross)",
   "Round Trip IMETCO & Finishing Dynamics":"Requires Ship Plan # — Get updated Ship Plan # from driver at Finishing Dynamics for return trip. Photo BOL required.",
+  "Finishing Dynamics - Villa Rica":"Dock closes 3:00 PM Mon–Thu, 2:00 PM Fri",
   "MM Systems - Pendergrass":"Closed 11:45–12:30 for lunch",
   "Thermal Products - Norcross":"Closed 1–2 for lunch",
   "TCM Waterproofing - Suwanee":"No dock — Forklift on site",
@@ -1172,7 +1174,7 @@ document.head.appendChild(s);
 }catch(e){_gmpState="failed";}
 }
 
-function GoogleMapView({stops,drivers,height,onStopClick,activeDriver,activeLoad,showSearch,searchLabel,onAssignStop,driverLocs}){
+function GoogleMapView({stops,drivers,fdCtx,height,onStopClick,activeDriver,activeLoad,showSearch,searchLabel,onAssignStop,driverLocs}){
 const containerRef=useRef(null);
 const mapInstanceRef=useRef(null);
 const markersRef=useRef([]);       /* [{marker, infoWindow, labelOverlay, stopId}] */
@@ -1359,6 +1361,8 @@ if(isP)badges.push('<span style="background:#f59e0b;color:#fff;padding:1px 5px;b
 if(done)badges.push('<span style="background:#16a34a;color:#fff;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:700">DONE</span>');
 if(onSite&&!done)badges.push('<span style="background:#f59e0b;color:#fff;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:700">ON SITE</span>');
 if(s.dueBy){const bg=s.dueBy.includes("-")?"#7c3aed":s.dueBy.startsWith("After")?"#2563eb":"#dc2626";badges.push(`<span style="background:${bg};color:#fff;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:700">⏰ ${s.dueBy}</span>`);}
+const fdF=fdCtx?finishingDynamicsFlag(s,{dayIdx:fdCtx.day,isToday:fdCtx.today,now:fdCtx.now}):null;
+if(fdF){const fc=FD_FLAG_COLORS[fdF.level]||FD_FLAG_COLORS.info;badges.push(`<span style="background:${fc.bg};color:${fc.fg};border:1px solid ${fc.bd};padding:1px 5px;border-radius:3px;font-size:9px;font-weight:700">🚩 ${fdF.text}</span>`);}
 if(s.shipPlan)badges.push(`<span style="background:#ea580c;color:#fff;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:700">SP# ${s.shipPlan}</span>`);
 if(s.pickupDueBy)badges.push(`<span style="background:#16a34a;color:#fff;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:700">📦 ${s.pickupDueBy}</span>`);
 
@@ -1494,6 +1498,7 @@ if(hideLabels){
   map.setOptions({styles:baseStyles});
 }
 },[hideLabels,mapReady]);
+const truckDrvKey=[...visibleTruckDriverIds(drivers,stops)].sort((a,b)=>a-b).join(",");
 useEffect(()=>{
 const map=mapInstanceRef.current;
 if(!map||!mapReady||!driverLocs)return;
@@ -1505,7 +1510,13 @@ if(!map||!mapReady||!driverLocs)return;
 const markerMap=driverMarkersRef.current;
 const seenIds=new Set();
 
+/* Iterate the FULL roster, not a filtered copy: `di` is the driver's
+   canonical index and it picks the colour (DCOL[di]) that the chips above the
+   map are already using. Filtering the array would renumber it and recolour
+   every truck. */
+const showTruck=new Set(truckDrvKey?truckDrvKey.split(",").map(Number):[]);
 drivers.forEach((drv,di)=>{
+  if(!showTruck.has(drv.id))return;
   const loc=driverLocs[drv.id];
   if(!loc||loc.lat==null||loc.lng==null)return;
   seenIds.add(drv.id);
@@ -1559,7 +1570,7 @@ markerMap.forEach((entry,did)=>{
     markerMap.delete(did);
   }
 });
-},[driverLocs,drivers,mapReady]);
+},[driverLocs,drivers,truckDrvKey,mapReady]);
 
 return(
 <div style={{position:"relative",borderRadius:14,overflow:"hidden",border:"1px solid #d6d3d1",boxShadow:"0 2px 12px rgba(0,0,0,0.08)",height:typeof height==="string"&&height.includes("%")?height:undefined}}>{showSearch&&(
@@ -1663,7 +1674,7 @@ return(
 );
 }
 
-function DriverView({driver,entries,dayLabel,onStatusUpdate,onPhotoUpload,onSignature,onEta,onShipPlan,onLiftgate}){
+function DriverView({driver,entries,fdCtx,dayLabel,onStatusUpdate,onPhotoUpload,onSignature,onEta,onShipPlan,onLiftgate}){
 const [sigStop,setSigStop]=useState(null);
 const [shipPlanInputs,setShipPlanInputs]=useState({});
 const [liftgateRequested,setLiftgateRequested]=useState({});
@@ -1746,6 +1757,7 @@ return(
 {arrived&&!departed&&<span style={_s.tag9Amber}>ON SITE</span>}
 {wantsShipPlan&&<span style={{fontSize:9,background:"#ea580c",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700}}>SHIP PLAN REQ</span>}
 {entry.dueBy&&<span style={{fontSize:9,background:entry.dueBy.includes("-")?"#7c3aed":entry.dueBy.startsWith("After")?"#2563eb":"#dc2626",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700,display:"inline-flex",alignItems:"center",gap:2}}>{"\u23F0"} {entry.dueBy}</span>}
+<FDFlag entry={entry} {...fdCtx}/>
 </div>
 <div style={{fontSize:16,fontWeight:700,color:"#1c1917",marginBottom:2}}>{entry.stop}</div>
 <div style={{fontSize:12,color:c.accent,fontWeight:600}}>{entry.customer}</div>
@@ -1973,7 +1985,7 @@ function StopStatus({entry,compact}){
     {!departed&&mins>=30&&<span style={{fontSize:9.5,fontWeight:700,color:"#c4342a",background:"#fdeeec",border:"1px solid #f2c4bf",borderRadius:6,padding:"2px 7px"}}>{"\u23f1"} not departed</span>}
   </div>);
 }
-function ManifestStop({entry,eIdx,total,drivers,siblings,onMove,onReassign,onRemove,onDelete,onUpdateInstructions,onShipPlan,onRefNum,onDueBy,onWeight,onLoadNum,onRate,maxLoad,onDragStart,onDragOver,onDrop,isDragOver,isDragging,onLiftgate,onRemoveLiftgate,onSplit,onToggleFuel,driverLoadCounts,onPhotoClick,onSetPickup,compact}){
+function ManifestStop({entry,fdCtx,eIdx,total,drivers,siblings,onMove,onReassign,onRemove,onDelete,onUpdateInstructions,onShipPlan,onRefNum,onDueBy,onWeight,onLoadNum,onRate,maxLoad,onDragStart,onDragOver,onDrop,isDragOver,isDragging,onLiftgate,onRemoveLiftgate,onSplit,onToggleFuel,driverLoadCounts,onPhotoClick,onSetPickup,compact}){
 const[expanded,setExpanded]=useState(false);const[instrText,setInstrText]=useState(entry.instructions||"");const[dueByInput,setDueByInput]=useState(entry.dueBy||"");const[dueType,setDueType]=useState(entry.dueBy?(entry.dueBy.startsWith("After")?"after":"by"):"by");const[lastHour,setLastHour]=useState(()=>{if(entry.dueBy){const m=entry.dueBy.match(/(\d+(?::\d+)?\s*[AP]M)/);return m?m[1].replace(/:\d+/,""):""}return "";});
 const[showAssign,setShowAssign]=useState(false);
 const getInitials=(name)=>{const parts=name.split(" ");return parts.length>=2?(parts[0][0]+parts[1][0]).toUpperCase():name.slice(0,2).toUpperCase();};
@@ -2001,6 +2013,7 @@ style={{display:"flex",alignItems:"center",gap:6,padding:compact?"5px 8px":"8px"
 {entry.status==="departed"&&<span style={_s.tag9Green}>DONE</span>}
 {entry.status==="arrived"&&<span style={{fontSize:9,background:"#f59e0b",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700}}>ON SITE</span>}
 {hasDue&&<span style={{fontSize:9,background:entry.dueBy.includes("-")?"#7c3aed":entry.dueBy.startsWith("After")?"#2563eb":"#dc2626",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700,display:"inline-flex",alignItems:"center",gap:2}}>{"\u23F0"} {entry.dueBy}</span>}
+<FDFlag entry={entry} {...fdCtx}/>
 {entry.pickupDueBy&&<span style={{fontSize:9,background:"#16a34a",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700,display:"inline-flex",alignItems:"center",gap:2}}>{"📦"} {entry.pickupDueBy}</span>}
 </div>
 <div style={{fontSize:compact?13:14,fontWeight:700,color:"#1c1917",marginTop:compact?0:2}}>{entry.stop}</div>
@@ -2625,7 +2638,7 @@ style={{display:"flex",alignItems:"center",gap:6,padding:"8px 14px",borderRadius
 {!activeDriver&&<div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:10,padding:"10px 14px",margin:"0 4px 12px",fontSize:12,color:"#92400e",fontWeight:600}}>👆 Tap a driver above to start building their route</div>}
 
 <div style={{margin:"0 4px"}}>
-<GoogleMapView stops={stopsWithCoords} drivers={drivers} height={400} onStopClick={handleStopClick} activeDriver={activeDriver} showSearch={true} searchLabel="Search address…"
+<GoogleMapView stops={stopsWithCoords} drivers={drivers} fdCtx={fdCtx} height={400} onStopClick={handleStopClick} activeDriver={activeDriver} showSearch={true} searchLabel="Search address…"
 onAssignStop={activeDriver?(stopId,drvId)=>handleStopClick(stopId):null} driverLocs={driverLocs}/>
 </div>
 
@@ -2836,6 +2849,13 @@ function DispatchApp(){
 const isDesktop=useIsDesktop();
 const[wo,setWo]=useState(()=>_defaultWoSd().wo);
 const[sd,setSd]=useState(()=>_defaultWoSd().sd);
+/* Day context for the Finishing Dynamics cutoff badge. `sd` IS the weekday
+   (0=Mon … 4=Fri), and the badge only counts down when the board is showing
+   the real calendar day — a Thursday board opened on Tuesday gets the cutoff
+   time without a fictional "40 minutes left". */
+const fdToday=wo===0&&sd===_defaultWoSd().sd;
+const fdNow=useMinuteTick(fdToday);
+const fdCtx={day:sd,today:fdToday,now:fdNow};
 const[log,_rawSetLog]=useState({});
 const dirtyDaysRef=useRef(new Set());
 const saveCooldownRef=useRef(new Set());
@@ -5648,6 +5668,7 @@ STANDING TIME RULES (always apply these when routing):
 - Atlanta Flooring - Suwanee: Deliver between 9:30 AM and 1:00 PM only
 - IMETCO to Finishing Dynamics: Must be delivered by 2:00 PM
 - All deliveries TO IMETCO (Perfect Edge, Southern Aluminum, Finishing Dynamics, Round Trip): Must arrive by 3:30 PM
+- Finishing Dynamics - Villa Rica: Dock closes ${fmtClock(fdCutoffMins(sd)??900)} on ${wd[sd].name} (3:00 PM Mon–Thu, 2:00 PM Fri). EVERY stop that touches Finishing Dynamics — "IMETCO to Finishing Dynamics", "Finishing Dynamics to IMETCO", "Round Trip IMETCO & Finishing Dynamics" — has to be WORKED before that time, not just started. After the cutoff the freight rides back to the yard.
 - DCO Eatonton: Long-distance run — schedule early, allow 2+ hours travel, +1h distance bonus
 - DCO Athens: Long-distance run — +1h distance bonus
 - LaVista/Waffle House (Specialty): Must have appointment time, normally 10 AM
@@ -5782,7 +5803,7 @@ const de=drvEntries(driverViewId);
 return(
 <div>
 <button onClick={()=>setDriverViewId(null)} style={{position:"fixed",top:12,right:12,zIndex:50,background:"#1c1917",color:"#fff",border:"none",borderRadius:8,padding:"8px 14px",cursor:"pointer",fontSize:12,fontWeight:600}}>← Dispatch View</button>
-<DriverView driver={drv} entries={de} dayLabel={`${wd[sd].name} — ${wd[sd].date}`}
+<DriverView driver={drv} entries={de} fdCtx={fdCtx} dayLabel={`${wd[sd].name} — ${wd[sd].date}`}
 onStatusUpdate={updateStatus} onPhotoUpload={addPhoto} onSignature={addSignature} onEta={setEta} onShipPlan={setShipPlan} onLiftgate={requestLiftgate}/>
 </div>
 );
@@ -6266,6 +6287,7 @@ style={{display:"flex",alignItems:"center",gap:6,padding:"6px 8px",marginBottom:
 {!isPU&&<span style={{fontSize:7,background:"#16a34a",color:"#fff",padding:"0 3px",borderRadius:2,fontWeight:700}}>DEL</span>}
 {e.priority&&<span style={{fontSize:7,background:"#f59e0b",color:"#fff",padding:"0 3px",borderRadius:2,fontWeight:700}}>PRI</span>}
 {e.dueBy&&<span style={{fontSize:7,background:e.dueBy.includes("By")?"#dc2626":"#2563eb",color:"#fff",padding:"0 3px",borderRadius:2,fontWeight:700}}>⏰{e.dueBy}</span>}
+<FDFlag entry={e} {...fdCtx} size="xs"/>
 {e.weight>0&&<span style={{fontSize:8,color:BRAND.main,fontWeight:700}}>{e.weight.toLocaleString()}lb</span>}
 </div>
 </div>
@@ -6318,6 +6340,7 @@ style={{marginBottom:5,borderRadius:10,background:"#fff",border:"1px solid #e7e5
 :<span style={{fontSize:8,background:"#16a34a",color:"#fff",padding:"0 4px",borderRadius:2,fontWeight:700,flexShrink:0}}>DEL</span>}
 {e.priority&&<span style={{fontSize:8,background:"#f59e0b",color:"#fff",padding:"0 4px",borderRadius:2,fontWeight:700,flexShrink:0}}>PRI</span>}
 {e.dueBy&&<span style={{fontSize:8,background:"#dc2626",color:"#fff",padding:"0 4px",borderRadius:2,fontWeight:700,flexShrink:0}}>⏰{e.dueBy}</span>}
+<FDFlag entry={e} {...fdCtx} size="xs"/>
 <span style={{fontSize:12,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.stop}</span>
 </div>
 <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
@@ -6384,7 +6407,7 @@ style={{display:"flex",alignItems:"center",gap:5,cursor:"pointer",padding:isA?"4
 </div>);})}
 </div>
 
-<GoogleMapView stops={mapS} drivers={drivers} height={"100%"} showSearch={true} searchLabel="Search address…"
+<GoogleMapView stops={mapS} drivers={drivers} fdCtx={fdCtx} height={"100%"} showSearch={true} searchLabel="Search address…"
 activeDriver={rpActive} onStopClick={rpClick} onAssignStop={rpActive?(sid)=>rpClick(sid):null} driverLocs={driverLocs}/>
 </div>
 
@@ -6502,6 +6525,7 @@ return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius
 {done&&<span style={_s.tag9Green}>DONE</span>}
 {onSite&&!done&&<span style={_s.tag9Amber}>ON SITE</span>}
 {entry.dueBy&&<span style={{fontSize:9,background:entry.dueBy.includes("-")?"#7c3aed":entry.dueBy.startsWith("After")?"#2563eb":"#dc2626",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700}}>⏰ {entry.dueBy}</span>}
+<FDFlag entry={entry} {...fdCtx}/>
 {drv&&<span style={{fontSize:9,background:DCOL[di]||"#78716c",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:600}}>{drv.name.split(" ")[0]}</span>}
 </div>
 <div style={{fontSize:16,fontWeight:700,fontVariantNumeric:"tabular-nums",flexShrink:0}}><InlineRate value={allInRate(entry)} isHourly={entry.isHourly} onSave={r=>updateRate(entry.id,r)}/></div>
@@ -7084,6 +7108,7 @@ return<span style={{color:"#78716c",fontWeight:600}}>{q}{showTown?" ("+town+")":
 {e.weight>0&&<div style={{fontSize:12,color:BRAND.main,fontWeight:700}}>{e.weight.toLocaleString()} lbs{e.wasSplit?" (Load "+e.loadNum+")":""}</div>}
 {e.shipPlan&&<div style={{fontSize:12,color:"#ea580c",fontWeight:700}}>Ship Plan # {e.shipPlan}</div>}
 {e.dueBy&&<div style={{fontSize:12,color:"#dc2626",fontWeight:600}}>⏰ {e.dueBy}</div>}
+<div><FDFlag entry={e} {...fdCtx}/></div>
 </div>
 
 {e.signature&&<div style={{padding:"0 20px 12px"}}>
@@ -7265,6 +7290,7 @@ style={{background:isDrgOver?"#dcfce7":isDrgSrc?"#fef9c3":done?"#f0fdf4":onSite?
 {done&&<span style={_s.tagGreen}>DONE</span>}
 {onSite&&!done&&<span style={_s.tagAmber}>ON SITE</span>}
 {hasDue&&<span style={{fontSize:8,background:entry.dueBy.includes("-")?"#7c3aed":entry.dueBy.startsWith("After")?"#2563eb":"#dc2626",color:"#fff",padding:"1px 4px",borderRadius:2,fontWeight:700,display:"inline-flex",alignItems:"center",gap:1}}>{"\u23F0"}{entry.dueBy}</span>}
+<FDFlag entry={entry} {...fdCtx} size="xs"/>
 {entry.pickupDueBy&&<span style={{fontSize:8,background:"#16a34a",color:"#fff",padding:"1px 4px",borderRadius:2,fontWeight:700,display:"inline-flex",alignItems:"center",gap:1}}>{"📦"}{entry.pickupDueBy}</span>}
 {isImetco&&<span style={{fontSize:8,background:"#ea580c",color:"#fff",padding:"1px 4px",borderRadius:2,fontWeight:700}}>SHIP PLAN REQ</span>}
 </div>
@@ -7359,6 +7385,7 @@ style={{background:isDrgOver?"#dcfce7":isDrgSrc?"#fef9c3":done?"#f0fdf4":onSite?
 {entry.stopType!=="pickup"&&<span style={_s.tagGreen}>DEL</span>}
 {entry.priority&&<span style={_s.tagAmber}>PRIORITY</span>}
 {entry.dueBy&&<span style={{fontSize:8,background:entry.dueBy.includes("-")?"#7c3aed":entry.dueBy.startsWith("After")?"#2563eb":"#dc2626",color:"#fff",padding:"1px 4px",borderRadius:2,fontWeight:700}}>{"\u23F0"}{entry.dueBy}</span>}
+<FDFlag entry={entry} {...fdCtx} size="xs"/>
 {entry.pickupDueBy&&<span style={_s.tagGreen}>{"📦"}{entry.pickupDueBy}</span>}
 </div>
 <InlineRate value={allInRate(entry)} isHourly={entry.isHourly} onSave={r=>updateRate(entry.id,r)}/>
@@ -7443,7 +7470,7 @@ style={{display:"flex",alignItems:"center",gap:4,padding:"4px 8px",borderRadius:
 {mapActiveDrv&&<button onClick={()=>{setMapActiveDrv(null);setMapActiveLoad(1);}} style={{fontSize:10,color:"#78716c",background:"none",border:"none",cursor:"pointer",padding:"4px 6px"}}>✕ Clear</button>}
 {!mapActiveDrv&&<span style={{fontSize:10,color:"#a8a29e",fontStyle:"italic"}}>or click any stop to see details</span>}
 </div>
-<GoogleMapView stops={stopsWithCoords2} drivers={drivers} height={Math.max(500,window.innerHeight-280)} showSearch={true} searchLabel="Search address on map…"
+<GoogleMapView stops={stopsWithCoords2} drivers={drivers} fdCtx={fdCtx} height={Math.max(500,window.innerHeight-280)} showSearch={true} searchLabel="Search address on map…"
 activeDriver={mapActiveDrv} activeLoad={mapActiveLoad}
 onAssignStop={mapActiveDrv?(stopId,drvId)=>{assignInOrder(stopId,mapActiveDrv,mapActiveLoad);}:null} driverLocs={driverLocs}/>
 </div>);
@@ -7499,7 +7526,7 @@ onAssignStop={mapActiveDrv?(stopId,drvId)=>{assignInOrder(stopId,mapActiveDrv,ma
 </div>
 <span style={{fontSize:9,color:"#a8a29e",fontWeight:500}}>1 min polling</span>
 </div>
-{drivers.filter(d=>d.id<=3).map((drv,di)=>{
+{visibleDrivers.map(d=>({d,di:drivers.findIndex(x=>x.id===d.id)})).map(({d:drv,di})=>{
   const loc=driverLocs[drv.id];
   const on=gpsEnabled[drv.id]!==false;
   const col=DCOL[di]||BRAND.main;
@@ -7604,6 +7631,7 @@ onAssignStop={mapActiveDrv?(stopId,drvId)=>{assignInOrder(stopId,mapActiveDrv,ma
 {done&&<span style={_s.tagGreen}>DONE</span>}
 {onSite&&!done&&<span style={_s.tagAmber}>ON SITE</span>}
 {entry.dueBy&&<span style={{fontSize:8,background:entry.dueBy.includes("-")?"#7c3aed":entry.dueBy.startsWith("After")?"#2563eb":"#dc2626",color:"#fff",padding:"1px 4px",borderRadius:2,fontWeight:700,display:"inline-flex",alignItems:"center",gap:1}}>{"\u23F0"}{entry.dueBy}</span>}
+<FDFlag entry={entry} {...fdCtx} size="xs"/>
 {drv&&<span style={{fontSize:9,background:DCOL[di]||"#78716c",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:600}}>{drv.name.split(" ")[0]}</span>}
 </div>
 <div style={{fontSize:13,fontWeight:600}}>{entry.stop}</div>
@@ -7644,7 +7672,7 @@ onAssignStop={mapActiveDrv?(stopId,drvId)=>{assignInOrder(stopId,mapActiveDrv,ma
 <div style={{background:"#fff",borderRadius:20,width:"100%",maxWidth:560,maxHeight:"90vh",display:"flex",flexDirection:"column",overflow:"hidden"}} onClick={e=>e.stopPropagation()}>
 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"20px 24px 12px 24px",borderBottom:"1px solid #f5f5f4",flexShrink:0}}><h3 style={{margin:0,fontSize:18,fontWeight:700}}>Manage Drivers</h3><button onClick={()=>{if(editDrv&&editNm.trim()){driverChangeSource.current="local";driverSaveInFlight.current=true;setDrivers(p=>p.map(d=>d.id===editDrv?{...d,name:editNm.trim(),phone:editPh.trim()}:d));}setShowDM(false);setEditDrv(null);}} style={_s.iconBtn}>{"\u2715"}</button></div>
 <div style={{padding:"4px 20px 24px 20px",overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",flex:1}}>
-{drivers.map((d,i)=><div key={d.id} style={{display:"flex",alignItems:"center",flexWrap:"wrap",gap:8,padding:"10px 0",borderBottom:"1px solid #f5f5f4",opacity:d.active===false?0.55:1}}>
+{orderRosterRows(drivers).map(({d,i})=><div key={d.id} style={{display:"flex",alignItems:"center",flexWrap:"wrap",gap:8,padding:"10px 0",borderBottom:"1px solid #f5f5f4",opacity:d.active===false?0.55:1}}>
 <div style={{width:12,height:12,borderRadius:4,background:DCOL[i]||"#78716c",flexShrink:0}}/>
 {editDrv===d.id?<div style={{flex:1,display:"flex",flexDirection:"column",gap:6}}>
 <input value={editNm} onChange={e=>setEditNm(e.target.value)} autoFocus placeholder="Name" onBlur={()=>{setTimeout(()=>{if(editNm.trim())saveDrv(d.id);},200);}} style={{border:"1px solid #d6d3d1",borderRadius:8,padding:"6px 10px",fontSize:14,outline:"none"}}/>
@@ -8398,7 +8426,7 @@ style={{marginTop:8,width:"100%",display:"flex",alignItems:"center",justifyConte
 <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:20,width:"100%",maxWidth:380,maxHeight:"90vh",display:"flex",flexDirection:"column",overflow:"hidden"}}>
 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"20px 24px 12px 24px",borderBottom:"1px solid #f5f5f4",flexShrink:0}}><h3 style={{margin:0,fontSize:18,fontWeight:700}}>Manage Drivers</h3><button onClick={()=>{if(editDrv&&editNm.trim()){driverChangeSource.current="local";driverSaveInFlight.current=true;setDrivers(p=>p.map(d=>d.id===editDrv?{...d,name:editNm.trim(),phone:editPh.trim()}:d));}setShowDM(false);setEditDrv(null);}} style={_s.iconBtn}>✕</button></div>
 <div style={{padding:"4px 20px 24px 20px",overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",flex:1}}>
-{drivers.map((d,i)=><div key={d.id} style={{display:"flex",flexDirection:"column",gap:8,padding:"10px 0",borderBottom:"1px solid #f5f5f4",opacity:d.active===false?0.55:1}}>
+{orderRosterRows(drivers).map(({d,i})=><div key={d.id} style={{display:"flex",flexDirection:"column",gap:8,padding:"10px 0",borderBottom:"1px solid #f5f5f4",opacity:d.active===false?0.55:1}}>
 <div style={{display:"flex",alignItems:"center",gap:10}}>
 <div style={{width:12,height:12,borderRadius:4,background:DCOL[i]||"#78716c",flexShrink:0}}/>
 {editDrv===d.id?<div style={{flex:1,display:"flex",flexDirection:"column",gap:6}}>
@@ -8667,7 +8695,7 @@ style={{padding:"12px 10px",textAlign:"center",fontSize:11,color:dragOver?.drvId
 {loadStops.map((entry)=>{
 const eIdx=de.indexOf(entry);
 return(<div key={entry.id}>
-<ManifestStop entry={entry} siblings={dl} eIdx={eIdx} total={de.length} drivers={drivers} onMove={dir=>moveInDriver(drv.id,entry.id,dir)} onReassign={did=>reassign(entry.id,did)} onRemove={()=>rmFromDriver(entry.id)} onDelete={()=>deleteDel(entry.id)} onUpdateInstructions={text=>updateInstructions(entry.id,text)} onShipPlan={val=>setShipPlan(entry.id,val)} onRefNum={val=>setRefNum(entry.id,val)} onToggleFuel={()=>toggleFuel(entry.id)} onDueBy={time=>setDueBy(entry.id,time)} onWeight={w=>setWeight(entry.id,w)} onLoadNum={n=>setLoadNum(entry.id,n)} onRate={r=>updateRate(entry.id,r)} onPhotoClick={setLightboxPhoto} onSetPickup={label=>setPickupFrom(entry.id,label)} compact={uiCompact} maxLoad={getMaxLoad(drv.id)}
+<ManifestStop entry={entry} fdCtx={fdCtx} siblings={dl} eIdx={eIdx} total={de.length} drivers={drivers} onMove={dir=>moveInDriver(drv.id,entry.id,dir)} onReassign={did=>reassign(entry.id,did)} onRemove={()=>rmFromDriver(entry.id)} onDelete={()=>deleteDel(entry.id)} onUpdateInstructions={text=>updateInstructions(entry.id,text)} onShipPlan={val=>setShipPlan(entry.id,val)} onRefNum={val=>setRefNum(entry.id,val)} onToggleFuel={()=>toggleFuel(entry.id)} onDueBy={time=>setDueBy(entry.id,time)} onWeight={w=>setWeight(entry.id,w)} onLoadNum={n=>setLoadNum(entry.id,n)} onRate={r=>updateRate(entry.id,r)} onPhotoClick={setLightboxPhoto} onSetPickup={label=>setPickupFrom(entry.id,label)} compact={uiCompact} maxLoad={getMaxLoad(drv.id)}
 onLiftgate={()=>{if(entry.isHourly){setEmH(p=>{const key=`${emDk}-emser`;const cur=p[key]||4;return{...p,[key]:cur+1};});setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===entry.id?{...e,liftgateApplied:true}:e)}));showToast("Liftgate +1 hr added");}else{manualLiftgate(entry.id);}}} onRemoveLiftgate={()=>removeLiftgate(entry.id)} onSplit={()=>setSplitEntry({id:entry.id,totalWeight:entry.weight||0,ratio:50,truck1Weight:Math.round((entry.weight||0)/2)})} driverLoadCounts={Object.fromEntries(drivers.map(d=>[d.id,getDriverLoadOptions(d.id)]))}
 isDragging={dragSrc?.drvId===drv.id&&dragSrc?.idx===eIdx} isDragOver={dragOver?.drvId===drv.id&&dragOver?.idx===eIdx} onDragStart={()=>setDragSrc({drvId:drv.id,idx:eIdx,id:entry.id})} onDragOver={()=>setDragOver({drvId:drv.id,idx:eIdx})} onDrop={()=>handleDrop(drv.id,eIdx,ln)}/>
 {splitEntry?.id===entry.id&&<div style={{margin:"0 0 4px",background:"#eff6ff",border:"2px solid #2563eb",borderRadius:10,padding:12}}>
@@ -8687,7 +8715,7 @@ isDragging={dragSrc?.drvId===drv.id&&dragSrc?.idx===eIdx} isDragOver={dragOver?.
 onDragOver={e=>{e.preventDefault();if(!ua.length)setDragOver({drvId:0,idx:0});}}
 onDrop={()=>{if(dragSrc){handleDrop(0,ua.length);}}}
 style={{background:dragOver?.drvId===0?"#dcfce7":"#fff",border:dragOver?.drvId===0?"2px dashed #16a34a":"2px dashed #d6d3d1",borderRadius:14,padding:16,marginBottom:12,transition:"background 0.15s"}}><div style={{display:"flex",alignItems:"center",gap:8,marginBottom:ua.length?10:0}}><div style={{width:14,height:14,borderRadius:4,background:"#a8a29e"}}/><span style={{fontSize:15,fontWeight:700,color:"#78716c"}}>Unassigned</span><span style={{fontSize:12,color:"#a8a29e"}}>({ua.length})</span></div>
-{ua.map((entry,eIdx)=><div key={entry.id}><ManifestStop entry={entry} siblings={dl} eIdx={eIdx} total={ua.length} drivers={drivers} onMove={dir=>moveInDriver(0,entry.id,dir)} onReassign={did=>reassign(entry.id,did)} onRemove={()=>deleteDel(entry.id)} onDelete={()=>deleteDel(entry.id)} onUpdateInstructions={text=>updateInstructions(entry.id,text)} onShipPlan={val=>setShipPlan(entry.id,val)} onRefNum={val=>setRefNum(entry.id,val)} onToggleFuel={()=>toggleFuel(entry.id)} onDueBy={time=>setDueBy(entry.id,time)} onWeight={w=>setWeight(entry.id,w)} onLoadNum={n=>setLoadNum(entry.id,n)} onRate={r=>updateRate(entry.id,r)} onPhotoClick={setLightboxPhoto} onSetPickup={label=>setPickupFrom(entry.id,label)} compact={uiCompact} maxLoad={1}
+{ua.map((entry,eIdx)=><div key={entry.id}><ManifestStop entry={entry} fdCtx={fdCtx} siblings={dl} eIdx={eIdx} total={ua.length} drivers={drivers} onMove={dir=>moveInDriver(0,entry.id,dir)} onReassign={did=>reassign(entry.id,did)} onRemove={()=>deleteDel(entry.id)} onDelete={()=>deleteDel(entry.id)} onUpdateInstructions={text=>updateInstructions(entry.id,text)} onShipPlan={val=>setShipPlan(entry.id,val)} onRefNum={val=>setRefNum(entry.id,val)} onToggleFuel={()=>toggleFuel(entry.id)} onDueBy={time=>setDueBy(entry.id,time)} onWeight={w=>setWeight(entry.id,w)} onLoadNum={n=>setLoadNum(entry.id,n)} onRate={r=>updateRate(entry.id,r)} onPhotoClick={setLightboxPhoto} onSetPickup={label=>setPickupFrom(entry.id,label)} compact={uiCompact} maxLoad={1}
 onLiftgate={()=>{if(entry.isHourly){setEmH(p=>{const key=`${emDk}-emser`;const cur=p[key]||4;return{...p,[key]:cur+1};});setLog(p=>({...p,[dk]:(p[dk]||[]).map(e=>e.id===entry.id?{...e,liftgateApplied:true}:e)}));showToast("Liftgate +1 hr added");}else{manualLiftgate(entry.id);}}} onRemoveLiftgate={()=>removeLiftgate(entry.id)} onSplit={()=>setSplitEntry({id:entry.id,totalWeight:entry.weight||0,ratio:50,truck1Weight:Math.round((entry.weight||0)/2)})} driverLoadCounts={Object.fromEntries(drivers.map(d=>[d.id,getDriverLoadOptions(d.id)]))}
 isDragging={dragSrc?.drvId===0&&dragSrc?.idx===eIdx} isDragOver={dragOver?.drvId===0&&dragOver?.idx===eIdx} onDragStart={()=>setDragSrc({drvId:0,idx:eIdx,id:entry.id})} onDragOver={()=>setDragOver({drvId:0,idx:eIdx})} onDrop={()=>handleDrop(0,eIdx)}/>
 {splitEntry?.id===entry.id&&<div style={{margin:"0 0 4px",background:"#eff6ff",border:"2px solid #2563eb",borderRadius:10,padding:12}}>
@@ -8803,6 +8831,7 @@ return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius
 <span style={{fontSize:11,fontWeight:600,color:c.accent,textTransform:"uppercase"}}>{entry.customer}</span>
 {entry.priority&&<span style={_s.tag9Amber}>PRIORITY</span>}
 {entry.dueBy&&<span style={{fontSize:9,background:entry.dueBy.includes("-")?"#7c3aed":entry.dueBy.startsWith("After")?"#2563eb":"#dc2626",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700,display:"inline-flex",alignItems:"center",gap:2}}>{"\u23F0"} {entry.dueBy}</span>}
+<FDFlag entry={entry} {...fdCtx}/>
 <span style={{fontSize:10,background:drv?(DCOL[di]||"#78716c"):"#a8a29e",color:"#fff",padding:"1px 6px",borderRadius:4,fontWeight:600}}>{drv?.name||"Unassigned"}</span>
 </div>
 <div style={{fontSize:14,fontWeight:600}}>{entry.stop}</div>
@@ -10090,6 +10119,13 @@ style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,width:"
 function DriverPage({driverSlug}){
 const[wo,setWo]=useState(()=>_defaultWoSd().wo);
 const[sd,setSd]=useState(()=>_defaultWoSd().sd);
+/* Day context for the Finishing Dynamics cutoff badge. `sd` IS the weekday
+   (0=Mon … 4=Fri), and the badge only counts down when the board is showing
+   the real calendar day — a Thursday board opened on Tuesday gets the cutoff
+   time without a fictional "40 minutes left". */
+const fdToday=wo===0&&sd===_defaultWoSd().sd;
+const fdNow=useMinuteTick(fdToday);
+const fdCtx={day:sd,today:fdToday,now:fdNow};
 const[log,setLog]=useState({});
 const[toast,setToast]=useState(null);
 const[pinEntry,setPinEntry]=useState("");
@@ -10566,6 +10602,7 @@ return(
 {arrived&&!departed&&<span style={_s.tag9Amber}>ON SITE</span>}
 {wantsShipPlan&&<span style={{fontSize:9,background:"#ea580c",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700}}>SHIP PLAN REQ</span>}
 {entry.dueBy&&<span style={{fontSize:9,background:entry.dueBy.includes("-")?"#7c3aed":entry.dueBy.startsWith("After")?"#2563eb":"#dc2626",color:"#fff",padding:"1px 5px",borderRadius:3,fontWeight:700,display:"inline-flex",alignItems:"center",gap:2}}>{"\u23F0"} {entry.dueBy}</span>}
+<FDFlag entry={entry} {...fdCtx}/>
 </div>
 <div style={{fontSize:16,fontWeight:700,color:"#1c1917",marginBottom:2}}>{entry.stop}</div>
 
