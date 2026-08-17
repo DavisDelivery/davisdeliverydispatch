@@ -1575,3 +1575,26 @@ export const visibleTruckDriverIds=(drivers,stops)=>{
   (drivers||[]).forEach(d=>{if(d&&(d.active!==false||onBoard.has(d.id)))out.add(d.id);});
   return out;
 };
+
+/* Display order for the Manage Drivers list.
+
+   The current fleet comes first, in roster order — that order is meaningful, it
+   picks each driver's colour (DCOL[i]) and their column on the board, so it is
+   never re-sorted. Everyone hidden follows, alphabetically by the name as
+   displayed. On a twenty-name roster with three actives, insertion order means
+   reading the whole list to find someone.
+
+   Returns {d, i} pairs, NOT a reordered driver array: `i` is the driver's
+   canonical index in `drivers`, and the colour swatch has to keep using it or
+   the modal would show a different colour than the board. */
+export const orderRosterRows=(drivers)=>{
+  const rows=(drivers||[]).map((d,i)=>({d,i}));
+  const isActive=(r)=>!!r.d&&r.d.active!==false;
+  const nameOf=(r)=>String((r.d&&r.d.name)||"");
+  const hidden=rows.filter(r=>!isActive(r));
+  hidden.sort((a,b)=>{
+    const c=nameOf(a).trim().localeCompare(nameOf(b).trim(),undefined,{sensitivity:"base",numeric:true});
+    return c!==0?c:a.i-b.i; /* same name twice — fall back to roster order so it never jitters */
+  });
+  return rows.filter(isActive).concat(hidden);
+};

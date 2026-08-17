@@ -62,7 +62,7 @@ inputMb4:{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"7px 10
 };
 import { useState, useCallback, useEffect, useRef, Fragment, Component } from "react";
 import { PICKUP_SOURCES, MULTI_PICKUP, normLoc as _normLoc } from "./pickupConfig.js";
-import { dedupeIds, dedupeAutoPickups, dedupeGhostDeliveries, dedupeDeliveries, reapOrphanAutoPickups, sanitizeEntry, _mergeEntryDriver, _mergeEntryDispatcher, buildMergedEntries, entrySig, makeTombFilter, makeDocTombFilter, mergeTombstones, vanishedAutoPickups, orderByIds, reconcileDriverRoster, applyDriverRemap, normDriverName, manualPickupCoversDock, allInRate, stripLiftgateFee, resequenceEntries, sortBySeq, normalizeOrder, orderAutoPickupsFirst, manualPickupOrigin, deliveryCollectedOffDock, qualifyPickupName, rebuildPickupsForPure, insertIdxForLoad, applyReassign, applySetLoadNum, reorderDriverBlock as _reorderDriverBlock, applyMoveInDriver, applyReorderDriver, applyDropReorder, resolvePickupLabel, finishingDynamicsFlag, FD_FLAG_COLORS, fdCutoffMins, fmtClock, visibleTruckDriverIds } from "./manifestLogic.js";
+import { dedupeIds, dedupeAutoPickups, dedupeGhostDeliveries, dedupeDeliveries, reapOrphanAutoPickups, sanitizeEntry, _mergeEntryDriver, _mergeEntryDispatcher, buildMergedEntries, entrySig, makeTombFilter, makeDocTombFilter, mergeTombstones, vanishedAutoPickups, orderByIds, reconcileDriverRoster, applyDriverRemap, normDriverName, manualPickupCoversDock, allInRate, stripLiftgateFee, resequenceEntries, sortBySeq, normalizeOrder, orderAutoPickupsFirst, manualPickupOrigin, deliveryCollectedOffDock, qualifyPickupName, rebuildPickupsForPure, insertIdxForLoad, applyReassign, applySetLoadNum, reorderDriverBlock as _reorderDriverBlock, applyMoveInDriver, applyReorderDriver, applyDropReorder, resolvePickupLabel, finishingDynamicsFlag, FD_FLAG_COLORS, fdCutoffMins, fmtClock, visibleTruckDriverIds, orderRosterRows } from "./manifestLogic.js";
 import { diffOrderDocs, orderDocId, ordersParity } from "./ordersStore.js";
 import { FDFlag, useMinuteTick } from "./FDFlag.jsx";
 
@@ -7672,7 +7672,7 @@ onAssignStop={mapActiveDrv?(stopId,drvId)=>{assignInOrder(stopId,mapActiveDrv,ma
 <div style={{background:"#fff",borderRadius:20,width:"100%",maxWidth:560,maxHeight:"90vh",display:"flex",flexDirection:"column",overflow:"hidden"}} onClick={e=>e.stopPropagation()}>
 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"20px 24px 12px 24px",borderBottom:"1px solid #f5f5f4",flexShrink:0}}><h3 style={{margin:0,fontSize:18,fontWeight:700}}>Manage Drivers</h3><button onClick={()=>{if(editDrv&&editNm.trim()){driverChangeSource.current="local";driverSaveInFlight.current=true;setDrivers(p=>p.map(d=>d.id===editDrv?{...d,name:editNm.trim(),phone:editPh.trim()}:d));}setShowDM(false);setEditDrv(null);}} style={_s.iconBtn}>{"\u2715"}</button></div>
 <div style={{padding:"4px 20px 24px 20px",overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",flex:1}}>
-{drivers.map((d,i)=><div key={d.id} style={{display:"flex",alignItems:"center",flexWrap:"wrap",gap:8,padding:"10px 0",borderBottom:"1px solid #f5f5f4",opacity:d.active===false?0.55:1}}>
+{orderRosterRows(drivers).map(({d,i})=><div key={d.id} style={{display:"flex",alignItems:"center",flexWrap:"wrap",gap:8,padding:"10px 0",borderBottom:"1px solid #f5f5f4",opacity:d.active===false?0.55:1}}>
 <div style={{width:12,height:12,borderRadius:4,background:DCOL[i]||"#78716c",flexShrink:0}}/>
 {editDrv===d.id?<div style={{flex:1,display:"flex",flexDirection:"column",gap:6}}>
 <input value={editNm} onChange={e=>setEditNm(e.target.value)} autoFocus placeholder="Name" onBlur={()=>{setTimeout(()=>{if(editNm.trim())saveDrv(d.id);},200);}} style={{border:"1px solid #d6d3d1",borderRadius:8,padding:"6px 10px",fontSize:14,outline:"none"}}/>
@@ -8426,7 +8426,7 @@ style={{marginTop:8,width:"100%",display:"flex",alignItems:"center",justifyConte
 <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:20,width:"100%",maxWidth:380,maxHeight:"90vh",display:"flex",flexDirection:"column",overflow:"hidden"}}>
 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"20px 24px 12px 24px",borderBottom:"1px solid #f5f5f4",flexShrink:0}}><h3 style={{margin:0,fontSize:18,fontWeight:700}}>Manage Drivers</h3><button onClick={()=>{if(editDrv&&editNm.trim()){driverChangeSource.current="local";driverSaveInFlight.current=true;setDrivers(p=>p.map(d=>d.id===editDrv?{...d,name:editNm.trim(),phone:editPh.trim()}:d));}setShowDM(false);setEditDrv(null);}} style={_s.iconBtn}>✕</button></div>
 <div style={{padding:"4px 20px 24px 20px",overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",flex:1}}>
-{drivers.map((d,i)=><div key={d.id} style={{display:"flex",flexDirection:"column",gap:8,padding:"10px 0",borderBottom:"1px solid #f5f5f4",opacity:d.active===false?0.55:1}}>
+{orderRosterRows(drivers).map(({d,i})=><div key={d.id} style={{display:"flex",flexDirection:"column",gap:8,padding:"10px 0",borderBottom:"1px solid #f5f5f4",opacity:d.active===false?0.55:1}}>
 <div style={{display:"flex",alignItems:"center",gap:10}}>
 <div style={{width:12,height:12,borderRadius:4,background:DCOL[i]||"#78716c",flexShrink:0}}/>
 {editDrv===d.id?<div style={{flex:1,display:"flex",flexDirection:"column",gap:6}}>
