@@ -2448,7 +2448,7 @@ function getCoords(addr){
   return null;
 }
 
-function RouteBuilder({entries,drivers,onAssign,onAssignBulk,onReorder,onBack,getDriverCapacity:getDrvCap,driverLocs}){
+function RouteBuilder({entries,drivers,onAssign,onAssignBulk,onReorder,onBack,getDriverCapacity:getDrvCap,driverLocs,fdCtx}){
 const[activeDriver,setActiveDriver]=useState(null);
 const deliveryEntries=entries.filter(e=>e.stopType!=="pickup");
 const[routeOrders,setRouteOrders]=useState(()=>{
@@ -8752,6 +8752,7 @@ onAssignBulk={(eids,did)=>reassignBulk(eids,did)}
 onReorder={(drvId,orderedIds)=>reorderDriver(drvId,orderedIds)}
 onBack={()=>setView("manifest")}
 driverLocs={driverLocs}
+fdCtx={fdCtx}
 getDriverCapacity={getDriverCapacity}/>}
 </div>}
 
