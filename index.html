@@ -15,5 +15,81 @@
   <body>
         <div id="root"></div>
         <script type="module" src="/src/main.jsx"></script>
+        <script>
+        /* Self-heal a stale app shell — the "white screen forever" recovery.
+           This app is a standalone home-screen PWA, and iOS keeps its own webview
+           cache: it will serve an OLD index.html even though Netlify marks the
+           shell must-revalidate. That stale shell points at a fingerprinted bundle
+           (/assets/index-<hash>.js) which the next deploy purges, so the script
+           404s, nothing runs, and the screen stays blank on every reload — the
+           React ErrorBoundary never even loads to catch it.
+
+           So the shell watches itself: if the app never mounts, it drops the
+           caches once and reloads with a cache-busting URL, pulling down the
+           current shell and bundle. It is guarded by a URL flag (which works even
+           when storage is blocked in Private mode) so it can never loop — at most
+           one recovery per navigation, and none once React has mounted. It never
+           touches localStorage, so no dispatch or driver data is lost. */
+        (function () {
+          var FLAG = "_r";
+          var triedRe = new RegExp("[?&]" + FLAG + "=");
+          function alreadyTried() {
+            if (triedRe.test(location.search)) return true;
+            try { return !!sessionStorage.getItem("dd_shell_recovered"); } catch (e) { return false; }
+          }
+          function recover() {
+            if (alreadyTried()) return;
+            try { sessionStorage.setItem("dd_shell_recovered", "1"); } catch (e) {}
+            var done = false;
+            function reload() {
+              if (done) return; done = true;
+              var sep = location.search ? "&" : "?";
+              location.replace(location.pathname + location.search + sep + FLAG + "=" + Date.now() + location.hash);
+            }
+            try {
+              var jobs = [];
+              if (window.caches && caches.keys) {
+                jobs.push(caches.keys().then(function (ks) {
+                  return Promise.all(ks.map(function (k) { return caches.delete(k); }));
+                }));
+              }
+              if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
+                jobs.push(navigator.serviceWorker.getRegistrations().then(function (rs) {
+                  return Promise.all(rs.map(function (r) { return r.unregister(); }));
+                }));
+              }
+              if (jobs.length) Promise.all(jobs).then(reload, reload); else reload();
+            } catch (e) { reload(); }
+            setTimeout(reload, 1500); /* safety net if the async teardown stalls */
+          }
+          /* 1) the bundle itself failed to load — stale shell -> purged hashed asset -> 404.
+                Caught in the capture phase (resource errors don't bubble), scoped to our
+                OWN hashed scripts while #root is still empty, so a flaky third-party script
+                (fonts, Firebase, Maps) can never trigger a needless reload. */
+          window.addEventListener("error", function (e) {
+            var t = e && e.target;
+            if (!t || t.tagName !== "SCRIPT" || !t.src) return;
+            if (t.src.indexOf(location.origin + "/") !== 0) return;
+            var root = document.getElementById("root");
+            if (root && root.childElementCount === 0) recover();
+          }, true);
+          /* 2) catch-all: the bundle loaded but nothing mounted (parse/runtime blank,
+                no boundary). If #root is still empty well after load, self-heal once. */
+          window.addEventListener("load", function () {
+            setTimeout(function () {
+              var root = document.getElementById("root");
+              if (!root) return;
+              if (root.childElementCount === 0) {
+                recover();
+              } else if (triedRe.test(location.search) && history.replaceState) {
+                /* mounted fine after a recovery — tidy the flag out of the address bar */
+                var clean = location.search.replace(new RegExp("([?&])" + FLAG + "=[^&]*"), function (_m, p1) { return p1 === "?" ? "?" : ""; });
+                if (clean === "?") clean = "";
+                history.replaceState(null, "", location.pathname + clean + location.hash);
+              }
+            }, 6000);
+          });
+        })();
+        </script>
   </body>
 </html>
