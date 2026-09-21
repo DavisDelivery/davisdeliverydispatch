@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { rebuildPickupsForPure, orderAutoPickupsFirst, orderByIds, applyReassign, applySetLoadNum, applyMoveInDriver, applyReorderDriver, applyDropReorder, resolvePickupLabel, dedupeIds, dedupeAutoPickups, reapOrphanAutoPickups, normalizeOrder } from "./manifestLogic.js";
+import { rebuildPickupsForPure, orderAutoPickupsFirst, orderByIds, applyReassign, applySetLoadNum, applyMoveInDriver, applyReorderDriver, applyDropReorder, resolvePickupLabel, dedupeIds, dedupeAutoPickups, reapOrphanAutoPickups, normalizeOrder, liveLoadOrderNote } from "./manifestLogic.js";
 import { PICKUP_SOURCES, MULTI_PICKUP, normLoc } from "./pickupConfig.js";
 
 /* ── Scenario sweep over the auto-pickup engine ───────────────────────────────
@@ -111,6 +111,22 @@ const ALL = (before, after) => [
   ...vDeliveriesPreserved(before, after),
 ];
 
+/* The "Load order:" every reader shows is computed live (liveLoadOrderNote);
+   the engine also stores one on the card it generates. Straight after a
+   rebuild the two must be identical — they resolve a delivery's dock through
+   the same rule, or the board shows a card with no load order, or the wrong
+   one. (Only checked on a freshly rebuilt manifest: a nudge deliberately runs
+   no rebuild, so the stored note is allowed to go stale while the live one
+   stays right.) */
+const noteDeps = { pickupSources: PICKUP_SOURCES, normLoc };
+const vLiveNoteMatchesStored = (all) =>
+  all
+    .filter(isAuto)
+    .filter((p) => liveLoadOrderNote(p, all, noteDeps) !== p.note)
+    .map((p) => `live note for "${p.stop}" (drv ${p.driverId} load ${p.loadNum || 1}) is ${JSON.stringify(liveLoadOrderNote(p, all, noteDeps))} but the card stores ${JSON.stringify(p.note)}`);
+
+const ALL_FRESH = (before, after) => [...ALL(before, after), ...vLiveNoteMatchesStored(after)];
+
 /* ── Scenario matrix ────────────────────────────────────────────────────────── */
 
 const del = (o) => ({ id: genId(), stopType: "delivery", driverId: 1, loadNum: 1, baseRate: 0, ...o });
@@ -169,7 +185,7 @@ describe("auto-pickup engine — invariants across the scenario matrix", () => {
     it(sc.name, () => {
       const d = deps({ driverLoadCount: sc.driverLoadCount });
       const after = rebuildAll(sc.entries, d);
-      expect(ALL(sc.entries, after)).toEqual([]);
+      expect(ALL_FRESH(sc.entries, after)).toEqual([]);
     });
   });
 });
@@ -200,7 +216,7 @@ describe("auto-pickup engine — multi-driver manifests", () => {
       });
     });
     const after = rebuildAll(entries, deps({ driverLoadCount: { 1: 2, 2: 2, 3: 2 } }));
-    expect(ALL(entries, after)).toEqual([]);
+    expect(ALL_FRESH(entries, after)).toEqual([]);
     after.filter(isAuto).forEach((p) => {
       expect(after.some((d) => d.stopType === "delivery" && key(d) === key(p))).toBe(true);
     });
@@ -237,7 +253,7 @@ describe("auto-pickup engine — survives the save/reload pipeline", () => {
       /* Nothing invented, nothing lost. */
       expect(back.map((e) => e.id).sort()).toEqual(built.map((e) => e.id).sort());
       /* And still a manifest a driver can actually run. */
-      expect(ALL(sc.entries, back)).toEqual([]);
+      expect(ALL_FRESH(sc.entries, back)).toEqual([]);
     });
   });
 

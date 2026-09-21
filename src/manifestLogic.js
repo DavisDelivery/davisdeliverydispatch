@@ -962,7 +962,15 @@ export const orderByIds=(items,orderedIds)=>{
      - collapse duplicate auto-pickups.
    Pure: same inputs → same output, no I/O. This is the surface the concurrency
    test suite locks down. */
-export const buildMergedEntries=(fbEntriesRaw,localEntriesRaw,{isDriver=false,callerDriverId=0,deletedIds=null,docTombstones=null,multiSource=null,normLoc=null}={})=>{
+export const buildMergedEntries=(fbEntriesRaw,localEntriesRaw,{isDriver=false,callerDriverId=0,deletedIds=null,docTombstones=null,multiSource=null,normLoc=null,docksFor=null}={})=>{
+  /* The reaper needs the SAME options the display and ingest paths give it —
+     docksFor included. Without docksFor it reads a free-typed pickupFrom
+     ("Emser Tile", a warehouse the supplier doesn't own) as a dock constraint,
+     while the engine reads it as "no dock named" and files the delivery under
+     the default dock. The two disagreed here alone: the engine made the
+     "Emser - Norcross" card, the board showed it, and this transaction deleted
+     it on save — gone from every screen on the next snapshot. */
+  const reapOpts=multiSource?(docksFor?{multiSource,normLoc,docksFor}:{multiSource,normLoc}):undefined;
   const fbEntries=dedupeIds(fbEntriesRaw||[]);
   const localEntries=dedupeIds(localEntriesRaw||[]);
   /* Durable tombstones from the day doc (merged with the caller's fresh local
@@ -1026,7 +1034,7 @@ export const buildMergedEntries=(fbEntriesRaw,localEntriesRaw,{isDriver=false,ca
   /* Orphan reap LAST, after the delivery safety-net re-append, so a rescued
      delivery keeps its pickup. Self-heals any orphan already persisted in
      Firebase: the merge drops it, and the transaction write makes that stick. */
-  const reconciled=reapOrphanAutoPickups(dedupeDeliveries(dedupeGhostDeliveries(dedupeAutoPickups(merged,normLoc?{normLoc}:undefined))),multiSource?{multiSource,normLoc}:undefined);
+  const reconciled=reapOrphanAutoPickups(dedupeDeliveries(dedupeGhostDeliveries(dedupeAutoPickups(merged,normLoc?{normLoc}:undefined))),reapOpts);
   /* Persist the day in `seq` order, auto-pickups ahead of what they supply, so
      the stored array itself is the agreed order — a client that loads it cold,
      an export, and the shadow order store's `_seq` all line up without
@@ -1034,6 +1042,26 @@ export const buildMergedEntries=(fbEntriesRaw,localEntriesRaw,{isDriver=false,ca
      written before this field existed, but it never rewrites one, so a
      transaction can't invent a reorder nobody asked for. */
   return normalizeOrder(reconciled,0,multiSource?{multiSource,normLoc}:undefined);
+};
+
+/* Which of a supplier's docks a delivery's freight comes off — the ONE rule the
+   engine, the live load-order note and (through the label) the card all share.
+   A delivery names its origin in `pickupFrom`; when that resolves to one of the
+   supplier's docks (normalized, so "Norcross" / "Emser - Norcross" / "Emser –
+   Norcross" all match) that dock is it. Otherwise — no origin named, or a
+   free-typed / unresolvable one ("Emser Tile", a warehouse the supplier doesn't
+   own) — the supplier's nominated default dock stands in, or its first listed
+   dock when none is nominated. Returns null only when the supplier has no docks
+   at all. Every consumer that needs to know which card a delivery belongs to
+   must go through here: the moment two of them resolve the same delivery to
+   different docks, one of them is wrong on the board. */
+export const deliveryDock=(e,puSrcs,normLoc)=>{
+  if(!Array.isArray(puSrcs)||!puSrcs.length)return null;
+  const nl=typeof normLoc==="function"?normLoc:(s)=>String(s||"").trim().toLowerCase();
+  const def=puSrcs.find(s=>s&&s.default)||puSrcs[0];
+  const raw=(e&&e.pickupFrom)||String(def.label||"").split(" - ").pop();
+  const loc=nl(raw);
+  return puSrcs.find(s=>s&&nl(s.label)===loc)||def;
 };
 
 /* ── The auto-pickup engine ───────────────────────────────────────────────────
@@ -1115,15 +1143,20 @@ dels.forEach(e=>{
      created a separate pickup card for each variant — more ghosts. _normLoc
      collapses them to one. We still keep a clean display label (prefer the
      matching source's short label) for the pickup's pickupFrom. */
-  /* Fall back to the nominated default dock rather than whichever happens to be
-     listed first, so the generated card names the same dock the label shows. */
-  const _defSrc=puSrcs.find(s=>s.default)||puSrcs[0];
-  const rawLoc=e.pickupFrom||_defSrc.label.split(" - ").pop();
-  const normLoc=_normLoc(rawLoc);
-  const matchSrc=puSrcs.find(s=>_normLoc(s.label)===normLoc)||_defSrc;
+  /* deliveryDock resolves the origin: a named dock wins, anything else falls
+     back to the nominated default (not whichever dock is listed first), so the
+     generated card names the same dock the label shows.
+
+     The group is keyed on the RESOLVED dock, not the raw pickupFrom. Keying on
+     the raw value put two deliveries whose origins both fall back to the
+     default ("Emser Tile" and nothing, say) in two groups, and each group
+     minted a card for the same dock — both reusing the same existingPU id — so
+     the board carried two "Emser - Norcross" cards with one id and half a load
+     order apiece. */
+  const matchSrc=deliveryDock(e,puSrcs,_normLoc);
   const loc=matchSrc.label.split(" - ").pop();
   const ln=e.loadNum||1;
-  const key=normLoc+"::"+ln;
+  const key=_normLoc(matchSrc.label)+"::"+ln;
   if(!byLocLoad[key])byLocLoad[key]={loc,loadNum:ln,dels:[]};
   byLocLoad[key].dels.push(e);
 });
@@ -1210,6 +1243,57 @@ if(!placed){
 const _orphanPus=removedPUs.filter(p=>!_reusedPuIds.has(p.id));
 if(_orphanPus.length)tombstone(_orphanPus); /* auto-pickups only; pass entries for signatures */
 return all;
+};
+
+/* The "Load order: …" text on an auto-pickup card, computed LIVE from the
+   deliveries currently on the board.
+
+   Why live: the stored note is written by rebuildPickupsForPure and only
+   refreshed when the engine runs (add / remove / reassign / load change). A
+   drag reorder runs no rebuild, so the stored text goes stale; every reader —
+   the card, the text and print manifests, the driver's phone — computes it
+   here instead.
+
+   Why here, and not in App.jsx where it used to live: that version matched a
+   delivery to its card by STRICT dock equality,
+   normLoc(delivery.pickupFrom) === normLoc(pickup.pickupFrom). The engine never
+   grouped that way — a delivery with no dock named, or an unresolvable one, is
+   bucketed under the supplier's default dock and gets its card there. So the
+   moment Emser started defaulting to Norcross, a delivery added without a dock
+   (the batch-add path leaves pickupFrom null) got an "Emser - Norcross" card
+   whose live note found NO deliveries; the display path then wiped the
+   perfectly good stored note as "stale", and the card sat on the board with no
+   load order at all. Matching now goes through deliveryDock, the same
+   resolution the engine groups by, so the note lists exactly the deliveries
+   the card was generated for — nothing more, nothing less. The scenario matrix
+   in pickupInvariants.test.js holds the two equal on every manifest it builds.
+
+   Returns null for anything that isn't an auto-pickup, and for a card with no
+   deliveries behind it (that is the reaper's problem, not this note's). Same
+   LIFO order as the engine's stored note: the last stop delivered is loaded
+   first. */
+export const liveLoadOrderNote=(pu,entries,deps)=>{
+  if(!pu||pu.stopType!=="pickup"||pu.manualPickup)return null;
+  const d=deps||{};
+  const nl=typeof d.normLoc==="function"?d.normLoc:(s)=>String(s||"").trim().toLowerCase();
+  const puSrcs=(Array.isArray(d.pickupSources)?d.pickupSources:[]).filter(s=>s&&s.customer===pu.customer);
+  const multi=puSrcs.length>1;
+  const puLoc=nl(pu.pickupFrom)||nl(pu.stop);
+  const list=Array.isArray(entries)?entries:[];
+  const dels=list.filter(e=>{
+    if(!e||e.stopType!=="delivery")return false;
+    if(e.customer!==pu.customer)return false;
+    if((e.loadNum||1)!==(pu.loadNum||1))return false;
+    if(e.driverId!==pu.driverId)return false;
+    /* Collected somewhere that isn't a dock, with a manual pickup there: the
+       engine makes no dock card for it, so it belongs on no dock card's note. */
+    if(puSrcs.length&&deliveryCollectedOffDock(e,puSrcs,list,nl))return false;
+    if(!multi)return true; /* single dock → every delivery on the load */
+    const dock=deliveryDock(e,puSrcs,nl);
+    return !!dock&&nl(dock.label)===puLoc;
+  });
+  if(!dels.length)return null;
+  return "Load order: "+dels.slice().reverse().map(e=>e.stop).join(", ");
 };
 
 

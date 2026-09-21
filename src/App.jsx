@@ -62,7 +62,7 @@ inputMb4:{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"7px 10
 };
 import { useState, useCallback, useEffect, useRef, Fragment, Component } from "react";
 import { PICKUP_SOURCES, MULTI_PICKUP, normLoc as _normLoc } from "./pickupConfig.js";
-import { dedupeIds, dedupeAutoPickups, dedupeGhostDeliveries, dedupeDeliveries, reapOrphanAutoPickups, sanitizeEntry, _mergeEntryDriver, _mergeEntryDispatcher, buildMergedEntries, entrySig, makeTombFilter, makeDocTombFilter, mergeTombstones, vanishedAutoPickups, orderByIds, reconcileDriverRoster, applyDriverRemap, normDriverName, manualPickupCoversDock, allInRate, stripLiftgateFee, resequenceEntries, sortBySeq, normalizeOrder, orderAutoPickupsFirst, manualPickupOrigin, deliveryCollectedOffDock, qualifyPickupName, rebuildPickupsForPure, insertIdxForLoad, applyReassign, applySetLoadNum, reorderDriverBlock as _reorderDriverBlock, applyMoveInDriver, applyReorderDriver, applyDropReorder, resolvePickupLabel, finishingDynamicsFlag, FD_FLAG_COLORS, fdCutoffMins, fmtClock, visibleTruckDriverIds, orderRosterRows } from "./manifestLogic.js";
+import { dedupeIds, dedupeAutoPickups, dedupeGhostDeliveries, dedupeDeliveries, reapOrphanAutoPickups, sanitizeEntry, _mergeEntryDriver, _mergeEntryDispatcher, buildMergedEntries, entrySig, makeTombFilter, makeDocTombFilter, mergeTombstones, vanishedAutoPickups, orderByIds, reconcileDriverRoster, applyDriverRemap, normDriverName, manualPickupCoversDock, allInRate, stripLiftgateFee, resequenceEntries, sortBySeq, normalizeOrder, orderAutoPickupsFirst, manualPickupOrigin, deliveryCollectedOffDock, qualifyPickupName, rebuildPickupsForPure, liveLoadOrderNote, insertIdxForLoad, applyReassign, applySetLoadNum, reorderDriverBlock as _reorderDriverBlock, applyMoveInDriver, applyReorderDriver, applyDropReorder, resolvePickupLabel, finishingDynamicsFlag, FD_FLAG_COLORS, fdCutoffMins, fmtClock, visibleTruckDriverIds, orderRosterRows } from "./manifestLogic.js";
 import { diffOrderDocs, orderDocId, ordersParity } from "./ordersStore.js";
 import { FDFlag, useMinuteTick } from "./FDFlag.jsx";
 
@@ -335,7 +335,7 @@ const saveManifestDay=async(wo,sd,entries,callerDriverId,deletedIds,allowEmpty)=
          resurrections, and collapse duplicate auto-pickups. Pure + unit-tested
          in manifestLogic.js (buildMergedEntries) so the concurrency scenarios
          can't silently regress. */
-      const deduped=buildMergedEntries(current?.entries||[],entries||[],{isDriver,callerDriverId,deletedIds,docTombstones:docTombs,multiSource:_reapOpts.multiSource,normLoc:_reapOpts.normLoc});
+      const deduped=buildMergedEntries(current?.entries||[],entries||[],{isDriver,callerDriverId,deletedIds,docTombstones:docTombs,multiSource:_reapOpts.multiSource,normLoc:_reapOpts.normLoc,docksFor:_reapOpts.docksFor});
       /* Normalize photos / signature for write. Bound the TOTAL inline base64
          across the whole doc (not just per-photo) to a budget under Firestore's
          ~1MiB limit — two 700KB fallback photos each pass a per-photo cap yet
@@ -5198,45 +5198,15 @@ const driverHasWeekEntries=(did)=>{
   return false;
 };
 const visibleDrivers=drivers.filter(d=>d.active!==false||driverHasWeekEntries(d.id));
-/* Live-compute load-order text for auto-generated pickups.
-   Why not just read entry.note? Because entry.note is only regenerated when
-   rebuildPickupsFor runs (add/remove/reassign/loadNum change). Dragging a
-   delivery to reorder doesn't trigger a rebuild, so the stored note goes
-   stale. Computing live here means every render (card, manifest text, etc.)
-   always reflects current delivery order — no rebuild required.
-   Returns null for manual pickups, non-pickups, or when no matching dels. */
-const _computeLiveLoadOrderNote=(pickupEntry,driverEntries)=>{
-  if(pickupEntry.stopType!=="pickup"||pickupEntry.manualPickup)return null;
-  const puLoad=pickupEntry.loadNum||1;
-  const puSrcs=PICKUP_SOURCES.filter(s=>s.customer===pickupEntry.customer);
-  const multiSource=puSrcs.length>1;
-  /* Match a delivery to this pickup using a NORMALIZED location compare.
-     The stored pickupFrom field is wildly inconsistent in the real data —
-     the same physical Norcross dock appears as "Norcross", "Emser -
-     Norcross", and "Emser Tile — Norcross" across different entries. Exact
-     string compare (the old code) therefore failed constantly and the
-     "Load order: ..." note disappeared. _normLoc reduces all of those to
-     "norcross" so they compare equal.
-
-     Single-source customers (most): every delivery on the load belongs to
-     the lone pickup — no location gating. Multi-source (Emser, Traditions):
-     the delivery's normalized location must equal the pickup's. */
-  const puLoc=_normLoc(pickupEntry.pickupFrom);
-  const custDels=driverEntries.filter(e=>{
-    if(e.stopType!=="delivery")return false;
-    if(e.customer!==pickupEntry.customer)return false;
-    if((e.loadNum||1)!==puLoad)return false;
-    if(e.driverId!==pickupEntry.driverId)return false;
-    if(!multiSource)return true;
-    return _normLoc(e.pickupFrom)===puLoc;
-  });
-  if(!custDels.length)return null;
-  /* Reverse delivery order → LIFO load order (last delivered loaded first).
-     List every stop — no truncation. There's plenty of horizontal space
-     on the card row and the driver needs the full load plan at a glance. */
-  const names=custDels.slice().reverse().map(e=>e.stop);
-  return "Load order: "+names.join(", ");
-};
+/* Live-compute load-order text for auto-generated pickups. The rule lives in
+   manifestLogic.js (liveLoadOrderNote) next to the engine that generates the
+   cards, so the two resolve a delivery's dock the same way and the scenario
+   matrix can hold them equal. Computing it live means every reader (card,
+   manifest text, print, the driver's phone) reflects the current delivery
+   order — a drag reorder never runs the engine, so the stored note would go
+   stale. Returns null for manual pickups, non-pickups, or when no matching
+   deliveries are on the load. */
+const _computeLiveLoadOrderNote=(pickupEntry,driverEntries)=>liveLoadOrderNote(pickupEntry,driverEntries,{pickupSources:PICKUP_SOURCES,normLoc:_normLoc});
 const drvEntries=did=>{
   /* Display-time safety net: collapse duplicate auto-pickups and drop orphaned
      ones (dock-aware) before the next Firestore round-trip heals storage, so a
@@ -10151,7 +10121,12 @@ const showToast=useCallback(m=>{setToast(m);setTimeout(()=>setToast(null),2000);
 const drvSaveTime=useRef(0);
 const driverId=resolveDriverSlug(driverSlug,allDrivers);
 const driver=driverId?allDrivers.find(d=>d.id===driverId):null;
-const entries=driverId?reapOrphanAutoPickups(dedupeDeliveries(dedupeAutoPickups(dl.filter(e=>e.driverId===driverId),_reapOpts)),_reapOpts):[];/* Self-heal on the driver's own phone too: the dispatcher board dedupes/reaps auto-pickups AND collapses duplicate deliveries via drvEntries, but the driver app renders its own dl — without this it showed duplicate/orphaned pickups and the duplicate-delivery (BEC-on-Trevor) rows. */
+const _healed=driverId?reapOrphanAutoPickups(dedupeDeliveries(dedupeAutoPickups(dl.filter(e=>e.driverId===driverId),_reapOpts)),_reapOpts):[];
+/* The phone reads the same live "Load order:" the board does — the stored note
+   only refreshes when the engine runs, so after a drag reorder on the board the
+   driver would load the truck in yesterday's order. A card with no live match
+   has any stale stored note cleared, exactly as drvEntries does. */
+const entries=_healed.map(e=>{if(e.stopType!=="pickup"||e.manualPickup)return e;const live=liveLoadOrderNote(e,_healed,{pickupSources:PICKUP_SOURCES,normLoc:_normLoc});if(live)return{...e,note:live};return(typeof e.note==="string"&&e.note.startsWith("Load order:"))?{...e,note:null}:e;});/* Self-heal on the driver's own phone too: the dispatcher board dedupes/reaps auto-pickups AND collapses duplicate deliveries via drvEntries, but the driver app renders its own dl — without this it showed duplicate/orphaned pickups and the duplicate-delivery (BEC-on-Trevor) rows. */
 useEffect(()=>{
   const unsubDrivers=subscribeDrivers((fbDrivers)=>{
     if(fbDrivers.length>0){
