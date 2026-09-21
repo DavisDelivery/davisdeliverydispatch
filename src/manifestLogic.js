@@ -468,24 +468,36 @@ export const entrySig=(e)=>{
    an unrelated stop — the failure mode that erased real deliveries from the
    board. Returns { size, has(entry) }. */
 export const makeTombFilter=(deletedIds)=>{
-  const map=new Map(); /* String(id) -> Set<sig>; sig "" means id-only (match any content) */
-  const add=(id,sig)=>{
+  const map=new Map(); /* String(id) -> Map<sig, at>; sig "" means id-only (match any content); at 0 means no clock */
+  const add=(id,sig,at)=>{
     if(id==null)return;
     const k=String(id); /* coerce so a numeric tombstone id matches a string entry id */
-    if(!map.has(k))map.set(k,new Set());
-    map.get(k).add(sig==null?"":sig);
+    if(!map.has(k))map.set(k,new Map());
+    const s=sig==null?"":sig;
+    const t=Number(at)||0;
+    const cur=map.get(k);
+    if(!cur.has(s)||t>cur.get(s))cur.set(s,t);
   };
-  if(deletedIds instanceof Map){deletedIds.forEach((sig,id)=>add(id,sig));}
-  else if(deletedIds instanceof Set){deletedIds.forEach(id=>add(id,""));}
-  else if(Array.isArray(deletedIds)){deletedIds.forEach(d=>{if(d&&typeof d==="object")add(d.id,d.sig);else add(d,"");});}
+  if(deletedIds instanceof Map){deletedIds.forEach((v,id)=>{if(v&&typeof v==="object")add(id,v.sig,v.at);else add(id,v,0);});}
+  else if(deletedIds instanceof Set){deletedIds.forEach(id=>add(id,"",0));}
+  else if(Array.isArray(deletedIds)){deletedIds.forEach(d=>{if(d&&typeof d==="object")add(d.id,d.sig,d.at);else add(d,"",0);});}
   return{
     size:map.size,
     has(e){
       if(!e||e.id==null)return false;
       const sigs=map.get(String(e.id));
       if(!sigs)return false;
-      if(sigs.has(""))return true;            /* id-only tombstone */
-      return sigs.has(entrySig(e));           /* must also match content */
+      /* Same last-writer-wins rule as the durable doc tombstones: a delete that
+         is OLDER than the entry's own last edit yields to the edit. The 90-second
+         in-memory tombstone used to ignore the clock, so one dispatcher's delete
+         beat another's newer rate change on this screen while the doc tombstone
+         let it live everywhere else — two boards, two answers. A tombstone with
+         no clock (a bare id) still matches unconditionally. */
+      const edited=Number(e.updatedAt)||0;
+      const live=(t)=>!t||t>=edited;
+      if(sigs.has("")&&live(sigs.get("")))return true;   /* id-only tombstone */
+      const s=entrySig(e);
+      return sigs.has(s)&&live(sigs.get(s));            /* must also match content */
     },
   };
 };
@@ -1273,12 +1285,25 @@ return all;
    LIFO order as the engine's stored note: the last stop delivered is loaded
    first. */
 export const liveLoadOrderNote=(pu,entries,deps)=>{
-  if(!pu||pu.stopType!=="pickup"||pu.manualPickup)return null;
+  if(!pu||pu.stopType!=="pickup")return null;
   const d=deps||{};
   const nl=typeof d.normLoc==="function"?d.normLoc:(s)=>String(s||"").trim().toLowerCase();
   const puSrcs=(Array.isArray(d.pickupSources)?d.pickupSources:[]).filter(s=>s&&s.customer===pu.customer);
   const multi=puSrcs.length>1;
-  const puLoc=nl(pu.pickupFrom)||nl(pu.stop);
+  let puLoc=nl(pu.pickupFrom)||nl(pu.stop);
+  if(pu.manualPickup){
+    /* A manual pickup that COVERS a supplier dock (manualPickupCoversDock —
+       the same test the engine uses to suppress the auto card) is the dock
+       pickup for that load: the engine makes no auto card beside it, so the
+       auto card's note had nowhere to go. A quote for Emser Tile collected at
+       Norcross, pushed onto a driver's day beside four hourly Emser stops, left
+       one "Emser - Norcross" card reading only "Picking up for …" and no load
+       order for the other four. Any other manual pickup (a return at a store,
+       an off-dock warehouse) gets no load order — those deliveries are not its. */
+    const src=puSrcs.find(s=>manualPickupCoversDock(pu,String(s.label||"").split(" - ").pop(),s.label,nl));
+    if(!src)return null;
+    puLoc=nl(src.label);
+  }
   const list=Array.isArray(entries)?entries:[];
   const dels=list.filter(e=>{
     if(!e||e.stopType!=="delivery")return false;
@@ -1294,6 +1319,28 @@ export const liveLoadOrderNote=(pu,entries,deps)=>{
   });
   if(!dels.length)return null;
   return "Load order: "+dels.slice().reverse().map(e=>e.stop).join(", ");
+};
+
+/* The pickup entry as every reader should display it: the live load order in
+   its note. An AUTO card's note IS the load order, so it is replaced (or a
+   stale stored one cleared). A MANUAL card keeps whatever the dispatcher
+   wrote ("Picking up for Smith") and gets the load order appended after
+   LOAD_ORDER_SEP — idempotently, so a display copy that finds its way back
+   into the day (a sort preset persists the driver's list) never stacks two.
+   Returns the same object when nothing changes. */
+export const LOAD_ORDER_SEP=" | ";
+const _loadOrderTail=/\s*\|\s*Load order:.*$/;
+export const withLiveLoadOrder=(e,entries,deps)=>{
+  if(!e||e.stopType!=="pickup")return e;
+  const live=liveLoadOrderNote(e,entries,deps);
+  if(!e.manualPickup){
+    if(live)return e.note===live?e:{...e,note:live};
+    return (typeof e.note==="string"&&e.note.startsWith("Load order:"))?{...e,note:null}:e;
+  }
+  const stored=typeof e.note==="string"?e.note:"";
+  const base=(stored.startsWith("Load order:")?"":stored.replace(_loadOrderTail,"")).trim();
+  const note=live?(base?base+LOAD_ORDER_SEP+live:live):(base||null);
+  return note===(stored||null)?e:{...e,note};
 };
 
 
@@ -1346,20 +1393,45 @@ export const applyReassign=(all,eid,did,newLoadNum,deps)=>{
   const idx=out.findIndex(e=>e&&e.id===eid);
   if(idx<0)return all;
   const cur=out[idx];
+  /* An AUTO pickup is derived data — it exists because deliveries on that
+     driver and load come off that dock. Moving one is not an operation: it
+     used to just rewrite driverId, leaving the driver with deliveries and no
+     pickup, and the next save reaped the moved copy. The card stays with its
+     deliveries; move those instead. */
+  if(cur.stopType==="pickup"&&!cur.manualPickup)return all;
   /* Old driver/load read from the array being edited. The component version
      read them off the display list, which is the same for these two fields and
      one less thing to go stale mid-edit. */
   const oldDid=cur.driverId,oldLoad=cur.loadNum||1;
-  const targetLoad=newLoadNum||oldLoad;
   const driverChanged=did!==oldDid;
-  const loadChanged=!!newLoadNum&&newLoadNum!==oldLoad;
-  const updated={...cur,driverId:did,...(newLoadNum?{loadNum:newLoadNum}:{})};
+  /* A stop coming off a truck, or going onto one from the pool, starts on
+     Load 1 unless the caller named a load. The pool has no loads, so the
+     number a stop carried from its last truck means nothing there — yet it
+     travelled with the stop onto the next driver and opened a lone Load 2
+     above an empty Load 1. A split-off half keeps its Load 2: that number IS
+     what it means. */
+  const resetLoad=driverChanged&&!newLoadNum&&!cur.wasSplit&&(did===0||oldDid===0);
+  const targetLoad=newLoadNum||(resetLoad?1:oldLoad);
+  const loadChanged=targetLoad!==oldLoad;
+  const updated={...cur,driverId:did,...((newLoadNum||loadChanged)?{loadNum:targetLoad}:{})};
   if(driverChanged||loadChanged){
+    /* A quote's pickup leg and its delivery are one job (they share a pairId).
+       Whichever one is moved, a partner still sitting where this one came from
+       comes along — assigning only the delivery used to leave the real pickup
+       in the pool and let the engine conjure a supplier dock card on the
+       driver, at an address the freight isn't at. */
+    const pIdx=cur.pairId?out.findIndex((e,i)=>i!==idx&&e&&e.pairId===cur.pairId&&e.driverId===oldDid):-1;
+    const movers=[updated];
+    if(pIdx>=0)movers.push({...out[pIdx],driverId:did,loadNum:updated.loadNum||out[pIdx].loadNum||1});
+    /* pickup first, so it lands ahead of the delivery it feeds */
+    movers.sort((a,b)=>(a.stopType==="pickup"?0:1)-(b.stopType==="pickup"?0:1));
+    [idx,pIdx].filter(i=>i>=0).sort((a,b)=>b-a).forEach(i=>out.splice(i,1)); /* by position — a value filter would take a colliding-id twin too */
     /* Splice out and reinsert at the bottom of the target (driver, load) — the
        'new stops land at the bottom' contract shared with addDel. */
-    out.splice(idx,1);
-    if(did>0)out.splice(insertIdxForLoad(out,did,targetLoad),0,updated);
-    else out.push(updated);
+    movers.forEach(m=>{
+      if(did>0)out.splice(insertIdxForLoad(out,did,m.loadNum||1),0,m);
+      else out.push(m);
+    });
   }else{
     out[idx]=updated;
   }
@@ -1514,15 +1586,32 @@ export const resolvePickupLabel=(entry,siblings)=>{
    when exactly one owns a location by that name — "Norcross" belongs to Emser,
    Florida Tile, Specialty, IMETCO, Crossville and Prolex alike, and guessing
    between them would put a confident wrong address on a driver's card. */
-export const qualifyPickupName=(rawPU,customerName,multiPickup)=>{
+export const qualifyPickupName=(rawPU,customerName,multiPickup,opts)=>{
   const raw=String(rawPU==null?"":rawPU).trim();
   if(!raw||raw.includes(" - "))return raw;
+  const o=opts||{};
   const hit=(locs)=>Array.isArray(locs)?locs.find(l=>l&&(l.label===raw||String(l.label||"").split(" - ").pop()===raw)):null;
+  /* The customer's OWN docks first — including a single-dock supplier
+     (Crossville, Prolex), which MULTI_PICKUP leaves out by construction. A
+     quote for Crossville with pickup "Norcross" used to keep the bare name, so
+     its manual pickup card read "Norcross" and the engine, unable to see that
+     card as the dock, put a second "Crossville - Norcross" card beside it. */
+  const own=hit(Array.isArray(o.pickupSources)?o.pickupSources.filter(s=>s&&s.customer===customerName):null);
+  if(own)return own.label;
   const mine=hit(multiPickup&&multiPickup[customerName]);
   if(mine)return mine.label;
   let found=null,owners=0;
   Object.values(multiPickup||{}).forEach(locs=>{const m=hit(locs);if(m){owners++;if(!found)found=m;}});
-  return owners===1?found.label:raw;
+  if(owners!==1)return raw;
+  /* Another supplier's branch, by name alone, is a guess. When the caller
+     knows the pickup ADDRESS the guess has to match it: "Atlanta" for a
+     customer at 11 Perimeter Center East is not Traditions on Chattahoochee
+     Avenue, and relabelling it sent the driver to Traditions. */
+  if(o.addr!=null&&String(o.addr).trim()){
+    const na=(s)=>String(s||"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim();
+    if(!found.addr||na(found.addr)!==na(o.addr))return raw;
+  }
+  return found.label;
 };
 
 /* ── Finishing Dynamics dock cutoff ─────────────────────────────────────────

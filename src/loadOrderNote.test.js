@@ -145,8 +145,8 @@ describe("liveLoadOrderNote — the field report", () => {
     expect(live(pu, all)).toBe(pu.note);
   });
 
-  it("nothing for a manual pickup, a delivery, or a card with no deliveries behind it", () => {
-    const manual = mpu({ stop: NORCROSS });
+  it("nothing for a manual pickup elsewhere, a delivery, or a card with no deliveries behind it", () => {
+    const manual = mpu({ stop: "DCO Smyrna", addr: "3500 Highlands Parkway SE" }); /* a return pickup at a store — not the dock */
     const d = del({ stop: "X" });
     const orphan = { id: "o", stopType: "pickup", customer: "Emser Tile", stop: NORCROSS, pickupFrom: "Norcross", driverId: 5, loadNum: 1, note: "Load order: gone" };
     expect(live(manual, [manual, d])).toBe(null);

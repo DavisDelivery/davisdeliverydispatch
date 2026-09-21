@@ -45,8 +45,14 @@ function getToken(m) {
   const phone =
     m.contactPhone || m.phone || m.recipient || m.to || m.from || m.number || '';
   const text = m.text != null ? m.text : m.message != null ? m.message : m.body || '';
+  // SimpleTexting's Message schema carries the direction as `directionType`:
+  // MO (mobile-originated = the customer wrote it) / MT (mobile-terminated =
+  // we sent it). None of the field names below exist on it, so every message
+  // read as outbound and the customer's own words rendered as "You: …".
   const dir = String(m.direction || m.type || m.kind || (m.incoming ? 'IN' : '') || '');
-  const inbound = m.incoming === true || /^(in|receiv)/i.test(dir);
+  const inbound = m.directionType != null
+    ? String(m.directionType).toUpperCase() === 'MO'
+    : (m.incoming === true || /^(in|receiv)/i.test(dir));
   const when =
     m.createdAt || m.receivedAt || m.sentAt || m.timestamp || m.date || m.time || null;
   let ts = 0;

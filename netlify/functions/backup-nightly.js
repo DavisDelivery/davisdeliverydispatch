@@ -26,16 +26,25 @@ const COLLECTIONS = [
   'emserHours',
   'emserShifts',
   'dispatchNotes',
-  'customStops',
-  'stopOverrides',
-  'hiddenStops',
   'invoices',
   'driverLocations',
+  'liftgateRequests',
+  'audit',
 ];
+// customStops / stopOverrides / hiddenStops are single documents under config/
+// (App.jsx writes config/customStops etc.). Listed as top-level collections they
+// read as empty every night, and the backup reported that as a clean zero.
 const SINGLE_DOCS = [
   'config/drivers',
   'config/driverCapacity',
+  'config/customStops',
+  'config/stopOverrides',
+  'config/hiddenStops',
 ];
+// Subcollections a top-level read cannot reach: messages/<channel>/items,
+// notifications/<driver>/items, orders/<day>/items (the per-order store).
+// A collection-group query captures every one of them, keyed by full path.
+const COLLECTION_GROUPS = ['items'];
 
 // Retention policy
 const KEEP_DAILY = 14;   // last 14 days of daily backups
@@ -76,6 +85,7 @@ async function dumpFirestore() {
     exportedAt: new Date().toISOString(),
     collections: {},
     singleDocs: {},
+    collectionGroups: {},
   };
   const errors = [];
 
@@ -108,10 +118,25 @@ async function dumpFirestore() {
     }
   }
 
+  // Read collection groups (subcollections), keyed by full document path
+  for (const group of COLLECTION_GROUPS) {
+    try {
+      const snap = await db.collectionGroup(group).get();
+      const docs = {};
+      snap.forEach(doc => { docs[doc.ref.path] = doc.data(); });
+      dump.collectionGroups[group] = docs;
+    } catch (e) {
+      console.error(`[BACKUP] Failed to read collection group ${group}:`, e.message);
+      errors.push({ collectionGroup: group, error: String(e.message || e) });
+      dump.collectionGroups[group] = {};
+    }
+  }
+
   // Count stats for the summary
   let totalDocs = 0;
   for (const coll of Object.values(dump.collections)) totalDocs += Object.keys(coll).length;
   for (const val of Object.values(dump.singleDocs)) if (val) totalDocs++;
+  for (const grp of Object.values(dump.collectionGroups)) totalDocs += Object.keys(grp).length;
 
   dump.summary = {
     totalCollections: Object.keys(dump.collections).length,
@@ -119,8 +144,13 @@ async function dumpFirestore() {
     totalDocs,
     byCollection: Object.fromEntries(
       Object.entries(dump.collections).map(([k, v]) => [k, Object.keys(v).length])
+        .concat(Object.entries(dump.collectionGroups).map(([k, v]) => ['group:' + k, Object.keys(v).length]))
     ),
-    errors: errors.length ? errors : undefined,
+    // Always an array. Firestore rejects `undefined` as a field value, and the
+    // status write copied this field verbatim — so on every CLEAN run the
+    // backups/status write threw (swallowed by writeStatus) and the app's
+    // health panel never saw a success.
+    errors,
   };
 
   return dump;
@@ -259,7 +289,7 @@ exports.handler = async (event) => {
 
     // 6. Write status
     const durationMs = Date.now() - startedAt;
-    const hadErrors = !!(dump.summary.errors && dump.summary.errors.length);
+    const hadErrors = dump.summary.errors.length > 0;
     const status = {
       success: true,
       partial: hadErrors,
@@ -270,7 +300,7 @@ exports.handler = async (event) => {
       durationMs,
       totalDocs: dump.summary.totalDocs,
       byCollection: dump.summary.byCollection,
-      errors: dump.summary.errors,
+      errors: dump.summary.errors, // [] on a clean run — never undefined
       rotation,
       log,
     };

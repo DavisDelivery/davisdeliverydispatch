@@ -32,14 +32,25 @@ function firestore() {
 /* Last 10 digits, so "404-394-9891" and "+14043949891" compare equal. */
 const digits10 = (s) => String(s || '').replace(/\D/g, '').slice(-10);
 
-/* SimpleTexting sends SMS as GET query params and MMS as a JSON (or form) POST. */
+/* SimpleTexting sends SMS as GET query params and MMS as a JSON (or form) POST.
+   Its webhook (Settings → Webhooks, trigger INCOMING_MESSAGE) POSTs a different
+   shape: { type: "INCOMING_MESSAGE", values: { contactPhone, accountPhone, text, … } }.
+   That envelope carried no `from`/`text` at the top level, so every webhook
+   delivery was answered 200 and dropped — the driver's reply never reached the
+   chat, and SimpleTexting saw a success and never retried. */
+function unwrapWebhook(body) {
+  if (!body || typeof body !== 'object' || !body.values || typeof body.values !== 'object') return body;
+  if (body.type && String(body.type).toUpperCase() !== 'INCOMING_MESSAGE') return {}; // delivery reports, unsubscribes, …
+  const v = body.values;
+  return { from: v.contactPhone || v.from || '', to: v.accountPhone || v.to || '', text: v.text != null ? v.text : v.body, subject: v.subject };
+}
 function parseInbound(event) {
   if (event.httpMethod === 'GET') return event.queryStringParameters || {};
   const headers = event.headers || {};
   const ct = (headers['content-type'] || headers['Content-Type'] || '').toLowerCase();
   const raw = event.body || '';
   if (ct.includes('application/json')) {
-    try { return JSON.parse(raw); } catch { return {}; }
+    try { return unwrapWebhook(JSON.parse(raw)); } catch { return {}; }
   }
   return querystring.parse(raw);
 }
