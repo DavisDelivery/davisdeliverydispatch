@@ -237,6 +237,63 @@ Four separate causes, all of them code, none of them Motive being down:
       Replaced with a 🛰 Satellite button in the control row. Labels carries over:
       hybrid is the photo with roads and place names, plain satellite is the photo alone.
 
+
+## 10 · 2026-09-22 — the truck in two places at once
+
+### What the board showed
+
+TYRESE Griffin, on site at **Precision Flooring – Norcross** (arrived 8:54) and
+**ProSource – Norcross** (arrived 8:47) at the same time, neither departed. The
+ProSource stamp is a minute *before* he reached the Emser – Norcross pickup those
+deliveries load from (8:48) and four before he left it (8:51) — the freight was
+still on Emser's dock.
+
+### Why the impossible stamp exists
+
+**The liftgate request button only existed on an arrived stop.** In both stop
+cards it sat inside the `arrived&&(…)` block, and on the driver's own page it
+was further gated on `arrived&&!departed`. A liftgate is something you see from
+the kerb; the only way to send the request was to stamp an arrival that had not
+happened. The pending request in the queue is timed **8:47 AM** — the same
+minute as the arrival. He was at the dock, saw the ProSource pallet needed a
+liftgate, and the app made him lie about his position to ask for it.
+
+Nothing else writes `arrivedAt`: it is set only by an explicit Arrived tap and
+never cleared. Emser hourly billing comes from `emserShifts` clock-in/out via
+`getShiftSummary`, so no money was affected — only the board's picture of where
+the truck was, and the "on site 30 min+" alert, which cried wolf all morning.
+
+### Fixed in this pass
+
+- [x] 🟠 **High — a liftgate could not be requested without a false arrival.**
+      The request, the pending notice and the approved notice moved out of the
+      arrived-only block in both `DriverView` and `DriverPage`. It asks for
+      nothing but the stop, and still disappears once the stop is departed.
+- [x] 🟠 **High — nothing enforced that a truck is in one place at a time.**
+      `updateStatus` stamps the one entry it was handed and looks at nothing
+      else. Arriving somewhere while another stop is open now raises a sheet
+      naming the open stops and their times, with **Depart those stops & arrive
+      here**, **Arrive anyway** and **Cancel**. The app writes no timestamp the
+      driver did not tap for.
+- [x] 🟡 **Medium — a delivery could be arrived before its dock was left.**
+      `arrivalWarnings` also reports a pickup on the same driver and load that
+      has not departed. Warn, not block: a stamp entered late from memory is a
+      real thing.
+- [x] 🟡 **Medium — the board could not see the overlap.** The triage bar gains
+      "N drivers on site at 2+ stops" and the driver row names them. The dwell
+      flag only fires at thirty minutes, so a stale stamp was invisible until
+      it was half an hour old.
+- [x] 🟠 **High — the Daily Log rendered a stale load order.** §08 made the
+      board's note live, but the Daily Log maps the raw day and rendered the
+      stored `note`, so the same pickup read two different ways in two columns
+      of one screen after any route reorder. It runs the same rule now, and a
+      test holds the whole day and one driver's slice to the same answer.
+
+### Note on the earlier reading
+
+The 8:47 stamp was first read here as a mis-tap on the wrong card. It was not —
+the liftgate gate above forced it. The fix follows the cause, not the symptom.
+
 ---
 
 ## Dead code / cleanup (not counted in the tally)

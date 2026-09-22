@@ -62,7 +62,7 @@ inputMb4:{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"7px 10
 };
 import { useState, useCallback, useEffect, useMemo, useRef, Fragment, Component } from "react";
 import { PICKUP_SOURCES, MULTI_PICKUP, normLoc as _normLoc } from "./pickupConfig.js";
-import { dedupeIds, dedupeAutoPickups, dedupeGhostDeliveries, dedupeDeliveries, reapOrphanAutoPickups, sanitizeEntry, _mergeEntryDriver, _mergeEntryDispatcher, buildMergedEntries, entrySig, makeTombFilter, makeDocTombFilter, mergeTombstones, vanishedAutoPickups, orderByIds, reconcileDriverRoster, applyDriverRemap, normDriverName, manualPickupCoversDock, allInRate, stripLiftgateFee, resequenceEntries, sortBySeq, normalizeOrder, orderAutoPickupsFirst, manualPickupOrigin, deliveryCollectedOffDock, qualifyPickupName, rebuildPickupsForPure, withLiveLoadOrder, insertIdxForLoad, applyReassign, applySetLoadNum, reorderDriverBlock as _reorderDriverBlock, applyMoveInDriver, applyReorderDriver, applyDropReorder, resolvePickupLabel, finishingDynamicsFlag, FD_FLAG_COLORS, fdCutoffMins, fmtClock, visibleTruckDriverIds, orderRosterRows, mergeDriverLocs, lastKnownLoc, gpsAgeMs, gpsAgeLabel, stopPinFill, isDoneStop, doneStopSvg, DONE_PIN_PX } from "./manifestLogic.js";
+import { dedupeIds, dedupeAutoPickups, dedupeGhostDeliveries, dedupeDeliveries, reapOrphanAutoPickups, sanitizeEntry, _mergeEntryDriver, _mergeEntryDispatcher, buildMergedEntries, entrySig, makeTombFilter, makeDocTombFilter, mergeTombstones, vanishedAutoPickups, orderByIds, reconcileDriverRoster, applyDriverRemap, normDriverName, manualPickupCoversDock, allInRate, stripLiftgateFee, resequenceEntries, sortBySeq, normalizeOrder, orderAutoPickupsFirst, manualPickupOrigin, deliveryCollectedOffDock, qualifyPickupName, rebuildPickupsForPure, withLiveLoadOrder, insertIdxForLoad, applyReassign, applySetLoadNum, reorderDriverBlock as _reorderDriverBlock, applyMoveInDriver, applyReorderDriver, applyDropReorder, resolvePickupLabel, finishingDynamicsFlag, FD_FLAG_COLORS, fdCutoffMins, fmtClock, visibleTruckDriverIds, orderRosterRows, mergeDriverLocs, lastKnownLoc, gpsAgeMs, gpsAgeLabel, stopPinFill, isDoneStop, doneStopSvg, DONE_PIN_PX, arrivalWarnings, openStopsFor, driversWithOverlap } from "./manifestLogic.js";
 import { diffOrderDocs, orderDocId, ordersParity } from "./ordersStore.js";
 import { FDFlag, useMinuteTick } from "./FDFlag.jsx";
 
@@ -1867,6 +1867,14 @@ onChange={e=>{if(e.target.files[0]){const r=new FileReader();r.onload=ev=>{compr
 <button onClick={()=>setSigStop(entry.id)} style={{background:"#f3e8f9",border:"1px solid #d8b4fe",borderRadius:8,padding:"8px 12px",cursor:"pointer",fontSize:12,fontWeight:600,color:"#7c3aed",flex:1}}>{"✍"} Sign</button>
 </div>
 
+</div>
+)}
+{/* A liftgate is something you see from the kerb, before anyone is on site.
+    This used to sit inside the arrived-only block, gated on arrived&&!departed,
+    so the only way to send the request was to stamp an arrival that had not
+    happened — which is how a delivery came to be marked arrived at 8:47 while
+    the truck was still loading at a dock it had not left. It asks for nothing
+    but the stop. */}
 {!entry.liftgateApplied&&!liftgateRequested[entry.id]&&<button onClick={()=>{setLiftgateRequested(p=>({...p,[entry.id]:true}));if(onLiftgate)onLiftgate(entry.id,entry.stop);}} style={{width:"100%",marginTop:6,background:"#fff7ed",border:"2px solid #fed7aa",borderRadius:8,padding:"8px 12px",cursor:"pointer",fontSize:12,fontWeight:700,color:"#ea580c",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
 🔄 Liftgate Required (+$75)
 </button>}
@@ -1876,8 +1884,6 @@ onChange={e=>{if(e.target.files[0]){const r=new FileReader();r.onload=ev=>{compr
 {entry.liftgateApplied&&<div style={{width:"100%",marginTop:6,background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:8,padding:"8px 12px",textAlign:"center",fontSize:11,fontWeight:600,color:"#16a34a"}}>
 ✓ Liftgate charge approved (+$75)
 </div>}
-</div>
-)}
 </div>
 {entry.photos&&entry.photos.length>0&&(
 <div style={{display:"flex",gap:6,marginTop:8,flexWrap:"wrap"}}>
@@ -5926,12 +5932,23 @@ const renderDriverStatus=(de)=>{
       </div>
     </div>
     {stuck.length>0&&<div style={{marginTop:5,display:"flex",alignItems:"center",gap:6,fontSize:11,fontWeight:600,color:"#c2650a",background:"#fff7ed",border:"1px solid #f2cf9c",borderRadius:7,padding:"5px 9px"}}>{"\u23f1"} {stuck[0].stop} on site {_onSiteMins(stuck[0])} min{stuck.length>1?" \u00b7 +"+(stuck.length-1)+" more":""}</div>}
+    {(()=>{const open=de.filter(e=>(e.status==="arrived"||(!!e.arrivedAt&&e.status!=="departed"))&&!e.departedAt);
+      if(open.length<2)return null;
+      return(<div style={{marginTop:5,display:"flex",alignItems:"center",gap:6,fontSize:11,fontWeight:700,color:"#c4342a",background:"#fdeeec",border:"1px solid #f2c4bf",borderRadius:7,padding:"5px 9px"}}>
+        {"⚠"} On site at {open.length} stops at once — {open.map(e=>e.stop.split(" – ")[0].split(" - ")[0]).join(", ")}
+      </div>);})()}
   </div>);
 };
 const renderTriageBar=()=>{
   const flags=[];
   const stuck=dl.filter(e=>e.stopType!=="pickup"&&_onSiteMins(e)>=30).length;
   if(stuck)flags.push({key:"stuck",label:stuck>1?"stops on site 30 min+":"stop on site 30 min+",count:stuck,level:"crit"});
+  /* A truck is in one place at a time. Two open stops means a departure was
+     never tapped or an arrival was tapped from somewhere else — either way one
+     of those stamps is wrong, and the dwell flag above won't say so until the
+     stale one crosses thirty minutes. */
+  const overlap=driversWithOverlap(dl);
+  if(overlap.length)flags.push({key:"overlap",label:overlap.length>1?"drivers on site at 2+ stops":"driver on site at 2+ stops",count:overlap.length,level:"crit"});
   let over=0;drivers.forEach(d=>{getDriverLoads(d.id).forEach(ln=>{if(getLoadWeight(d.id,ln)>getDriverCapacity(d.id))over++;});});
   if(over)flags.push({key:"over",label:over>1?"loads over capacity":"load over capacity",count:over,level:"warn"});
   const noSP=dl.filter(e=>e.customer==="IMETCO"&&e.stopType!=="pickup"&&e.driverId>0&&!e.shipPlan).length;
@@ -7750,7 +7767,12 @@ onAssignStop={mapActiveDrv?(stopId,drvId)=>{assignInOrder(stopId,mapActiveDrv,ma
 </div>);})()}
 
 {dl.length===0?<div style={{textAlign:"center",padding:"40px 20px",color:"#a8a29e"}}><div style={{fontSize:28,marginBottom:8}}>{"\uD83D\uDE9A"}</div><div style={{fontSize:13}}>No deliveries yet</div></div>
-:dl.map(entry=>{const c=getCustColor(entry.customer);const drv=drivers.find(d=>d.id===entry.driverId);const di=drivers.findIndex(d=>d.id===entry.driverId);const done=entry.status==="departed";const onSite=entry.status==="arrived";const addr=entry.addr||getAddr(entry.stop);const hasInstr=entry.instructions?.trim();return(
+:dl.map(_dlE=>{/* The board computes the load order live (a drag reorder never
+  runs the engine, so the stored note goes stale); this panel rendered the
+  stored one, so the same pickup read differently in the two columns. Same
+  rule, same answer. */
+  const entry=withLiveLoadOrder(_dlE,dl,_noteDeps);
+  const c=getCustColor(entry.customer);const drv=drivers.find(d=>d.id===entry.driverId);const di=drivers.findIndex(d=>d.id===entry.driverId);const done=entry.status==="departed";const onSite=entry.status==="arrived";const addr=entry.addr||getAddr(entry.stop);const hasInstr=entry.instructions?.trim();return(
 <div key={entry.id} style={{background:done?"#f0fdf4":onSite?"#fffbeb":"#fafaf9",borderRadius:10,padding:"10px 14px",marginBottom:6,borderLeft:`3px solid ${entry.priority?"#f59e0b":entry.stopType==="pickup"?"#2563eb":c.accent}`,border:`1px solid ${done?"#bbf7d0":onSite?"#fde68a":"#e7e5e4"}`,opacity:done?0.7:1}}>
 <div style={_s.flexBtwStart}>
 <div style={_s.f1m}>
@@ -10265,6 +10287,10 @@ const getPin=(phone)=>{const digits=(phone||"").replace(/\D/g,"");return digits.
 const[sigStop,setSigStop]=useState(null);
 const[shipPlanInputs,setShipPlanInputs]=useState({});
 const[lgReqSent,setLgReqSent]=useState({}); /* entryId → true once a liftgate request was submitted, so the button can't be spammed */
+/* Set when an Arrived tap would contradict where the truck is: another stop
+   still on site, or a delivery whose dock hasn't been left. The sheet asks;
+   nothing is stamped until the driver picks an answer. */
+const[arriveGuard,setArriveGuard]=useState(null); /* {entry, warnings} */
 const[allDrivers,setAllDrivers]=useState(()=>lsGet(LS_DRIVERS,DEFAULT_DRIVERS));
 const[fbLoaded,setFbLoaded]=useState(false);
 const[driverNotifs,setDriverNotifs]=useState([]);
@@ -10602,6 +10628,40 @@ return(
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet"/>
 {toast&&<div style={{position:"fixed",top:20,left:"50%",transform:"translateX(-50%)",background:"#16a34a",color:"#fff",padding:"10px 24px",borderRadius:12,fontWeight:600,fontSize:14,zIndex:999,boxShadow:"0 8px 32px rgba(22,163,74,0.3)",animation:"slideDown 0.3s ease"}}>✓ {toast}</div>}
 
+{arriveGuard&&(()=>{
+/* The app never stamps a time on the driver's behalf. Every button here is a
+   tap; "Depart & arrive" is two stamps the driver asked for in one go. */
+const {entry:gE,warnings}=arriveGuard;
+const openW=warnings.find(w=>w.kind==="open-stop");
+const puW=warnings.find(w=>w.kind==="before-pickup");
+const close=()=>setArriveGuard(null);
+const arriveNow=()=>{close();updateStatus(gE.id,"arrived");showToast("Arrived ✓");};
+return(<div onClick={close} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:1000,display:"flex",alignItems:"flex-end",justifyContent:"center"}}>
+<div onClick={e=>e.stopPropagation()} style={{background:"#fff",width:"100%",maxWidth:480,borderRadius:"18px 18px 0 0",padding:"20px 18px calc(20px + env(safe-area-inset-bottom,0px))",boxShadow:"0 -8px 32px rgba(0,0,0,0.25)"}}>
+<div style={{fontSize:17,fontWeight:800,marginBottom:4}}>Before you mark this arrived</div>
+<div style={{fontSize:13,color:"#57534e",marginBottom:14}}>{gE.stop}</div>
+
+{openW&&<div style={{background:"#fff7ed",border:"1px solid #fed7aa",borderRadius:12,padding:"12px 14px",marginBottom:10}}>
+<div style={{fontSize:13,fontWeight:700,color:"#c2410c",marginBottom:4}}>You're still on site at {openW.stops.length>1?openW.stops.length+" stops":openW.stops[0].stop}</div>
+<div style={{fontSize:12,color:"#7c2d12",lineHeight:1.45}}>{openW.stops.map(o=>o.stop+(o.arrivedAt?" (since "+o.arrivedAt+")":"")).join(", ")}</div>
+</div>}
+
+{puW&&<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:12,padding:"12px 14px",marginBottom:10}}>
+<div style={{fontSize:13,fontWeight:700,color:"#1d4ed8",marginBottom:4}}>You haven't left {puW.pickup.stop} yet</div>
+<div style={{fontSize:12,color:"#1e3a8a",lineHeight:1.45}}>This load comes off that dock. If you're still there, this stop isn't arrived yet — but if you already delivered it, go ahead.</div>
+</div>}
+
+{openW&&<button onClick={()=>{close();openW.stops.forEach(o=>updateStatus(o.id,"departed"));updateStatus(gE.id,"arrived");showToast("Departed "+(openW.stops.length>1?openW.stops.length+" stops":openW.stops[0].stop.split(" - ")[0])+", arrived ✓");}}
+style={{width:"100%",background:"#16a34a",color:"#fff",border:"none",borderRadius:12,padding:"13px",cursor:"pointer",fontSize:14,fontWeight:700,marginBottom:8}}>
+Depart {openW.stops.length>1?"those stops":openW.stops[0].stop.split(" - ")[0]} &amp; arrive here
+</button>}
+
+<button onClick={arriveNow} style={{width:"100%",background:"#fff",color:"#c2410c",border:"2px solid #fed7aa",borderRadius:12,padding:"12px",cursor:"pointer",fontSize:14,fontWeight:700,marginBottom:8}}>Arrive anyway</button>
+<button onClick={close} style={{width:"100%",background:"#f5f5f4",color:"#57534e",border:"none",borderRadius:12,padding:"12px",cursor:"pointer",fontSize:14,fontWeight:600}}>Cancel</button>
+</div>
+</div>);
+})()}
+
 <div style={{background:BRAND.dark,color:"#fff",padding:"calc(16px + env(safe-area-inset-top,0px)) 20px"}}>
 <div style={_s.flexBtw}>
 <div>
@@ -10803,7 +10863,11 @@ return(<button onClick={()=>{
 {entry.eta&&<span style={{fontSize:12,fontWeight:700,color:"#2563eb",background:"#eff6ff",padding:"4px 10px",borderRadius:8,border:"1px solid #bfdbfe"}}>🚚 {fmtEta(entry.eta,entry.etaSetAt)}{entry.etaDest?" → "+entry.etaDest:""}</span>}
 </div>}
 <div style={{display:"flex",gap:6,marginTop:10,flexWrap:"wrap"}}>
-{!arrived&&<button onClick={()=>{updateStatus(entry.id,"arrived");showToast("Arrived ✓");}} style={{flex:1,background:"#f59e0b",color:"#fff",border:"none",borderRadius:10,padding:"10px",cursor:"pointer",fontSize:13,fontWeight:600}}>Arrived</button>}
+{!arrived&&<button onClick={()=>{
+const w=arrivalWarnings(entry,entries,_noteDeps);
+if(w.length){setArriveGuard({entry,warnings:w});return;}
+updateStatus(entry.id,"arrived");showToast("Arrived ✓");
+}} style={{flex:1,background:"#f59e0b",color:"#fff",border:"none",borderRadius:10,padding:"10px",cursor:"pointer",fontSize:13,fontWeight:600}}>Arrived</button>}
 {arrived&&!departed&&<button onClick={()=>{if(!canDepart)return;const _sv=(shipPlanInputs[entry.id]||"").trim();if(_sv&&_sv!==entry.shipPlan)setShipPlanD(entry.id,_sv);updateStatus(entry.id,"departed");showToast("Departed ✓");}} style={{flex:1,background:canDepart?"#16a34a":"#a8a29e",color:"#fff",border:"none",borderRadius:10,padding:"10px",cursor:canDepart?"pointer":"not-allowed",fontSize:13,fontWeight:600}}>{canDepart?"Departed":"Enter Ship Plan # First"}</button>}
 {arrived&&(
 <div style={{width:"100%",marginTop:4}}>
@@ -10843,17 +10907,23 @@ onChange={e=>{if(e.target.files[0]){const r=new FileReader();r.onload=ev=>addPho
 <button onClick={()=>setSigStop(entry.id)} style={{background:"#f3e8f9",border:"1px solid #d8b4fe",borderRadius:8,padding:"8px 12px",cursor:"pointer",fontSize:12,fontWeight:600,color:"#7c3aed",flex:1}}>{"✍"} Sign</button>
 </div>
 
-{arrived&&!departed&&!entry.liftgateApplied&&!lgReqSent[entry.id]&&<button onClick={()=>{
+</div>
+)}
+{/* A liftgate is something you see from the kerb, before anyone is on site.
+    This used to sit inside the arrived-only block, gated on arrived&&!departed,
+    so the only way to send the request was to stamp an arrival that had not
+    happened — which is how a delivery came to be marked arrived at 8:47 while
+    the truck was still loading at a dock it had not left. It asks for nothing
+    but the stop. */}
+{!departed&&!entry.liftgateApplied&&!lgReqSent[entry.id]&&<button onClick={()=>{
 setLgReqSent(p=>({...p,[entry.id]:true}));
 submitLiftgateRequest({id:genId(),entryId:entry.id,stop:entry.stop,driverId:driverId,driverName:driver?.name||"Driver",time:new Date().toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"}),status:"pending"}).catch(()=>{setLgReqSent(p=>{const n={...p};delete n[entry.id];return n;});showToast("Couldn't send — try again");});
 showToast("Liftgate request sent to dispatch");
 }} style={{width:"100%",marginTop:6,background:"#fff7ed",border:"2px solid #fed7aa",borderRadius:8,padding:"8px 12px",cursor:"pointer",fontSize:12,fontWeight:700,color:"#ea580c",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
 🔄 Liftgate Required (+$75)
 </button>}
-{arrived&&!departed&&!entry.liftgateApplied&&lgReqSent[entry.id]&&<div style={{width:"100%",marginTop:6,background:"#fef3c7",border:"1px solid #fde68a",borderRadius:8,padding:"8px 12px",textAlign:"center",fontSize:11,fontWeight:600,color:"#92400e"}}>⏳ Liftgate request sent — awaiting dispatch</div>}
+{!entry.liftgateApplied&&lgReqSent[entry.id]&&<div style={{width:"100%",marginTop:6,background:"#fef3c7",border:"1px solid #fde68a",borderRadius:8,padding:"8px 12px",textAlign:"center",fontSize:11,fontWeight:600,color:"#92400e"}}>⏳ Liftgate request sent — awaiting dispatch</div>}
 {entry.liftgateApplied&&<div style={{width:"100%",marginTop:6,background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:8,padding:"8px 12px",textAlign:"center",fontSize:11,fontWeight:600,color:"#16a34a"}}>✓ Liftgate charge approved (+$75)</div>}
-</div>
-)}
 </div>
 {entry.photos&&entry.photos.length>0&&(
 <div style={{display:"flex",gap:6,marginTop:8,flexWrap:"wrap"}}>
