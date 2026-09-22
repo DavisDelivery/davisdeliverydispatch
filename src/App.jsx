@@ -60,9 +60,9 @@ cancelBtn2:{background:"#e7e5e4",border:"none",borderRadius:8,padding:"6px 12px"
 greenBtn:{background:"#16a34a",color:"#fff",border:"none",borderRadius:8,padding:"6px 12px",cursor:"pointer",fontSize:12,fontWeight:700},
 inputMb4:{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"7px 10px",fontSize:12,outline:"none",marginBottom:4},
 };
-import { useState, useCallback, useEffect, useRef, Fragment, Component } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef, Fragment, Component } from "react";
 import { PICKUP_SOURCES, MULTI_PICKUP, normLoc as _normLoc } from "./pickupConfig.js";
-import { dedupeIds, dedupeAutoPickups, dedupeGhostDeliveries, dedupeDeliveries, reapOrphanAutoPickups, sanitizeEntry, _mergeEntryDriver, _mergeEntryDispatcher, buildMergedEntries, entrySig, makeTombFilter, makeDocTombFilter, mergeTombstones, vanishedAutoPickups, orderByIds, reconcileDriverRoster, applyDriverRemap, normDriverName, manualPickupCoversDock, allInRate, stripLiftgateFee, resequenceEntries, sortBySeq, normalizeOrder, orderAutoPickupsFirst, manualPickupOrigin, deliveryCollectedOffDock, qualifyPickupName, rebuildPickupsForPure, withLiveLoadOrder, insertIdxForLoad, applyReassign, applySetLoadNum, reorderDriverBlock as _reorderDriverBlock, applyMoveInDriver, applyReorderDriver, applyDropReorder, resolvePickupLabel, finishingDynamicsFlag, FD_FLAG_COLORS, fdCutoffMins, fmtClock, visibleTruckDriverIds, orderRosterRows } from "./manifestLogic.js";
+import { dedupeIds, dedupeAutoPickups, dedupeGhostDeliveries, dedupeDeliveries, reapOrphanAutoPickups, sanitizeEntry, _mergeEntryDriver, _mergeEntryDispatcher, buildMergedEntries, entrySig, makeTombFilter, makeDocTombFilter, mergeTombstones, vanishedAutoPickups, orderByIds, reconcileDriverRoster, applyDriverRemap, normDriverName, manualPickupCoversDock, allInRate, stripLiftgateFee, resequenceEntries, sortBySeq, normalizeOrder, orderAutoPickupsFirst, manualPickupOrigin, deliveryCollectedOffDock, qualifyPickupName, rebuildPickupsForPure, withLiveLoadOrder, insertIdxForLoad, applyReassign, applySetLoadNum, reorderDriverBlock as _reorderDriverBlock, applyMoveInDriver, applyReorderDriver, applyDropReorder, resolvePickupLabel, finishingDynamicsFlag, FD_FLAG_COLORS, fdCutoffMins, fmtClock, visibleTruckDriverIds, orderRosterRows, mergeDriverLocs, lastKnownLoc, gpsAgeMs, gpsAgeLabel, stopPinFill } from "./manifestLogic.js";
 import { diffOrderDocs, orderDocId, ordersParity } from "./ordersStore.js";
 import { FDFlag, useMinuteTick } from "./FDFlag.jsx";
 
@@ -1195,6 +1195,7 @@ const searchInputRef=useRef(null);
 const[useRoadRoutes,setUseRoadRoutes]=useState(false);
 const[showTraffic,setShowTraffic]=useState(false);
 const[hideLabels,setHideLabels]=useState(false);
+const[satellite,setSatellite]=useState(false);
 const trafficLayerRef=useRef(null);
 const openInfoRef=useRef(null);    /* currently open InfoWindow */
 const [mapReady,setMapReady]=useState(false);
@@ -1213,8 +1214,10 @@ if(mapInstanceRef.current)return;
 const map=new window.google.maps.Map(containerRef.current,{
 center:{lat:33.92,lng:-84.25},
 zoom:10,
-mapTypeControl:true,
-mapTypeControlOptions:{style:window.google.maps.MapTypeControlStyle.HORIZONTAL_BAR,position:window.google.maps.ControlPosition.TOP_RIGHT,mapTypeIds:["roadmap","satellite","hybrid"]},
+/* Google's own map-type bar draws at TOP_RIGHT, which is exactly where the
+   Load 1 / Load 2 legend sits, so it was never reachable. The 🛰 Satellite
+   button in the control row below replaces it. */
+mapTypeControl:false,
 streetViewControl:true,
 fullscreenControl:true,
 zoomControl:true,
@@ -1338,7 +1341,7 @@ const isActiveDriverStop=activeDriverRef.current&&s.driverId===activeDriverRef.c
 const hasRouteNum=s.routeOrder>0&&!done;
 const isUnassigned=!isAssigned&&!done;
 const scale=done?4:onSite?9:hasRouteNum?10:isActiveDriverStop?9:isUnassigned?8:6;
-const fillColor=done?"#a8a29e":isUnassigned?"#d97706":"#2563eb";
+const fillColor=stopPinFill(s,{done,unassigned:isUnassigned});
 const strokeColor=onSite?"#f59e0b":isActiveDriverStop?"#1c1917":isUnassigned?"#92400e":isP?"#f59e0b":"#fff";
 const strokeWeight=onSite?3:isActiveDriverStop?3:isUnassigned?2.5:1.5;
 const fillOpacity=done?0.4:hasActive&&!isActiveDriverStop&&isAssigned?0.5:1;
@@ -1507,7 +1510,11 @@ if(hideLabels){
 }else{
   map.setOptions({styles:baseStyles});
 }
-},[hideLabels,mapReady]);
+/* A styles array has no effect on satellite imagery, so Labels is carried over
+   there by the map type itself: hybrid is the photo with roads and place names
+   on it, plain satellite is the photo alone. */
+map.setMapTypeId(satellite?(hideLabels?"satellite":"hybrid"):"roadmap");
+},[hideLabels,satellite,mapReady]);
 const truckDrvKey=[...visibleTruckDriverIds(drivers,stops)].sort((a,b)=>a-b).join(",");
 useEffect(()=>{
 const map=mapInstanceRef.current;
@@ -1532,12 +1539,13 @@ drivers.forEach((drv,di)=>{
   seenIds.add(drv.id);
   const col=DCOL[di]||BRAND.main;
   const initials=drv.name.split(" ").map(w=>w[0]).join("").toUpperCase();
-  /* Age in minutes. Anything older than 10m gets dimmed; over 30m is stale. */
-  const ageMs=loc.updatedAt?(typeof loc.updatedAt==="string"?Date.now()-new Date(loc.updatedAt).getTime():Date.now()-loc.updatedAt):0;
-  const ageMin=Math.round(ageMs/60000);
-  const ageLabel=ageMin<1?"just now":ageMin<60?ageMin+"m ago":Math.round(ageMin/60)+"h ago";
-  const isStale=ageMin>30;
-  const isDim=ageMin>10;
+  /* Age in minutes. Anything older than 10m gets dimmed; over 30m is stale.
+     A fix with no clock used to date itself "just now"; it now says so. */
+  const ageMs=gpsAgeMs(loc);
+  const ageMin=ageMs===null?null:Math.round(ageMs/60000);
+  const ageLabel=gpsAgeLabel(loc);
+  const isStale=ageMin!==null&&ageMin>30;
+  const isDim=ageMin!==null&&ageMin>10;
   const speedLabel=loc.speed>0?loc.speed+" mph":"";
   const truckLabel=loc.truck||"";
   const cityLabel=[loc.city,loc.locState].filter(Boolean).join(", ");
@@ -1600,6 +1608,10 @@ style={{width:"100%",padding:"10px 14px 10px 36px",border:"none",borderRadius:10
 </button>
 <button onClick={()=>setHideLabels(!hideLabels)} style={{background:hideLabels?"#7c3aed":"#fff",color:hideLabels?"#fff":"#57534e",border:"1px solid "+(hideLabels?"#7c3aed":"#d6d3d1"),borderRadius:8,padding:"6px 10px",fontSize:10,fontWeight:700,cursor:"pointer",boxShadow:"0 2px 8px rgba(0,0,0,0.15)",display:"flex",alignItems:"center",gap:4}}>
 {hideLabels?"🏷 Labels OFF":"🏷 Labels"}
+</button>
+<button onClick={()=>setSatellite(!satellite)} style={{background:satellite?"#0f766e":"#fff",color:satellite?"#fff":"#57534e",border:"1px solid "+(satellite?"#0f766e":"#d6d3d1"),borderRadius:8,padding:"6px 10px",fontSize:10,fontWeight:700,cursor:"pointer",boxShadow:"0 2px 8px rgba(0,0,0,0.15)",display:"flex",alignItems:"center",gap:4}}
+  title={satellite?"Back to the road map":"Satellite imagery"+(hideLabels?"":" with road and place labels")}>
+{satellite?"🛰 Satellite ON":"🛰 Satellite"}
 </button>
 </div>
 
@@ -3224,9 +3236,18 @@ return stored;
 }); /* {customerName: [{s:"name",r:100,addr:"...",note:"..."}]} */
 const[mapActiveDrv,setMapActiveDrv]=useState(null); /* driver selected for click-to-assign on Live Routes map */
 const[mapActiveLoad,setMapActiveLoad]=useState(1); /* which load number for click-to-assign */
-const[driverLocs,setDriverLocs]=useState({}); /* {driverId: {lat,lng,updatedAt}} */
+/* Two independent writers, kept apart so neither can wipe the other: the
+   driver's phone (Firestore driverLocations) and the Motive gateway on the
+   truck. `driverLocs` is the merge — newest fix per driver, stale fixes and
+   GPS-off drivers dropped. See mergeDriverLocs in manifestLogic.js. */
+const[phoneLocs,setPhoneLocs]=useState({});  /* {driverId: {lat,lng,updatedAt}} */
+const[motiveLocs,setMotiveLocs]=useState({});
+const[gpsLink,setGpsLink]=useState({state:"idle",at:0,detail:"",reported:0,unnamed:0}); /* health of the Motive proxy */
+const[gpsClock,setGpsClock]=useState(()=>Date.now()); /* re-dates the panel without a new fix */
+useEffect(()=>{const t=setInterval(()=>setGpsClock(Date.now()),60000);return()=>clearInterval(t);},[]);
 const[gpsEnabled,setGpsEnabled]=useState(()=>{try{const s=localStorage.getItem("gpsEnabled");return s?JSON.parse(s):{1:true,2:true,3:true,4:true};}catch{return{1:true,2:true,3:true,4:true};}}); /* per-driver Motive GPS toggle */
 const toggleGps=(driverId)=>setGpsEnabled(prev=>{const next={...prev,[driverId]:!prev[driverId]};try{localStorage.setItem("gpsEnabled",JSON.stringify(next));}catch{}return next;});
+const driverLocs=useMemo(()=>mergeDriverLocs(phoneLocs,motiveLocs,gpsEnabled,gpsClock),[phoneLocs,motiveLocs,gpsEnabled,gpsClock]);
 const[uiCompact,setUiCompact]=useState(()=>lsGet("dd_ui_compact",false)); /* density toggle: compact vs comfortable board */
 const toggleCompact=()=>setUiCompact(p=>{const n=!p;lsSet("dd_ui_compact",n);return n;});
 const[invoices,setInvoices]=useState([]);
@@ -3661,7 +3682,7 @@ useEffect(()=>{
     }));
     setSavedQuotes(clean);
   });
-  const unsubLocs=subscribeDriverLocations((locs)=>{setDriverLocs(locs);});
+  const unsubLocs=subscribeDriverLocations((locs)=>{setPhoneLocs(locs);});
   const unsubInv=subscribeInvoices((inv)=>{setInvoices(inv);});
   const unsubCustomStops=subscribeCustomStops((data)=>{
     setCustomStops(prev=>{
@@ -3739,23 +3760,30 @@ useEffect(()=>{
     });
   };
   let aborted=false;
+  /* A failed poll used to return in silence, so a dead API key and a truck
+     parked all weekend looked identical on the board — the panel just kept
+     showing whatever fix it already had. Record what the link is doing and let
+     the panel say it. */
+  const down=(state,detail)=>{if(!aborted)setGpsLink({state,at:Date.now(),detail:detail||"",reported:0,unnamed:0});};
   const poll=async()=>{
     if(aborted)return;
     try{
       const r=await fetch("/api/motive-gps");
       if(!r.ok){
-        if(r.status===401||r.status===403){console.warn("[MOTIVE] Auth failed:",r.status,"— check MOTIVE_API_KEY in Netlify env");}
-        else if(r.status>=500){console.warn("[MOTIVE] Server error:",r.status);}
+        let detail="";
+        try{const b=await r.json();detail=b&&(b.error||b.detail)||"";}catch{}
+        if(r.status===401||r.status===403){console.warn("[MOTIVE] Auth failed:",r.status,"— check MOTIVE_API_KEY in Netlify env");down("auth",detail||("HTTP "+r.status));}
+        else{console.warn("[MOTIVE] Server error:",r.status,detail);down("error",detail||("HTTP "+r.status));}
         return;
       }
       const data=await r.json();
-      if(!data.vehicles||!Array.isArray(data.vehicles))return;
+      if(!data.vehicles||!Array.isArray(data.vehicles)){down("error","malformed response");return;}
       const locs={};
+      let unmatched=0;
       data.vehicles.forEach(v=>{
         if(v.lat==null||v.lng==null)return;
         const drv=matchDriver(v.driver);
-        if(!drv)return;
-        if(gpsEnabled[drv.id]===false)return;
+        if(!drv){unmatched++;return;}
         locs[drv.id]={
           lat:v.lat,lng:v.lng,
           speed:v.speed,bearing:v.bearing,
@@ -3766,15 +3794,20 @@ useEffect(()=>{
         };
       });
       if(aborted)return;
-      /* Merge new locs into existing state. Drivers not in this poll keep
-         their last-known location (until their gpsEnabled toggles off). */
-      if(Object.keys(locs).length>0)setDriverLocs(prev=>({...prev,...locs}));
-    }catch(e){console.warn("[MOTIVE] Poll failed:",e.message);}
+      /* Replace, don't merge. A truck Motive has stopped reporting should age
+         out of this source; the merge in driverLocs is what decides whether the
+         phone's fix or this one is the newer of the two. gpsEnabled is applied
+         there too, so toggling GPS off silences both sources, not just this. */
+      setMotiveLocs(locs);
+      setGpsLink({state:"ok",at:Date.now(),detail:"",
+        reported:Number(data.reported)||data.vehicles.length,
+        unnamed:(Number(data.unnamed)||0)+unmatched});
+    }catch(e){console.warn("[MOTIVE] Poll failed:",e.message);down("offline",e.message);}
   };
   poll();
   const interval=setInterval(poll,20000);
   return()=>{aborted=true;clearInterval(interval);};
-},[drivers,gpsEnabled]);
+},[drivers]);
 useEffect(()=>{
   const unsubManifests=subscribeManifests(wo,(fbData)=>{
     _rawSetLog(prev=>{
@@ -7563,15 +7596,35 @@ onAssignStop={mapActiveDrv?(stopId,drvId)=>{assignInOrder(stopId,mapActiveDrv,ma
 <span style={{fontSize:13}}>📡</span>
 <span style={{fontSize:12,fontWeight:700,color:"#1c1917"}}>Motive GPS</span>
 </div>
-<span style={{fontSize:9,color:"#a8a29e",fontWeight:500}}>1 min polling</span>
+{(()=>{
+  /* This used to read "1 min polling" whatever was happening — it polls every
+     20s, and it said the same thing with a dead API key. Say what the link is
+     actually doing, so "no GPS" can be told apart from "truck hasn't moved". */
+  const linkAge=gpsLink.at?Math.round((gpsClock-gpsLink.at)/60000):null;
+  const fresh=linkAge!==null&&linkAge<3;
+  const txt=gpsLink.state==="idle"?"connecting…"
+    :gpsLink.state==="auth"?"⚠ Motive key rejected"
+    :gpsLink.state==="offline"?"⚠ proxy unreachable"
+    :gpsLink.state==="error"?"⚠ "+(gpsLink.detail||"Motive error")
+    :fresh?"live · 20s polling":"⚠ last synced "+(linkAge<60?linkAge+"m":Math.round(linkAge/60)+"h")+" ago";
+  const bad=(gpsLink.state!=="ok"&&gpsLink.state!=="idle")||(gpsLink.state==="ok"&&!fresh);
+  return(<span title={gpsLink.detail||undefined} style={{fontSize:9,color:bad?"#dc2626":"#a8a29e",fontWeight:bad?700:500,maxWidth:190,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{txt}</span>);
+})()}
 </div>
+{gpsLink.state==="ok"&&gpsLink.unnamed>0&&<div style={{fontSize:9,color:"#92400e",background:"#fef3c7",border:"1px solid #fde68a",borderRadius:6,padding:"4px 8px",marginBottom:6,lineHeight:1.4}}>
+  {gpsLink.unnamed} of {gpsLink.reported} vehicles Motive reported carry no driver this app knows — add the truck number in netlify/functions/motive-gps.js, or assign the driver in Motive.
+</div>}
 {visibleDrivers.map(d=>({d,di:drivers.findIndex(x=>x.id===d.id)})).map(({d:drv,di})=>{
   const loc=driverLocs[drv.id];
   const on=gpsEnabled[drv.id]!==false;
   const col=DCOL[di]||BRAND.main;
-  const age=loc?.updatedAt?(typeof loc.updatedAt==="string"?Math.round((Date.now()-new Date(loc.updatedAt).getTime())/60000):Math.round((Date.now()-loc.updatedAt)/60000)):null;
-  const ageStr=age===null?"—":age<1?"just now":age<60?age+"m ago":Math.round(age/60)+"h ago";
-  const hasLoc=on&&loc&&loc.lat;
+  const ageStr=gpsAgeLabel(loc,gpsClock);
+  const ageMs=gpsAgeMs(loc,gpsClock);
+  const ageMin=ageMs===null?null:Math.round(ageMs/60000);
+  const hasLoc=on&&!!loc;
+  /* No current fix, but the driver is on record somewhere — say when, rather
+     than "No data yet", which is only true for someone who has never pinged. */
+  const stale=!hasLoc&&on?lastKnownLoc(phoneLocs,motiveLocs,drv.id):null;
   return(
   <div key={drv.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",borderRadius:10,marginBottom:4,background:on?"#fff":"#f5f5f4",border:"1px solid "+(on?"#e7e5e4":"#ebebea"),transition:"all 0.2s"}}>
     <div style={{width:28,height:28,borderRadius:8,background:on?col:"#d6d3d1",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:"#fff",fontWeight:700,flexShrink:0,transition:"background 0.2s"}}>
@@ -7585,15 +7638,15 @@ onAssignStop={mapActiveDrv?(stopId,drvId)=>{assignInOrder(stopId,mapActiveDrv,ma
           {loc.speed>0&&<span style={{color:"#2563eb",fontWeight:600,flexShrink:0}}>· {loc.speed} mph</span>}
         </div>
       ):(
-        <div style={{fontSize:10,color:"#a8a29e"}}>{on?"No data yet":"GPS off"}</div>
+        <div style={{fontSize:10,color:"#a8a29e"}}>{!on?"GPS off":stale?"Last seen "+gpsAgeLabel(stale,gpsClock):"No data yet"}</div>
       )}
     </div>
     {on&&hasLoc&&(
-      <div style={{fontSize:9,color:age!==null&&age>30?"#dc2626":"#78716c",background:age!==null&&age>30?"#fef2f2":"#f5f5f4",border:"1px solid "+(age!==null&&age>30?"#fca5a5":"#e7e5e4"),borderRadius:6,padding:"2px 6px",flexShrink:0,fontWeight:age!==null&&age>30?700:400}}>
-        {age!==null&&age>30?"⚠ ":""}{ageStr}
+      <div style={{fontSize:9,color:ageMin!==null&&ageMin>30?"#dc2626":"#78716c",background:ageMin!==null&&ageMin>30?"#fef2f2":"#f5f5f4",border:"1px solid "+(ageMin!==null&&ageMin>30?"#fca5a5":"#e7e5e4"),borderRadius:6,padding:"2px 6px",flexShrink:0,fontWeight:ageMin!==null&&ageMin>30?700:400}}>
+        {ageMin!==null&&ageMin>30?"⚠ ":""}{ageStr}
       </div>
     )}
-    <button onClick={()=>{toggleGps(drv.id);if(on){setDriverLocs(prev=>{const n={...prev};delete n[drv.id];return n;});}}}
+    <button onClick={()=>toggleGps(drv.id)}
       style={{flexShrink:0,width:36,height:20,borderRadius:10,border:"none",cursor:"pointer",background:on?col:"#d6d3d1",position:"relative",transition:"background 0.25s",padding:0}}
       title={(on?"Disable":"Enable")+" GPS for "+drv.name}>
       <span style={{position:"absolute",top:2,left:on?18:2,width:16,height:16,borderRadius:8,background:"#fff",boxShadow:"0 1px 4px rgba(0,0,0,0.25)",transition:"left 0.2s",display:"block"}}/>

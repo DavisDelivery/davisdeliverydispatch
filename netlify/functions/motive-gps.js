@@ -10,8 +10,10 @@
  * X-Api-Key header and returns { vehicles: [{ vehicle: { current_location,
  * current_driver, ... } }] }. We translate to a flat normalized list.
  *
- * Truck number → driver name mapping here is the authoritative source;
- * the client does EXACT-match name lookup to avoid substring collisions.
+ * Truck number → driver name mapping here is a FALLBACK for vehicles Motive
+ * hasn't synced a driver to; Motive's own current_driver wins when present.
+ * The client does EXACT-match name lookup to avoid substring collisions, and
+ * that match — not this map — is what decides whose pin appears.
  */
 
 /* Hardcoded Davis Delivery truck roster.
@@ -69,11 +71,6 @@ export default async (req) => {
         const rawNumber = String(v.number || v.id || "").replace(/\D/g, "");
         const paddedNumber = rawNumber.padStart(4, "0");
 
-        /* Only surface trucks in our roster. Filters out any other vehicles
-           the Motive account may have (rentals, retired units, etc). */
-        const rosterName = TRUCK_DRIVER_MAP[paddedNumber];
-        if (!rosterName) return null;
-
         const lat = loc.lat ?? loc.latitude ?? null;
         const lng = loc.lon ?? loc.lng ?? loc.longitude ?? null;
         if (lat === null || lng === null) return null;
@@ -83,7 +80,17 @@ export default async (req) => {
         const motiveDriverName = (drv.first_name || drv.last_name)
           ? `${drv.first_name || ""} ${drv.last_name || ""}`.trim()
           : "";
+
+        /* The roster below is a fallback for trucks Motive hasn't synced a
+           driver to — not an allowlist. It used to drop every vehicle whose
+           number wasn't in it, so a truck Motive itself named a driver for
+           never reached the board, and the only trucks that could ever show a
+           live fix were the three listed. A vehicle with no name from either
+           source is still dropped; so is any name the client's roster doesn't
+           match, which is what keeps rentals and retired units off the map. */
+        const rosterName = TRUCK_DRIVER_MAP[paddedNumber] || "";
         const driverName = motiveDriverName || rosterName;
+        if (!driverName) return null;
 
         /* Motive v3 speed is in km/h. Convert to mph. */
         const speedKph = loc.speed ?? loc.kph ?? null;
@@ -105,7 +112,12 @@ export default async (req) => {
       })
       .filter(Boolean);
 
-    return json(200, { fetchedAt, vehicles }, 15);
+    /* Vehicles Motive reported that carried no driver name from either source.
+       This is the number to look at when a driver reads "no GPS": add their
+       truck to TRUCK_DRIVER_MAP above, or assign the driver in Motive. */
+    const unnamed = rawList.length - vehicles.length;
+
+    return json(200, { fetchedAt, vehicles, reported: rawList.length, unnamed }, 15);
   } catch (err) {
     console.error("[MOTIVE] Fetch exception:", err);
     return json(500, {

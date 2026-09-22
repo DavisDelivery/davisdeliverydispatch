@@ -175,6 +175,68 @@ Several paths price or total the same job differently. Not catastrophic today (i
 - ⚪ An AI quote with a currency-formatted rate string ("$250") is saved as $0.
 - ⚪ AI chat "Add selected" writes the model's raw `rate`/`weight` strings into the entry with no numeric coercion.
 
+
+## 09 · 2026-09-22 — truck GPS, map pins
+
+### Why the GPS panel read 17h–258h
+
+Four separate causes, all of them code, none of them Motive being down:
+
+1. **`TRUCK_DRIVER_MAP` was an allowlist, not a fallback.** `motive-gps.js` dropped
+   every vehicle whose padded number was absent from a three-entry map — even when
+   Motive itself reported a `current_driver` for it. Three of seven drivers could
+   ever show a live fix; the rest could only be located by their own phone.
+2. **The Firestore snapshot replaced the whole location table.** `subscribeDriverLocations`
+   did `setDriverLocs(locs)`, so every Motive fix on the board was dropped the
+   moment any phone wrote, and only came back on the next 20 s poll.
+3. **Nothing expires a phone ping.** `driverLocations/{id}` is written while the
+   driver page is open and never removed. A driver who last opened the app ten days
+   ago still had a record — so the panel dated it "258h ago" and the map still drew
+   a truck pin on today's board.
+4. **A failed poll returned in silence.** A rejected `MOTIVE_API_KEY` and a truck
+   parked all weekend looked identical: the panel said "1 min polling" either way
+   (it polls every 20 s), and the last known fix stayed on screen.
+
+### Fixed in this pass
+
+- [x] 🟠 **High — roster allowlist dropped named vehicles.** The map is now a fallback
+      for trucks Motive hasn't synced a driver to. A vehicle with no name from either
+      source is still dropped, and the client's exact-match against the app roster is
+      what keeps rentals and retired units off the map.
+- [x] 🟠 **High — one source clobbered the other.** The two writers are held in separate
+      state (`phoneLocs`, `motiveLocs`) and merged by clock — newest fix per driver,
+      the same last-writer-wins rule the manifest sync runs on (`mergeDriverLocs`).
+- [x] 🟠 **High — a stale fix drew a live pin.** A fix older than `GPS_FRESH_MS` (12 h,
+      comfortably past a full shift) stops pinning and stops counting as a location.
+      Nothing is deleted: `lastKnownLoc` still dates it, and the panel reads
+      "Last seen 11d ago" instead of "No data yet".
+- [x] 🟡 **Medium — the GPS toggle didn't hold.** Turning a driver's GPS off deleted the
+      entry once; the next Firestore snapshot put the phone ping straight back.
+      `gpsEnabled` is applied in the merge, so it silences both sources.
+- [x] 🟡 **Medium — no failure signal.** The panel header reports the link: connecting,
+      live, "Motive key rejected", "proxy unreachable", or how long since the last
+      successful sync. A banner counts vehicles Motive reported that carry no driver
+      the app knows, which is the number to look at when a driver reads "no GPS".
+- [x] 🟡 **Medium — a fix with no clock dated itself "just now".** It now reads
+      "age unknown", and an age past two days reads in days rather than "258h ago".
+
+### Still needs a human
+
+- [ ] Add the missing truck numbers to `TRUCK_DRIVER_MAP` in `netlify/functions/motive-gps.js`,
+      or assign those drivers in the Motive dashboard. The banner says how many are unnamed.
+- [ ] Confirm `MOTIVE_API_KEY` is set in Netlify → Site configuration → Environment
+      variables (Functions scope). The panel now says outright when it is rejected.
+
+### Map
+
+- [x] **Emser keeps its blue.** An Emser Tile stop draws in the customer's own blue in
+      every state, not amber when unassigned or grey when done. Finished stops stay
+      legible — they draw small and faded, and that is the cue that says done.
+- [x] **Satellite toggle.** Google's native map-type bar was configured at `TOP_RIGHT`,
+      which is exactly where the Load 1 / Load 2 legend sits, so it was never reachable.
+      Replaced with a 🛰 Satellite button in the control row. Labels carries over:
+      hybrid is the photo with roads and place names, plain satellite is the photo alone.
+
 ---
 
 ## Dead code / cleanup (not counted in the tally)

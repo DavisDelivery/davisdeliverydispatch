@@ -1850,3 +1850,105 @@ export const orderRosterRows=(drivers)=>{
   });
   return rows.filter(isActive).concat(hidden);
 };
+
+/* ═══ WHERE THE TRUCK IS ═══
+
+   Two things write a driver's position and neither owns the other: the Motive
+   gateway on the truck, polled through /api/motive-gps, and the driver's own
+   phone, which writes driverLocations/{id} while the driver page is open.
+
+   The Firestore snapshot used to replace the whole map, so every Motive fix it
+   held was dropped the moment any phone wrote, and the poll put them back
+   twenty seconds later. Merge the two by clock instead — the newer fix wins,
+   the same last-writer-wins rule the manifest sync runs on.
+
+   Nothing ever removes a phone ping. The record for a driver who last opened
+   the app ten days ago sits in Firestore reading "258h ago". That is a true
+   record of where they were; it is not where the truck is now, and a pin on
+   today's map is a claim about now. Past the cutoff a fix stops pinning and
+   stops counting as a location — the record is untouched, and the panel still
+   says when the driver was last seen. */
+export const GPS_FRESH_MS=12*60*60*1000;
+
+export const locUpdatedAtMs=(loc)=>{
+  const raw=loc&&loc.updatedAt;
+  if(raw==null)return null;
+  if(typeof raw==="number")return Number.isFinite(raw)?raw:null;
+  const t=new Date(raw).getTime();
+  return Number.isFinite(t)?t:null;
+};
+
+export const hasFix=(loc)=>{
+  if(!loc||loc.lat==null||loc.lng==null)return false;
+  return Number.isFinite(Number(loc.lat))&&Number.isFinite(Number(loc.lng));
+};
+
+export const gpsAgeMs=(loc,now)=>{
+  const t=locUpdatedAtMs(loc);
+  if(t===null)return null;
+  return Math.max(0,(now==null?Date.now():now)-t);
+};
+
+/* A fix with no clock at all is still shown — refusing to draw it would hide a
+   working truck over a missing field — but it is never dated as "just now". */
+export const gpsIsFresh=(loc,now,maxAgeMs)=>{
+  if(!hasFix(loc))return false;
+  const age=gpsAgeMs(loc,now);
+  if(age===null)return true;
+  return age<=(maxAgeMs==null?GPS_FRESH_MS:maxAgeMs);
+};
+
+export const gpsAgeLabel=(loc,now)=>{
+  const age=gpsAgeMs(loc,now);
+  if(age===null)return "age unknown";
+  const mins=Math.round(age/60000);
+  if(mins<1)return "just now";
+  if(mins<60)return mins+"m ago";
+  const hrs=Math.round(mins/60);
+  if(hrs<48)return hrs+"h ago";
+  return Math.round(hrs/24)+"d ago";
+};
+
+/* The one map the board reads. A driver whose GPS toggle is off has no
+   location from either source — the toggle used to delete the entry once, and
+   the next Firestore snapshot put the phone ping straight back. */
+export const mergeDriverLocs=(phone,motive,gpsEnabled,now,maxAgeMs)=>{
+  const out={};
+  const take=(src)=>{
+    Object.keys(src||{}).forEach(id=>{
+      const loc=src[id];
+      if(!gpsIsFresh(loc,now,maxAgeMs))return;
+      if(gpsEnabled&&gpsEnabled[id]===false)return;
+      const cur=out[id];
+      if(!cur){out[id]=loc;return;}
+      const a=locUpdatedAtMs(cur),b=locUpdatedAtMs(loc);
+      if(b!=null&&(a==null||b>a))out[id]=loc;
+    });
+  };
+  take(phone);take(motive);
+  return out;
+};
+
+/* The most recent fix on record for a driver, fresh or not, so the panel can
+   say "last seen 11d ago" where the map draws nothing. */
+export const lastKnownLoc=(phone,motive,driverId)=>{
+  const cands=[phone&&phone[driverId],motive&&motive[driverId]].filter(hasFix);
+  if(!cands.length)return null;
+  return cands.reduce((best,c)=>{
+    const a=locUpdatedAtMs(best),b=locUpdatedAtMs(c);
+    return b!=null&&(a==null||b>a)?c:best;
+  });
+};
+
+/* ═══ STOP PIN COLOUR ═══
+
+   Emser is the yard's biggest account and its work has to read at a glance, so
+   an Emser stop carries the customer's own blue in every state. Finished stops
+   stay legible: they draw small and faded, and that — not the grey — is the cue
+   that says done. */
+export const isEmserStop=(s)=>!!s&&String(s.customer==null?"":s.customer).trim().toLowerCase()==="emser tile";
+
+export const stopPinFill=(s,{done,unassigned}={})=>{
+  if(isEmserStop(s))return "#2563eb";
+  return done?"#a8a29e":unassigned?"#d97706":"#2563eb";
+};
