@@ -1,9 +1,10 @@
 import { describe, it, expect } from "vitest";
 import {
   liveLoadOrderNote, deliveryDock, rebuildPickupsForPure, buildMergedEntries,
-  reapOrphanAutoPickups, applyDropReorder, dedupeIds,
+  reapOrphanAutoPickups, applyDropReorder, dedupeIds, dedupeAutoPickups,
+  sanitizeEntry, resolvePickupLabel,
 } from "./manifestLogic.js";
-import { PICKUP_SOURCES, MULTI_PICKUP, normLoc } from "./pickupConfig.js";
+import { PICKUP_SOURCES, MULTI_PICKUP, normLoc, RETIRED_PICKUPS, retiredPickup } from "./pickupConfig.js";
 
 /* ── The load order a driver reads off an auto-pickup card ───────────────────
    Field report, 2026-09-21: four Emser Tile deliveries batch-loaded onto a
@@ -32,9 +33,11 @@ const cards = (all) => all.filter((e) => e.stopType === "pickup" && !e.manualPic
 const card = (all, label) => cards(all).find((p) => p.stop === label);
 const live = (pu, all) => liveLoadOrderNote(pu, all, noteDeps);
 
-const EMSER = docks("Emser Tile");
 const NORCROSS = "Emser - Norcross";
-const ROSWELL = "Emser - Roswell";
+/* Emser ships from one dock now (Roswell closed), so the multi-dock rules are
+   exercised against a supplier that still has several. */
+const ALPHARETTA = "Traditions - Alpharetta";
+const ATLANTA = "Traditions - Atlanta";
 
 describe("deliveryDock — one rule for which card a delivery belongs to", () => {
   const dock = (pickupFrom, cust = "Emser Tile") => deliveryDock({ pickupFrom }, docks(cust), normLoc)?.label;
@@ -46,7 +49,8 @@ describe("deliveryDock — one rule for which card a delivery belongs to", () =>
   });
   it("every stored spelling of a dock resolves to it", () => {
     ["Norcross", "Emser - Norcross", "Emser – Norcross", "Emser Tile — Norcross", "norcross"].forEach((v) => expect(dock(v)).toBe(NORCROSS));
-    ["Roswell", "Emser - Roswell", "Emser – Roswell"].forEach((v) => expect(dock(v)).toBe(ROSWELL));
+    ["Atlanta", "Traditions - Atlanta", "Traditions – Atlanta"].forEach((v) => expect(dock(v, "Traditions in Tile")).toBe(ATLANTA));
+    ["Bogart", "Traditions - Bogart"].forEach((v) => expect(dock(v, "Traditions in Tile")).toBe("Traditions - Bogart"));
   });
   it("the supplier's own name, or a place it doesn't own, is not a dock — default stands in", () => {
     expect(dock("Emser Tile")).toBe(NORCROSS);
@@ -95,16 +99,17 @@ describe("liveLoadOrderNote — the field report", () => {
   });
 
   it("mixed spellings and docks: each card lists exactly the deliveries it was made for", () => {
+    const trad = (o) => del({ customer: "Traditions in Tile", ...o });
     const all = rebuildPickupsForPure([
-      del({ stop: "A", pickupFrom: null }),
-      del({ stop: "B", pickupFrom: "Emser - Norcross" }),
-      del({ stop: "C", pickupFrom: "Roswell" }),
-      del({ stop: "D", pickupFrom: "Emser Tile" }),
-      del({ stop: "E", pickupFrom: "Emser – Roswell" }),
-    ], "Emser Tile", deps());
-    expect(cards(all).map((p) => p.stop).sort()).toEqual([NORCROSS, ROSWELL]);
-    expect(live(card(all, NORCROSS), all)).toBe("Load order: D, B, A");
-    expect(live(card(all, ROSWELL), all)).toBe("Load order: E, C");
+      trad({ stop: "A", pickupFrom: null }),                   /* no dock named → first listed */
+      trad({ stop: "B", pickupFrom: "Traditions - Alpharetta" }),
+      trad({ stop: "C", pickupFrom: "Atlanta" }),
+      trad({ stop: "D", pickupFrom: "Traditions in Tile" }),   /* the supplier is not a dock */
+      trad({ stop: "E", pickupFrom: "Traditions – Atlanta" }), /* en-dash */
+    ], "Traditions in Tile", deps());
+    expect(cards(all).map((p) => p.stop).sort()).toEqual([ALPHARETTA, ATLANTA]);
+    expect(live(card(all, ALPHARETTA), all)).toBe("Load order: D, B, A");
+    expect(live(card(all, ATLANTA), all)).toBe("Load order: E, C");
     cards(all).forEach((p) => expect(live(p, all)).toBe(p.note));
   });
 
@@ -192,22 +197,93 @@ describe("save merge — the reaper agrees with the engine", () => {
 
   it("the same manifest comes back from the save with exactly the same stops", () => {
     const built = rebuildPickupsForPure([
-      del({ stop: "A", pickupFrom: "Emser Tile" }), del({ stop: "B" }), del({ stop: "C", pickupFrom: "Roswell" }),
+      del({ stop: "A", pickupFrom: "Emser Tile" }), del({ stop: "B" }), del({ stop: "C", pickupFrom: "typed by hand" }),
     ], "Emser Tile", deps());
     const back = save(dedupeIds(built), dedupeIds(built));
     expect(back.map((e) => e.id).sort()).toEqual(built.map((e) => e.id).sort());
   });
 
   it("a genuinely orphaned dock card is still reaped", () => {
-    const built = rebuildPickupsForPure([del({ stop: "A", pickupFrom: "Norcross" })], "Emser Tile", deps());
-    const roswellCard = { ...card(built, NORCROSS), id: "stale_roswell", stop: ROSWELL, pickupFrom: "Roswell", addr: EMSER[1].addr };
-    const out = save([...built, roswellCard], [...built, roswellCard]);
-    expect(cards(out).map((p) => p.stop)).toEqual([NORCROSS]);
+    /* A multi-dock supplier: a card at a dock this load collects nothing from
+       has no delivery behind it and must go. */
+    const built = rebuildPickupsForPure(
+      [del({ customer: "Traditions in Tile", stop: "A", pickupFrom: "Alpharetta" })], "Traditions in Tile", deps());
+    const atlantaDock = docks("Traditions in Tile").find((s) => s.label === ATLANTA);
+    const strayCard = { ...card(built, ALPHARETTA), id: "stale_atl", stop: ATLANTA, pickupFrom: "Atlanta", addr: atlantaDock.addr };
+    const out = save([...built, strayCard], [...built, strayCard]);
+    expect(cards(out).map((p) => p.stop)).toEqual([ALPHARETTA]);
   });
 
   it("without docksFor the merge still runs (back-compat), with the old location-blind reaper", () => {
     const built = rebuildPickupsForPure([del({ stop: "A" })], "Emser Tile", deps());
     expect(cards(buildMergedEntries(built, built, { multiSource: reapOpts.multiSource, normLoc })).length).toBe(1);
     expect(cards(buildMergedEntries(built, built, {})).length).toBe(1);
+  });
+});
+
+/* ── A dock the supplier closed ──────────────────────────────────────────────
+   Emser's Roswell branch shut. Taking it out of PICKUP_SOURCES is the easy
+   half; the hard half is the orders already saved against it. Those rows
+   outlive the config, and until they are healed the board disagrees with
+   itself about where the freight is — the exact shape of the bug this file
+   exists to pin down. */
+describe("retired dock — Emser Roswell", () => {
+  const CLOSED = "Emser - Roswell";
+
+  it("is gone from the dock list, and leaves Emser with a single dock", () => {
+    expect(PICKUP_SOURCES.filter((s) => s.customer === "Emser Tile").map((s) => s.label)).toEqual([NORCROSS]);
+    expect(PICKUP_SOURCES.some((s) => /roswell/i.test(s.label))).toBe(false);
+    /* One dock means nothing to choose, so Emser is no longer a prompting supplier. */
+    expect(MULTI_PICKUP["Emser Tile"]).toBeUndefined();
+  });
+
+  it("is recorded as retired, pointing at a dock that still exists", () => {
+    const rec = RETIRED_PICKUPS.find((r) => r.label === CLOSED);
+    expect(rec).toBeTruthy();
+    expect(PICKUP_SOURCES.some((s) => s.label === rec.movedTo)).toBe(true);
+    ["Roswell", CLOSED, "Emser Tile — Roswell", "emser – roswell"].forEach((v) =>
+      expect(retiredPickup("Emser Tile", v)?.label).toBe(NORCROSS));
+    /* Somewhere else that happens to be in Roswell is not this dock. */
+    expect(retiredPickup("Florida Tile", "Roswell")).toBe(null);
+    expect(retiredPickup("Emser Tile", "Norcross")).toBe(null);
+  });
+
+  it("a delivery still naming it collects at Norcross, and says so", () => {
+    const stored = sanitizeEntry(del({ stop: "DCO Smyrna", pickupFrom: CLOSED }));
+    expect(stored.pickupFrom).toBe(NORCROSS);
+    expect(deliveryDock(stored, docks("Emser Tile"), normLoc).label).toBe(NORCROSS);
+    expect(resolvePickupLabel(stored, [stored]).text).toBe(NORCROSS);
+  });
+
+  it("a quote collected there heals too, though its customer owns no docks", () => {
+    const q = sanitizeEntry(del({ customer: "Quote Delivery", stop: "Smith Residence", pickupFrom: CLOSED }));
+    expect(q.pickupFrom).toBe(NORCROSS);
+  });
+
+  it("a stale card generated at the closed dock moves to Norcross and collapses into the real one", () => {
+    const live1 = rebuildPickupsForPure([del({ stop: "A" }), del({ stop: "B" })], "Emser Tile", deps());
+    const stale = { id: "old_ros", stopType: "pickup", customer: "Emser Tile", stop: CLOSED, pickupFrom: "Roswell",
+      addr: "250 Hembree Park Drive, Roswell, GA 30076", driverId: 5, loadNum: 1, baseRate: 0, weight: 0 };
+    const ingested = [...live1, stale].map(sanitizeEntry);
+    /* Healed: no row anywhere still points at the closed building. */
+    expect(ingested.some((e) => /roswell/i.test(e.stop) || /roswell/i.test(e.pickupFrom || "") || /Hembree/i.test(e.addr))).toBe(false);
+    /* And the two cards for one dock become one. */
+    expect(cards(dedupeAutoPickups(ingested, { normLoc })).length).toBe(1);
+  });
+
+  it("a MANUAL pickup someone scheduled there is left alone, and does not stand in for the dock", () => {
+    const manual = mpu({ stop: CLOSED, addr: "250 Hembree Park Drive, Roswell, GA 30076", note: "Return pallets" });
+    const kept = sanitizeEntry(manual);
+    expect(kept.stop).toBe(CLOSED);          /* still visible, for the dispatcher to delete */
+    expect(kept.addr).toContain("Hembree");
+    /* It must not suppress the Norcross card the deliveries actually need. */
+    const all = rebuildPickupsForPure([kept, del({ stop: "A" })], "Emser Tile", deps());
+    expect(cards(all).map((p) => p.stop)).toEqual([NORCROSS]);
+    expect(live(card(all, NORCROSS), all)).toBe("Load order: A");
+  });
+
+  it("the closed dock can never be reached as a destination again", () => {
+    expect(deliveryDock({ pickupFrom: CLOSED }, docks("Emser Tile"), normLoc).label).toBe(NORCROSS);
+    expect(deliveryDock({ pickupFrom: "Roswell" }, docks("Emser Tile"), normLoc).label).toBe(NORCROSS);
   });
 });

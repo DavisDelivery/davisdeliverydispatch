@@ -840,6 +840,10 @@ function resolveDriverSlug(slug,driversArr){
 const ADDR={
   "Emser Norcross":"5470 Oakbrook Pkwy, Norcross, GA 30093",
   "Emser - Norcross":"5470 Oakbrook Pkwy, Norcross, GA 30093",
+  /* Emser's Roswell branch is closed (see RETIRED_PICKUPS in pickupConfig.js).
+     Its address stays in this book so stops already on the books — a past
+     "Transfer - Roswell", any legacy row saved without its own addr — still
+     resolve an address and a map pin. Nothing offers it as a choice. */
   "Emser Roswell":"250 Hembree Park Drive, Roswell, GA 30076",
   "Transfer - Norcross":"5470 Oakbrook Pkwy, Norcross, GA 30093",
   "Transfer - Roswell":"250 Hembree Park Drive, Roswell, GA 30076",
@@ -986,8 +990,8 @@ const DEFAULT_INSTRUCTIONS={
 const getDefaultInstr=(s)=>DEFAULT_INSTRUCTIONS[s]||"";
 
 const CUSTOMERS={
-"Emser Tile":{rate_type:"hourly",rate:102.50,min_hours:4,pickup:"Norcross &/or Roswell",note:"$102.50/hr, 4hr min",
-deliveries:["AFDC Flooring Attic","Advanced Flooring Design - Mableton","American Flooring Services","Atlanta Flooring - Suwanee","Atlanta West - Lithia Springs","BEC - Alpharetta","Britts - Lawrenceville","Builders Floor Coverings - Decatur","Construction Resources - Decatur","D3 - Woodstock","Dalton Carpet Outlet - Smyrna","DCO Athens","DCO Eatonton","DCO Lakes Pkwy","DCO Smyrna","DCO Tech Dr - Lawrenceville","Drop Ship Liftgate","Elite Flooring - Norcross","Flooring Design Group - Doraville","Floorworx - Norcross","Gel & Associates - Atlanta","Hillman - Sugar Hill","Idlewood - Norcross","JSJ/ProSource - Marietta","Madison Flooring Group","NE Corner - Flowery Branch","NOCO Contracting","Peachwood Floor Covering","Precision Flooring - Norcross","Premier - Suwanee","Prestigious - Alpharetta","ProSource - Marietta","ProSource - Norcross","SE Commercial - Woodstock","Sherwin Williams - Norcross","Sherwin Williams - Smyrna","Stocco - Alpharetta","Strathmore - Atlanta","Transfer - Norcross","Transfer - Roswell","Valufloor - Doraville","Vanguard - Norcross"]},
+"Emser Tile":{rate_type:"hourly",rate:102.50,min_hours:4,pickup:"Norcross",note:"$102.50/hr, 4hr min",
+deliveries:["AFDC Flooring Attic","Advanced Flooring Design - Mableton","American Flooring Services","Atlanta Flooring - Suwanee","Atlanta West - Lithia Springs","BEC - Alpharetta","Britts - Lawrenceville","Builders Floor Coverings - Decatur","Construction Resources - Decatur","D3 - Woodstock","Dalton Carpet Outlet - Smyrna","DCO Athens","DCO Eatonton","DCO Lakes Pkwy","DCO Smyrna","DCO Tech Dr - Lawrenceville","Drop Ship Liftgate","Elite Flooring - Norcross","Flooring Design Group - Doraville","Floorworx - Norcross","Gel & Associates - Atlanta","Hillman - Sugar Hill","Idlewood - Norcross","JSJ/ProSource - Marietta","Madison Flooring Group","NE Corner - Flowery Branch","NOCO Contracting","Peachwood Floor Covering","Precision Flooring - Norcross","Premier - Suwanee","Prestigious - Alpharetta","ProSource - Marietta","ProSource - Norcross","SE Commercial - Woodstock","Sherwin Williams - Norcross","Sherwin Williams - Smyrna","Stocco - Alpharetta","Strathmore - Atlanta","Transfer - Norcross","Valufloor - Doraville","Vanguard - Norcross"]},
 "Florida Tile":{rate_type:"flat",pickup:"Norcross",fuel_surcharge:0.15,note:"Flat rate + 15% fuel (separate)",
 deliveries:[{s:"3 Little Dogs - Cumming",r:200},{s:"Atlanta West - Lithia Springs",r:200},{s:"BEC - Alpharetta",r:175},{s:"Britts - Lawrenceville",r:125},{s:"Builders Floor Coverings - Decatur",r:175},{s:"Construction Resources - Decatur",r:175},{s:"DCO Lakes Pkwy - Lawrenceville",r:125},{s:"DCO Tech Dr - Lawrenceville",r:125},{s:"Floor Works - Dallas",r:250},{s:"Hillman - Sugar Hill",r:150},{s:"JSJ/ProSource - Marietta",r:150},{s:"Moda",r:150},{s:"NE Corner - Flowery Branch",r:150},{s:"Precision Flooring - Norcross",r:125},{s:"Premier - Suwanee",r:125},{s:"ProSource - Norcross",r:125},{s:"Remodel Republic",r:150},{s:"SE Commercial - Woodstock",r:175},{s:"SE Southern Surfaces - Buford",r:150,lg:true,addr:"4550 Atwater Court, Suite 211, Buford, GA 30518"},{s:"Tile House",r:175},{s:"Vanguard - Norcross",r:125}]},
 "Specialty":{rate_type:"flat",pickup:"Norcross",fuel_included:true,note:"Flat rate (15% fuel included)",priority:true,priorityNote:"Be on dock first thing",
@@ -4490,11 +4494,11 @@ const autoDeliverAfter=(cust==="Specialty"&&!ex.dueBy)?"Pickup 7:30 AM — Speci
 const imetcoPU=cust==="IMETCO"&&IMETCO_PICKUP_MAP[stop]?IMETCO_PICKUP_MAP[stop]:null;
 const isQuoteCust=(cust==="Quote Delivery"||cust==="One-Off Delivery");
 const defaultInstr=isQuoteCust?"BOL & Pictures must be sent back via Email":instrForStop;
-/* selPickup is the user's Norcross/Roswell toggle — only meaningful for
-   customers that actually have multiple pickup sources (Emser Tile,
-   Traditions in Tile). For single-source customers like MM Systems or
-   Florida Tile, falling through to selPickup stamps the wrong location
-   (e.g. "MM Systems — Roswell" when MM Systems only ships from
+/* selPickup is the user's dock toggle — only meaningful for customers that
+   actually have multiple pickup sources (Traditions in Tile, IMETCO; Emser
+   left that set when Roswell closed). For single-source customers like MM
+   Systems or Florida Tile, falling through to selPickup stamps the wrong
+   location (e.g. "MM Systems — Alpharetta" when MM Systems only ships from
    Pendergrass). Gate the fallback on multi-source. */
 const custPickupSources=PICKUP_SOURCES.filter(ps=>ps.customer===cust);
 const isMultiSourceCust=custPickupSources.length>1;
@@ -5756,7 +5760,7 @@ WEIGHT FORMAT RULES:
 
 Match stop names to known customers: AFD = "Atlanta Flooring - Suwanee", ELITE = "Elite Flooring - Norcross", FWORX = "Floorworx - Norcross", IDLEWOOD = "Idlewood - Norcross", VALUFLOR = "Valufloor - Doraville", BEC = "BEC - Alpharetta", PEACHWOOD = "Peachwood Floor Covering", AMERICAN FLOORING = "American Flooring Services", DCO EATONTON or DALTON CARPET ONE EATONTON = "DCO Eatonton", DCO LAWRENCEVILLE or DALTON CARPET = "DCO Tech Dr - Lawrenceville", DCO LAKES or DCO LAKES PKWY = "DCO Lakes Pkwy", DCO SMYRNA or DALTON CARPET OUTLET = "Dalton Carpet Outlet - Smyrna", DCO ATHENS = "DCO Athens", HILLMAN = "Hillman - Sugar Hill", BRITTS = "Britts - Lawrenceville", STOCCO = "Stocco - Alpharetta", NE CORNER = "NE Corner - Flowery Branch", PREMIER = "Premier - Suwanee", PROSOURCE = varies by location, VANGUARD = "Vanguard - Norcross", SE COMMERCIAL = "SE Commercial - Woodstock", PRECISION = "Precision Flooring - Norcross", ATL WEST = "Atlanta West - Lithia Springs", ATL FLOORING = "Atlanta Flooring - Suwanee", SHERWIN = varies by location, GEL = "Gel & Associates - Atlanta", STRATHMORE = "Strathmore - Atlanta", FLOORING DESIGN = "Flooring Design Group - Doraville", D3 = "D3 - Woodstock", PRESTIGIOUS = "Prestigious - Alpharetta", MADISON = "Madison Flooring Group", CONSTRUCTION RESOURCES = "Construction Resources - Decatur", BFC = "Builders Floor Coverings - Decatur", BUILDERS = "Builders Floor Coverings - Decatur", NOCO = "NOCO Contracting", PEACHWOOD SUWANEE = "Peachwood Floor Covering", ADVANCE = "Advanced Flooring Design - Mableton", ADV FLOORING = "Advanced Flooring Design - Mableton".
 CRITICAL: The "stop" field in JSON MUST use the EXACT stop name from the lists above (e.g. "DCO Eatonton" NOT "Dalton Carpet One - Eatonton"). These exact names are required for map markers and address lookup to work.
-Note which pickup location (Norcross or Roswell) each stop comes from. Stops listed under "ROSWELL:" are from Roswell pickup; all others default to Norcross. If a stop appears under BOTH Norcross and Roswell sections, list it twice with the appropriate pickup noted.
+Emser ships from Norcross only — its Roswell branch is closed. Ignore any "ROSWELL:" heading on an older sheet and treat every stop under it as Norcross; never emit Roswell as a pickup location. A stop listed under both headings is ONE stop, not two.
 
 When suggesting route orders, ALWAYS show time constraints first, then order remaining stops by geographic proximity in the Atlanta metro.
 If two stops have conflicting time windows, flag the conflict clearly before suggesting a route.
@@ -7440,8 +7444,8 @@ style={{background:isDrgOver?"#dcfce7":isDrgSrc?"#fef9c3":done?"#f0fdf4":onSite?
 {/* Inline pickup-location picker for the Unassigned panel — same control
    ManifestStop has, but this render path (the desktop Unassigned card)
    never had it, so an ambiguous multi-location pickup showed
-   '⚠ pick location' with no way to pick. Now Chad can set Norcross vs
-   Roswell (etc.) right here before assigning. */}
+   '⚠ pick location' with no way to pick. Now Chad can set Alpharetta vs
+   Atlanta (etc.) right here before assigning. */}
 {(()=>{
   if(entry.stopType==="pickup")return null;
   const rp=resolvePickupLabel(entry,dl);

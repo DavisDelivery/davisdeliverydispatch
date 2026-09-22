@@ -1,4 +1,4 @@
-import { MULTI_PICKUP } from "./pickupConfig.js";
+import { MULTI_PICKUP, PICKUP_SOURCES, retiredPickup, normLoc as cfgNormLoc } from "./pickupConfig.js";
 /* manifestLogic.js — pure, side-effect-free manifest data logic.
 
    Extracted from App.jsx so it can be unit-tested in isolation (App.jsx loads
@@ -400,19 +400,38 @@ export function sanitizeEntry(e){
   const safeStr=v=>typeof v==="string"?v:(v==null?"":String(v));
   const safeNum=v=>typeof v==="number"&&isFinite(v)?v:(parseFloat(v)||0);
   const safeStrOrNull=v=>typeof v==="string"?v:null;
+  /* ── A closed dock heals to its replacement ──────────────────────────────
+     Retiring a dock (RETIRED_PICKUPS) does not retire the orders that name it.
+     Stored deliveries still carry its `pickupFrom`, and auto pickup cards
+     generated there still carry its `stop` and address. Left as they are, the
+     engine files those deliveries under the supplier's remaining dock and
+     builds a card there while the old card sits beside it under a location
+     nothing else recognises — two pickups for one load, one of them a shut
+     building. This is the one seam every read of Firestore passes through
+     (both dispatcher subscriptions, the driver's phone, the quote unplan
+     read), so healing here fixes a day the first time any screen opens it,
+     and the next save writes the repair back.
+
+     Only AUTO pickups are relocated. A MANUAL pickup someone scheduled at the
+     closed dock is a plan that is now wrong, and quietly moving it would hide
+     that — it comes through untouched, for the dispatcher to delete. Its
+     delivery's `pickupFrom` still heals, so the card the engine draws is
+     right either way. */
+  const isAutoPickup=e.stopType==="pickup"&&!e.manualPickup;
+  const moved=retiredPickup(e.customer,e.pickupFrom)||(isAutoPickup?retiredPickup(e.customer,e.stop):null);
   return{
     ...e,
     id:e.id,
-    stop:safeStr(e.stop),
+    stop:(isAutoPickup&&moved)?moved.label:safeStr(e.stop),
     customer:safeStr(e.customer),
-    addr:safeStr(e.addr).replace(/5981 (Live Oak|Oakbrook) P(ark)?w(a)?y/i,"5470 Oakbrook Pkwy"),
+    addr:((isAutoPickup&&moved)?moved.addr:safeStr(e.addr)).replace(/5981 (Live Oak|Oakbrook) P(ark)?w(a)?y/i,"5470 Oakbrook Pkwy"),
     note:safeStrOrNull(e.note),
     instructions:safeStrOrNull(e.instructions),
     shipPlan:safeStrOrNull(e.shipPlan),
     refNum:safeStrOrNull(e.refNum),
     dueBy:safeStrOrNull(e.dueBy),
     pickupDueBy:safeStrOrNull(e.pickupDueBy),
-    pickupFrom:safeStrOrNull(e.pickupFrom),
+    pickupFrom:moved?moved.label:safeStrOrNull(e.pickupFrom),
     eta:safeStrOrNull(e.eta),
     etaDest:safeStrOrNull(e.etaDest),
     stopType:safeStr(e.stopType),
@@ -1563,6 +1582,28 @@ export const resolvePickupLabel=(entry,siblings)=>{
     const def=locs.find(l=>l.default);
     if(def)return{text:def.label,ambiguous:false,defaulted:true};
     return{text:multiCust+" — ⚠ pick location",ambiguous:true};
+  }
+  /* ── One dock ────────────────────────────────────────────────────────────
+     A supplier with a single dock has nothing to choose, but the card should
+     still say WHERE — "Pickup from Emser - Norcross", not a bare "Emser Tile".
+     It also has to agree with the card the engine draws, which deliveryDock
+     always resolves to that one dock; a label that says less than the card is
+     how the load order went missing in the first place.
+
+     Reached when the origin is unnamed, or names this very dock in any of its
+     stored spellings ("Norcross", "Emser - Norcross", a healed retirement).
+     An origin somewhere else — a warehouse the supplier does not own — falls
+     through untouched below, because that freight genuinely is not on the
+     dock. */
+  const ownDocks=PICKUP_SOURCES.filter(s=>s&&s.customer===cust);
+  if(ownDocks.length===1&&(!pf||cfgNormLoc(pf)===cfgNormLoc(ownDocks[0].label))){
+    /* Nothing named, but a manual pickup on this load may already say where
+       the load comes from — the dispatcher's answer beats the dock. */
+    if(!pf){
+      const manualSrc=manualPickupOrigin(entry,siblings);
+      if(manualSrc)return{text:manualSrc,ambiguous:false};
+    }
+    return{text:ownDocks[0].label,ambiguous:false};
   }
   /* Single-location or no special handling — original behavior. */
   if(pf&&pf.includes(" - "))return{text:pf,ambiguous:false};

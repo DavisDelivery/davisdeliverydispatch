@@ -3,12 +3,15 @@
    instead of a hand-copied fixture that would drift out of sync with it. */
 
 export const PICKUP_SOURCES=[
-/* `default:true` — where this supplier ships from unless told otherwise.
-   Emser runs almost everything out of Norcross, so an unspecified Emser load
-   resolves there instead of demanding a dock choice on every card. Docks
-   without the flag still prompt. */
+/* `default:true` — where this supplier ships from unless told otherwise. A
+   supplier with only one dock resolves there whatever the flag says; the flag
+   matters when there are several and an unspecified load must still land
+   somewhere instead of demanding a dock choice on every card. Multi-dock
+   suppliers without the flag (Traditions, IMETCO) still prompt. */
 {customer:"Emser Tile",label:"Emser - Norcross",addr:"5470 Oakbrook Pkwy, Norcross, GA 30093",default:true},
-{customer:"Emser Tile",label:"Emser - Roswell",addr:"250 Hembree Park Drive, Roswell, GA 30076"},
+/* Emser's Roswell branch closed — see RETIRED_PICKUPS at the bottom of this
+   file. `default:true` stays on Norcross: it is inert while Emser has one dock,
+   and it is the answer already written down if a second one ever opens. */
 {customer:"Florida Tile",label:"Florida Tile - Norcross",addr:"1455 Oakbrook Drive, Suite 100, Norcross, GA 30093"},
 {customer:"Specialty",label:"Specialty - Norcross",addr:"1275 Oakbrook Drive, Suite D, Norcross, GA 30093"},
 {customer:"IMETCO",label:"IMETCO - Norcross",addr:"4648 South Old Peachtree Road, Norcross, GA 30071"},
@@ -51,3 +54,47 @@ export const normLoc=(v)=>{
   return parts[parts.length-1].trim().toLowerCase();
 };
 
+
+/* ── Docks a supplier has CLOSED ─────────────────────────────────────────────
+   A retired dock is recorded here rather than just deleted from PICKUP_SOURCES,
+   because deleting it does not delete the orders that name it. Firestore holds
+   deliveries whose `pickupFrom` still reads "Emser - Roswell", auto pickup
+   cards generated at that dock, and phones holding yesterday's copy of both.
+
+   With the dock merely gone from the list, every one of those rows becomes the
+   disagreement this codebase keeps getting bitten by: `deliveryDock` no longer
+   recognises the name, so the engine files the delivery under the supplier's
+   remaining dock and builds a card there — while the delivery's own label keeps
+   printing the closed dock, and the stale card keys on a different location so
+   nothing collapses it. The driver reads two pickups for one load, one of them
+   at a shut building with a real address on it.
+
+   So a retirement names its replacement, and sanitizeEntry rewrites stored rows
+   to it on the way in. `movedTo` must be a label that is still in
+   PICKUP_SOURCES. */
+export const RETIRED_PICKUPS=[
+  {customer:"Emser Tile",label:"Emser - Roswell",movedTo:"Emser - Norcross"},
+];
+
+/* The dock a retired location now resolves to, or null if nothing is retired
+   for this value. Matches on the NORMALIZED location, so every stored spelling
+   ("Roswell", "Emser - Roswell", "Emser Tile — Roswell") heals alike.
+
+   It matches when the entry belongs to that supplier, OR when the stored value
+   names the supplier itself — a Quote Delivery collected at "Emser - Roswell"
+   carries the closed dock under a customer that owns no docks at all. A bare
+   "Roswell" on some other customer is left alone: plenty of places are in
+   Roswell, and only this supplier's dock is the one that shut. */
+export const retiredPickup=(customer,value)=>{
+  const loc=normLoc(value);
+  if(!loc)return null;
+  const raw=String(value==null?"":value).trim().toLowerCase();
+  const hit=RETIRED_PICKUPS.find(r=>{
+    if(normLoc(r.label)!==loc)return false;
+    if(r.customer===customer)return true;
+    const supplier=String(r.label).split(/\s+[-–—]\s+/)[0].trim().toLowerCase();
+    return !!supplier&&raw.includes(supplier);
+  });
+  if(!hit)return null;
+  return PICKUP_SOURCES.find(s=>s.label===hit.movedTo)||null;
+};
