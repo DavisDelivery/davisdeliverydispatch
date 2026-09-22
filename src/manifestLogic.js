@@ -51,7 +51,17 @@ export const dedupeAutoPickups=(entries,opts)=>{
      rebuildPickupsFor and the load-order note already key. With no opts it falls
      back to a lowercased raw string (back-compatible with existing callers). */
   const normLoc=opts&&typeof opts.normLoc==="function"?opts.normLoc:(s)=>String(s||"").trim().toLowerCase();
-  const dock=(e)=>normLoc(e.pickupFrom)||normLoc(e.stop);
+  /* A card at a dock that has CLOSED keys on the dock that took its freight,
+     so the leftover card and the one the supplier's open dock needs collapse
+     into one instead of standing side by side saying the same thing twice.
+     Only for cards nobody has worked: a card the driver stamped at the old
+     dock keys on that dock and is never folded into another, because it is
+     the record of a trip that was made. */
+  const dock=(e)=>{
+    const raw=e.pickupFrom||e.stop;
+    const moved=isWorked(e)?null:retiredPickup(e.customer,raw);
+    return normLoc(moved?moved.label:raw);
+  };
   const seen=new Set();
   let changed=false;
   const out=entries.filter(e=>{
@@ -400,38 +410,26 @@ export function sanitizeEntry(e){
   const safeStr=v=>typeof v==="string"?v:(v==null?"":String(v));
   const safeNum=v=>typeof v==="number"&&isFinite(v)?v:(parseFloat(v)||0);
   const safeStrOrNull=v=>typeof v==="string"?v:null;
-  /* ── A closed dock heals to its replacement ──────────────────────────────
-     Retiring a dock (RETIRED_PICKUPS) does not retire the orders that name it.
-     Stored deliveries still carry its `pickupFrom`, and auto pickup cards
-     generated there still carry its `stop` and address. Left as they are, the
-     engine files those deliveries under the supplier's remaining dock and
-     builds a card there while the old card sits beside it under a location
-     nothing else recognises — two pickups for one load, one of them a shut
-     building. This is the one seam every read of Firestore passes through
-     (both dispatcher subscriptions, the driver's phone, the quote unplan
-     read), so healing here fixes a day the first time any screen opens it,
-     and the next save writes the repair back.
-
-     Only AUTO pickups are relocated. A MANUAL pickup someone scheduled at the
-     closed dock is a plan that is now wrong, and quietly moving it would hide
-     that — it comes through untouched, for the dispatcher to delete. Its
-     delivery's `pickupFrom` still heals, so the card the engine draws is
-     right either way. */
-  const isAutoPickup=e.stopType==="pickup"&&!e.manualPickup;
-  const moved=retiredPickup(e.customer,e.pickupFrom)||(isAutoPickup?retiredPickup(e.customer,e.stop):null);
+  /* A closed dock (RETIRED_PICKUPS) is NOT rewritten here. sanitizeEntry runs
+     on every read of Firestore, including days long finished, and whatever it
+     changes the next save persists — so healing here would quietly restate
+     where past freight was collected. A stop that already happened at a dock
+     that has since shut still says so. The retirement is applied where it
+     belongs instead: to work not yet done, at the moment it is resolved or
+     drawn (see resolvePickupLabel and deliveryDock). */
   return{
     ...e,
     id:e.id,
-    stop:(isAutoPickup&&moved)?moved.label:safeStr(e.stop),
+    stop:safeStr(e.stop),
     customer:safeStr(e.customer),
-    addr:((isAutoPickup&&moved)?moved.addr:safeStr(e.addr)).replace(/5981 (Live Oak|Oakbrook) P(ark)?w(a)?y/i,"5470 Oakbrook Pkwy"),
+    addr:safeStr(e.addr).replace(/5981 (Live Oak|Oakbrook) P(ark)?w(a)?y/i,"5470 Oakbrook Pkwy"),
     note:safeStrOrNull(e.note),
     instructions:safeStrOrNull(e.instructions),
     shipPlan:safeStrOrNull(e.shipPlan),
     refNum:safeStrOrNull(e.refNum),
     dueBy:safeStrOrNull(e.dueBy),
     pickupDueBy:safeStrOrNull(e.pickupDueBy),
-    pickupFrom:moved?moved.label:safeStrOrNull(e.pickupFrom),
+    pickupFrom:safeStrOrNull(e.pickupFrom),
     eta:safeStrOrNull(e.eta),
     etaDest:safeStrOrNull(e.etaDest),
     stopType:safeStr(e.stopType),
@@ -1075,6 +1073,20 @@ export const buildMergedEntries=(fbEntriesRaw,localEntriesRaw,{isDriver=false,ca
   return normalizeOrder(reconciled,0,multiSource?{multiSource,normLoc}:undefined);
 };
 
+/* Has a driver touched this stop yet?
+
+   This is the line between a plan and a record, and the retirement of a dock
+   turns on it. A stop nobody has worked is intention: if it still names a dock
+   that has closed, the intention is wrong and the screen must show where the
+   freight actually is. A stop with a stamp on it is history: that truck really
+   did stand at that dock, and nothing here may restate it — not the label, not
+   the card, and above all not the stored row.
+
+   Deliberately generous about what counts as touched. Any stamp at all means
+   the stop was worked, because the cost of being wrong runs one way: quietly
+   re-describing something that already happened. */
+export const isWorked=(e)=>!!e&&(e.status==="arrived"||e.status==="departed"||!!e.arrivedAt||!!e.departedAt);
+
 /* Which of a supplier's docks a delivery's freight comes off — the ONE rule the
    engine, the live load-order note and (through the label) the card all share.
    A delivery names its origin in `pickupFrom`; when that resolves to one of the
@@ -1090,7 +1102,13 @@ export const deliveryDock=(e,puSrcs,normLoc)=>{
   if(!Array.isArray(puSrcs)||!puSrcs.length)return null;
   const nl=typeof normLoc==="function"?normLoc:(s)=>String(s||"").trim().toLowerCase();
   const def=puSrcs.find(s=>s&&s.default)||puSrcs[0];
-  const raw=(e&&e.pickupFrom)||String(def.label||"").split(" - ").pop();
+  /* A dock the supplier has closed is not one of its docks any more, so the
+     question "which dock is this" has a different answer than it used to: the
+     one that took the closed dock's freight. Without this the freight would
+     fall to the supplier's default, which is only the same place by luck.
+     Nothing is written — this decides which card to draw, not what happened. */
+  const retired=e?retiredPickup(e.customer,e.pickupFrom):null;
+  const raw=(retired&&retired.label)||(e&&e.pickupFrom)||String(def.label||"").split(" - ").pop();
   const loc=nl(raw);
   return puSrcs.find(s=>s&&nl(s.label)===loc)||def;
 };
@@ -1351,6 +1369,17 @@ export const LOAD_ORDER_SEP=" | ";
 const _loadOrderTail=/\s*\|\s*Load order:.*$/;
 export const withLiveLoadOrder=(e,entries,deps)=>{
   if(!e||e.stopType!=="pickup")return e;
+  /* An auto card generated at a dock that has since closed, on a load nobody
+     has worked yet, is a trip to a shut building. It is DISPLAYED at the dock
+     that took the freight — title and address both — so neither the board nor
+     the phone can send anyone there. The stored card keeps its own name: this
+     wrapper is read-only, it runs on the way to the screen, and the save path
+     never sees its output. A card the driver already stamped is left exactly
+     as it is, because that trip was made. */
+  if(!e.manualPickup&&!isWorked(e)){
+    const moved=retiredPickup(e.customer,e.pickupFrom||e.stop);
+    if(moved&&moved.label!==e.stop)e={...e,stop:moved.label,addr:moved.addr,pickupFrom:moved.label};
+  }
   const live=liveLoadOrderNote(e,entries,deps);
   if(!e.manualPickup){
     if(live)return e.note===live?e:{...e,note:live};
@@ -1552,8 +1581,17 @@ export const applyDropReorder=(all,drvId,srcId,srcIdxFallback,toIdx)=>{
    answers — the "⚠ pick location" prompt with no right answer. Extracted so the
    label can be checked against the pickup cards on the same board. */
 export const resolvePickupLabel=(entry,siblings)=>{
-  const pf=entry.pickupFrom;
+  let pf=entry.pickupFrom;
   const cust=entry.customer;
+  /* A stop still to be run that names a dock which has closed reads as the
+     dock that took its freight — the driver has to be sent somewhere that is
+     open. A stop already worked keeps the name it was worked under: that trip
+     happened, and the card is the record of it. Only the reading changes;
+     `entry.pickupFrom` is never touched. */
+  if(pf&&!isWorked(entry)){
+    const moved=retiredPickup(cust,pf);
+    if(moved)pf=moved.label;
+  }
   /* Which multi-pickup customer is this stop tied to? It can be named either
      in `customer` (e.g. a Traditions delivery) or carried in `pickupFrom`
      (e.g. a Quote Delivery whose load originates at Traditions). */

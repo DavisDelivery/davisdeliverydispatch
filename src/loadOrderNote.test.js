@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   liveLoadOrderNote, deliveryDock, rebuildPickupsForPure, buildMergedEntries,
   reapOrphanAutoPickups, applyDropReorder, dedupeIds, dedupeAutoPickups,
-  sanitizeEntry, resolvePickupLabel,
+  sanitizeEntry, resolvePickupLabel, withLiveLoadOrder,
 } from "./manifestLogic.js";
 import { PICKUP_SOURCES, MULTI_PICKUP, normLoc, RETIRED_PICKUPS, retiredPickup } from "./pickupConfig.js";
 
@@ -223,17 +223,32 @@ describe("save merge — the reaper agrees with the engine", () => {
 
 /* ── A dock the supplier closed ──────────────────────────────────────────────
    Emser's Roswell branch shut. Taking it out of PICKUP_SOURCES is the easy
-   half; the hard half is the orders already saved against it. Those rows
-   outlive the config, and until they are healed the board disagrees with
-   itself about where the freight is — the exact shape of the bug this file
-   exists to pin down. */
+   half; the orders already saved against it are the half that decides whether
+   a driver is sent to a locked door.
+
+   The rule those orders are judged by is whether anyone has worked them. A
+   stop still to be run is a plan, and a plan pointing at a closed dock is
+   simply wrong — every screen shows it at the dock that took the freight. A
+   stop with a driver's stamp on it is a record of a trip that was made, and
+   nothing here may restate it. Above all, none of this writes: the stored row
+   is the same bytes after a read as before it, so a finished day keeps saying
+   what happened. */
 describe("retired dock — Emser Roswell", () => {
   const CLOSED = "Emser - Roswell";
+  const HEMBREE = "250 Hembree Park Drive, Roswell, GA 30076";
+  const WORKED = { status: "departed", departedAt: "10:14 AM" };
+  const rosDel = (o = {}) => del({ stop: "DCO Smyrna", pickupFrom: CLOSED, addr: "3500 Highlands Pkwy", ...o });
+  const rosCard = (o = {}) => ({ id: genId(), stopType: "pickup", customer: "Emser Tile", stop: CLOSED,
+    pickupFrom: "Roswell", addr: HEMBREE, driverId: 5, loadNum: 1, baseRate: 0, weight: 0, ...o });
+  /* The dispatcher board's own read pipeline, in order. */
+  const shown = (dl) => {
+    const es = reapOrphanAutoPickups(dedupeAutoPickups(dl, reapOpts), reapOpts);
+    return es.map((e) => withLiveLoadOrder(e, es, noteDeps));
+  };
 
   it("is gone from the dock list, and leaves Emser with a single dock", () => {
     expect(PICKUP_SOURCES.filter((s) => s.customer === "Emser Tile").map((s) => s.label)).toEqual([NORCROSS]);
     expect(PICKUP_SOURCES.some((s) => /roswell/i.test(s.label))).toBe(false);
-    /* One dock means nothing to choose, so Emser is no longer a prompting supplier. */
     expect(MULTI_PICKUP["Emser Tile"]).toBeUndefined();
   });
 
@@ -248,42 +263,73 @@ describe("retired dock — Emser Roswell", () => {
     expect(retiredPickup("Emser Tile", "Norcross")).toBe(null);
   });
 
-  it("a delivery still naming it collects at Norcross, and says so", () => {
-    const stored = sanitizeEntry(del({ stop: "DCO Smyrna", pickupFrom: CLOSED }));
-    expect(stored.pickupFrom).toBe(NORCROSS);
-    expect(deliveryDock(stored, docks("Emser Tile"), normLoc).label).toBe(NORCROSS);
-    expect(resolvePickupLabel(stored, [stored]).text).toBe(NORCROSS);
+  /* ── The record is never touched ───────────────────────────────────────── */
+  it("reading a stored row never moves it off the closed dock — worked or not", () => {
+    /* sanitizeEntry still coerces types (an absent pickupFrom becomes null);
+       what it must never do is move the stop somewhere else. */
+    const where = (e) => ({ stop: e.stop, pickupFrom: e.pickupFrom ?? null, addr: e.addr });
+    [rosDel(), rosDel(WORKED), rosCard(), rosCard(WORKED), mpu({ stop: CLOSED, addr: HEMBREE })].forEach((row) => {
+      expect(where(sanitizeEntry(row))).toEqual(where(row));
+    });
   });
 
-  it("a quote collected there heals too, though its customer owns no docks", () => {
-    const q = sanitizeEntry(del({ customer: "Quote Delivery", stop: "Smith Residence", pickupFrom: CLOSED }));
-    expect(q.pickupFrom).toBe(NORCROSS);
+  /* ── Work still to be done points at the open dock ─────────────────────── */
+  it("an unworked delivery naming it collects at Norcross, and says so", () => {
+    const d = rosDel();
+    expect(deliveryDock(d, docks("Emser Tile"), normLoc).label).toBe(NORCROSS);
+    expect(resolvePickupLabel(d, [d]).text).toBe(NORCROSS);
+    expect(d.pickupFrom).toBe(CLOSED); /* the row itself is unchanged */
   });
 
-  it("a stale card generated at the closed dock moves to Norcross and collapses into the real one", () => {
-    const live1 = rebuildPickupsForPure([del({ stop: "A" }), del({ stop: "B" })], "Emser Tile", deps());
-    const stale = { id: "old_ros", stopType: "pickup", customer: "Emser Tile", stop: CLOSED, pickupFrom: "Roswell",
-      addr: "250 Hembree Park Drive, Roswell, GA 30076", driverId: 5, loadNum: 1, baseRate: 0, weight: 0 };
-    const ingested = [...live1, stale].map(sanitizeEntry);
-    /* Healed: no row anywhere still points at the closed building. */
-    expect(ingested.some((e) => /roswell/i.test(e.stop) || /roswell/i.test(e.pickupFrom || "") || /Hembree/i.test(e.addr))).toBe(false);
-    /* And the two cards for one dock become one. */
-    expect(cards(dedupeAutoPickups(ingested, { normLoc })).length).toBe(1);
+  it("an unworked card at the closed dock is shown at Norcross, address and all", () => {
+    const board = shown([rosCard(), rosDel(), del({ stop: "BEC - Alpharetta", pickupFrom: CLOSED })]);
+    const pu = board.find((e) => e.stopType === "pickup");
+    expect(pu.stop).toBe(NORCROSS);
+    expect(pu.addr).toBe(docks("Emser Tile")[0].addr);
+    expect(pu.addr).not.toContain("Hembree");
+    expect(pu.note).toBe("Load order: BEC - Alpharetta, DCO Smyrna");
   });
 
-  it("a MANUAL pickup someone scheduled there is left alone, and does not stand in for the dock", () => {
-    const manual = mpu({ stop: CLOSED, addr: "250 Hembree Park Drive, Roswell, GA 30076", note: "Return pallets" });
-    const kept = sanitizeEntry(manual);
-    expect(kept.stop).toBe(CLOSED);          /* still visible, for the dispatcher to delete */
-    expect(kept.addr).toContain("Hembree");
-    /* It must not suppress the Norcross card the deliveries actually need. */
-    const all = rebuildPickupsForPure([kept, del({ stop: "A" })], "Emser Tile", deps());
-    expect(cards(all).map((p) => p.stop)).toEqual([NORCROSS]);
-    expect(live(card(all, NORCROSS), all)).toBe("Load order: A");
+  it("the leftover card and the open dock's card collapse into one", () => {
+    const norCard = { ...rosCard(), id: "pu_nor", stop: NORCROSS, pickupFrom: "Norcross", addr: docks("Emser Tile")[0].addr };
+    const board = shown([rosCard(), rosDel(), norCard, del({ stop: "B", pickupFrom: "Norcross" })]);
+    expect(board.filter((e) => e.stopType === "pickup").map((p) => p.stop)).toEqual([NORCROSS]);
   });
 
-  it("the closed dock can never be reached as a destination again", () => {
-    expect(deliveryDock({ pickupFrom: CLOSED }, docks("Emser Tile"), normLoc).label).toBe(NORCROSS);
-    expect(deliveryDock({ pickupFrom: "Roswell" }, docks("Emser Tile"), normLoc).label).toBe(NORCROSS);
+  /* ── What already happened keeps saying so ─────────────────────────────── */
+  it("a delivery already worked out of it still reads the dock it was worked from", () => {
+    const d = rosDel(WORKED);
+    expect(resolvePickupLabel(d, [d]).text).toBe(CLOSED);
+  });
+
+  it("a card the driver stamped there keeps its name and its address", () => {
+    const board = shown([rosCard(WORKED), rosDel(WORKED)]);
+    const pu = board.find((e) => e.stopType === "pickup");
+    expect(pu.stop).toBe(CLOSED);
+    expect(pu.addr).toBe(HEMBREE);
+  });
+
+  it("a worked card is never folded into the open dock's card", () => {
+    const norCard = { ...rosCard(), id: "pu_nor", stop: NORCROSS, pickupFrom: "Norcross", addr: docks("Emser Tile")[0].addr };
+    const board = shown([rosCard(WORKED), rosDel(WORKED), norCard, del({ stop: "B", pickupFrom: "Norcross" })]);
+    expect(board.filter((e) => e.stopType === "pickup").map((p) => p.stop).sort()).toEqual([NORCROSS, CLOSED]);
+  });
+
+  /* ── The dispatcher's own plans are theirs to change ───────────────────── */
+  it("a MANUAL pickup scheduled there is left alone, and does not stand in for the dock", () => {
+    const manual = mpu({ stop: CLOSED, addr: HEMBREE, note: "Return pallets" });
+    expect(sanitizeEntry(manual).stop).toBe(CLOSED);
+    expect(sanitizeEntry(manual).addr).toBe(HEMBREE);
+    const all = rebuildPickupsForPure([manual, del({ stop: "A" })], "Emser Tile", deps());
+    const board = shown(all);
+    expect(board.find((e) => e.manualPickup).stop).toBe(CLOSED); /* still visible, to be deleted */
+    expect(cards(board).map((p) => p.stop)).toEqual([NORCROSS]);
+    expect(live(card(board, NORCROSS), board)).toBe("Load order: A");
+  });
+
+  it("one edit rebuilds a day planned against it onto the open dock", () => {
+    const rebuilt = rebuildPickupsForPure([rosCard(), rosDel(), del({ stop: "B", pickupFrom: CLOSED })], "Emser Tile", deps());
+    expect(cards(rebuilt).map((p) => p.stop)).toEqual([NORCROSS]);
+    expect(cards(rebuilt)[0].addr).toBe(docks("Emser Tile")[0].addr);
   });
 });
