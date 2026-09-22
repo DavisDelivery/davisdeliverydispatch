@@ -60,9 +60,9 @@ cancelBtn2:{background:"#e7e5e4",border:"none",borderRadius:8,padding:"6px 12px"
 greenBtn:{background:"#16a34a",color:"#fff",border:"none",borderRadius:8,padding:"6px 12px",cursor:"pointer",fontSize:12,fontWeight:700},
 inputMb4:{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"7px 10px",fontSize:12,outline:"none",marginBottom:4},
 };
-import { useState, useCallback, useEffect, useRef, Fragment, Component } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef, Fragment, Component } from "react";
 import { PICKUP_SOURCES, MULTI_PICKUP, normLoc as _normLoc } from "./pickupConfig.js";
-import { dedupeIds, dedupeAutoPickups, dedupeGhostDeliveries, dedupeDeliveries, reapOrphanAutoPickups, sanitizeEntry, _mergeEntryDriver, _mergeEntryDispatcher, buildMergedEntries, entrySig, makeTombFilter, makeDocTombFilter, mergeTombstones, vanishedAutoPickups, orderByIds, reconcileDriverRoster, applyDriverRemap, normDriverName, manualPickupCoversDock, allInRate, stripLiftgateFee, resequenceEntries, sortBySeq, normalizeOrder, orderAutoPickupsFirst, manualPickupOrigin, deliveryCollectedOffDock, qualifyPickupName, rebuildPickupsForPure, insertIdxForLoad, applyReassign, applySetLoadNum, reorderDriverBlock as _reorderDriverBlock, applyMoveInDriver, applyReorderDriver, applyDropReorder, resolvePickupLabel, finishingDynamicsFlag, FD_FLAG_COLORS, fdCutoffMins, fmtClock, visibleTruckDriverIds, orderRosterRows } from "./manifestLogic.js";
+import { dedupeIds, dedupeAutoPickups, dedupeGhostDeliveries, dedupeDeliveries, reapOrphanAutoPickups, sanitizeEntry, _mergeEntryDriver, _mergeEntryDispatcher, buildMergedEntries, entrySig, makeTombFilter, makeDocTombFilter, mergeTombstones, vanishedAutoPickups, orderByIds, reconcileDriverRoster, applyDriverRemap, normDriverName, manualPickupCoversDock, allInRate, stripLiftgateFee, resequenceEntries, sortBySeq, normalizeOrder, orderAutoPickupsFirst, manualPickupOrigin, deliveryCollectedOffDock, qualifyPickupName, rebuildPickupsForPure, withLiveLoadOrder, insertIdxForLoad, applyReassign, applySetLoadNum, reorderDriverBlock as _reorderDriverBlock, applyMoveInDriver, applyReorderDriver, applyDropReorder, resolvePickupLabel, finishingDynamicsFlag, FD_FLAG_COLORS, fdCutoffMins, fmtClock, visibleTruckDriverIds, orderRosterRows, mergeDriverLocs, lastKnownLoc, gpsAgeMs, gpsAgeLabel, stopPinFill, isDoneStop, doneStopSvg, DONE_PIN_PX } from "./manifestLogic.js";
 import { diffOrderDocs, orderDocId, ordersParity } from "./ordersStore.js";
 import { FDFlag, useMinuteTick } from "./FDFlag.jsx";
 
@@ -335,7 +335,7 @@ const saveManifestDay=async(wo,sd,entries,callerDriverId,deletedIds,allowEmpty)=
          resurrections, and collapse duplicate auto-pickups. Pure + unit-tested
          in manifestLogic.js (buildMergedEntries) so the concurrency scenarios
          can't silently regress. */
-      const deduped=buildMergedEntries(current?.entries||[],entries||[],{isDriver,callerDriverId,deletedIds,docTombstones:docTombs,multiSource:_reapOpts.multiSource,normLoc:_reapOpts.normLoc});
+      const deduped=buildMergedEntries(current?.entries||[],entries||[],{isDriver,callerDriverId,deletedIds,docTombstones:docTombs,multiSource:_reapOpts.multiSource,normLoc:_reapOpts.normLoc,docksFor:_reapOpts.docksFor});
       /* Normalize photos / signature for write. Bound the TOTAL inline base64
          across the whole doc (not just per-photo) to a budget under Firestore's
          ~1MiB limit — two 700KB fallback photos each pass a per-photo cap yet
@@ -782,6 +782,11 @@ const DAYS = ["Monday","Tuesday","Wednesday","Thursday","Friday"];
 /* -- BRAND COLORS -- */
 const BRAND={main:"#1e5b92",dark:"#134b7f",light:"#357bb7",pale:"#e8f0f8",bg:"#f0f5fa"};
 const DISTANCE_BONUS_STOPS=["DCO Eatonton","DCO Athens"];
+/* Which hourly stops earn Emser's +1h bonuses (distance, liftgate). The
+   continuation half of a split (a second truck for the SAME order) inherits
+   isHourly and the stop name, so every bonus filter counted it a second time —
+   an extra $102.50 on the day for one order. One rule for all of them. */
+const _hourlyBonusEligible=(e)=>!!e&&!!e.isHourly&&!e.splitContinuation;
 const IMETCO_PICKUP_MAP={"IMETCO to Finishing Dynamics":"Norcross","Perfect Edge to IMETCO":"Doraville","Southern Aluminum to IMETCO":"Lithia Springs","Finishing Dynamics to IMETCO":"Villa Rica","Round Trip IMETCO & Finishing Dynamics":"Norcross"};
 /* IMETCO "X to IMETCO" jobs DELIVER to IMETCO's Norcross dock. The pickup leg
    carries the source address (via the pickup source label); the delivery stop's
@@ -835,6 +840,10 @@ function resolveDriverSlug(slug,driversArr){
 const ADDR={
   "Emser Norcross":"5470 Oakbrook Pkwy, Norcross, GA 30093",
   "Emser - Norcross":"5470 Oakbrook Pkwy, Norcross, GA 30093",
+  /* Emser's Roswell branch is closed (see RETIRED_PICKUPS in pickupConfig.js).
+     Its address stays in this book so stops already on the books — a past
+     "Transfer - Roswell", any legacy row saved without its own addr — still
+     resolve an address and a map pin. Nothing offers it as a choice. */
   "Emser Roswell":"250 Hembree Park Drive, Roswell, GA 30076",
   "Transfer - Norcross":"5470 Oakbrook Pkwy, Norcross, GA 30093",
   "Transfer - Roswell":"250 Hembree Park Drive, Roswell, GA 30076",
@@ -981,8 +990,8 @@ const DEFAULT_INSTRUCTIONS={
 const getDefaultInstr=(s)=>DEFAULT_INSTRUCTIONS[s]||"";
 
 const CUSTOMERS={
-"Emser Tile":{rate_type:"hourly",rate:102.50,min_hours:4,pickup:"Norcross &/or Roswell",note:"$102.50/hr, 4hr min",
-deliveries:["AFDC Flooring Attic","Advanced Flooring Design - Mableton","American Flooring Services","Atlanta Flooring - Suwanee","Atlanta West - Lithia Springs","BEC - Alpharetta","Britts - Lawrenceville","Builders Floor Coverings - Decatur","Construction Resources - Decatur","D3 - Woodstock","Dalton Carpet Outlet - Smyrna","DCO Athens","DCO Eatonton","DCO Lakes Pkwy","DCO Smyrna","DCO Tech Dr - Lawrenceville","Drop Ship Liftgate","Elite Flooring - Norcross","Flooring Design Group - Doraville","Floorworx - Norcross","Gel & Associates - Atlanta","Hillman - Sugar Hill","Idlewood - Norcross","JSJ/ProSource - Marietta","Madison Flooring Group","NE Corner - Flowery Branch","NOCO Contracting","Peachwood Floor Covering","Precision Flooring - Norcross","Premier - Suwanee","Prestigious - Alpharetta","ProSource - Marietta","ProSource - Norcross","SE Commercial - Woodstock","Sherwin Williams - Norcross","Sherwin Williams - Smyrna","Stocco - Alpharetta","Strathmore - Atlanta","Transfer - Norcross","Transfer - Roswell","Valufloor - Doraville","Vanguard - Norcross"]},
+"Emser Tile":{rate_type:"hourly",rate:102.50,min_hours:4,pickup:"Norcross",note:"$102.50/hr, 4hr min",
+deliveries:["AFDC Flooring Attic","Advanced Flooring Design - Mableton","American Flooring Services","Atlanta Flooring - Suwanee","Atlanta West - Lithia Springs","BEC - Alpharetta","Britts - Lawrenceville","Builders Floor Coverings - Decatur","Construction Resources - Decatur","D3 - Woodstock","Dalton Carpet Outlet - Smyrna","DCO Athens","DCO Eatonton","DCO Lakes Pkwy","DCO Smyrna","DCO Tech Dr - Lawrenceville","Drop Ship Liftgate","Elite Flooring - Norcross","Flooring Design Group - Doraville","Floorworx - Norcross","Gel & Associates - Atlanta","Hillman - Sugar Hill","Idlewood - Norcross","JSJ/ProSource - Marietta","Madison Flooring Group","NE Corner - Flowery Branch","NOCO Contracting","Peachwood Floor Covering","Precision Flooring - Norcross","Premier - Suwanee","Prestigious - Alpharetta","ProSource - Marietta","ProSource - Norcross","SE Commercial - Woodstock","Sherwin Williams - Norcross","Sherwin Williams - Smyrna","Stocco - Alpharetta","Strathmore - Atlanta","Transfer - Norcross","Valufloor - Doraville","Vanguard - Norcross"]},
 "Florida Tile":{rate_type:"flat",pickup:"Norcross",fuel_surcharge:0.15,note:"Flat rate + 15% fuel (separate)",
 deliveries:[{s:"3 Little Dogs - Cumming",r:200},{s:"Atlanta West - Lithia Springs",r:200},{s:"BEC - Alpharetta",r:175},{s:"Britts - Lawrenceville",r:125},{s:"Builders Floor Coverings - Decatur",r:175},{s:"Construction Resources - Decatur",r:175},{s:"DCO Lakes Pkwy - Lawrenceville",r:125},{s:"DCO Tech Dr - Lawrenceville",r:125},{s:"Floor Works - Dallas",r:250},{s:"Hillman - Sugar Hill",r:150},{s:"JSJ/ProSource - Marietta",r:150},{s:"Moda",r:150},{s:"NE Corner - Flowery Branch",r:150},{s:"Precision Flooring - Norcross",r:125},{s:"Premier - Suwanee",r:125},{s:"ProSource - Norcross",r:125},{s:"Remodel Republic",r:150},{s:"SE Commercial - Woodstock",r:175},{s:"SE Southern Surfaces - Buford",r:150,lg:true,addr:"4550 Atwater Court, Suite 211, Buford, GA 30518"},{s:"Tile House",r:175},{s:"Vanguard - Norcross",r:125}]},
 "Specialty":{rate_type:"flat",pickup:"Norcross",fuel_included:true,note:"Flat rate (15% fuel included)",priority:true,priorityNote:"Be on dock first thing",
@@ -1027,6 +1036,7 @@ function getBaseTier(mi){if(mi<=10)return 100;if(mi<=20)return 150;if(mi<=30)ret
    carry one auto-pickup per dock on a (driver,load), so the reaper must match a
    pickup to a delivery at its OWN dock, not just same-customer. Passed to
    reapOrphanAutoPickups / buildMergedEntries at every ingest + save. */
+const _noteDeps={pickupSources:PICKUP_SOURCES,normLoc:_normLoc}; /* liveLoadOrderNote / withLiveLoadOrder */
 const _reapOpts={multiSource:(c)=>!!MULTI_PICKUP[c],normLoc:_normLoc,
   /* Lets the reaper tell a real dock from a free-typed origin — see reapOrphanAutoPickups. */
   docksFor:(c)=>PICKUP_SOURCES.filter(s=>s.customer===c).map(s=>s.label)};
@@ -1185,6 +1195,7 @@ const searchInputRef=useRef(null);
 const[useRoadRoutes,setUseRoadRoutes]=useState(false);
 const[showTraffic,setShowTraffic]=useState(false);
 const[hideLabels,setHideLabels]=useState(false);
+const[satellite,setSatellite]=useState(false);
 const trafficLayerRef=useRef(null);
 const openInfoRef=useRef(null);    /* currently open InfoWindow */
 const [mapReady,setMapReady]=useState(false);
@@ -1203,8 +1214,10 @@ if(mapInstanceRef.current)return;
 const map=new window.google.maps.Map(containerRef.current,{
 center:{lat:33.92,lng:-84.25},
 zoom:10,
-mapTypeControl:true,
-mapTypeControlOptions:{style:window.google.maps.MapTypeControlStyle.HORIZONTAL_BAR,position:window.google.maps.ControlPosition.TOP_RIGHT,mapTypeIds:["roadmap","satellite","hybrid"]},
+/* Google's own map-type bar draws at TOP_RIGHT, which is exactly where the
+   Load 1 / Load 2 legend sits, so it was never reachable. The 🛰 Satellite
+   button in the control row below replaces it. */
+mapTypeControl:false,
 streetViewControl:true,
 fullscreenControl:true,
 zoomControl:true,
@@ -1317,7 +1330,7 @@ bounds.extend(pos);
 
 const di=drivers.findIndex(d=>d.id===s.driverId);
 const col=di>=0?DCOL[di]:(CC[s.customer]||CC["One-Off Delivery"]).accent;
-const done=s.status==="departed";
+const done=isDoneStop(s);
 const onSite=s.status==="arrived";
 const isPU=s.stopType==="pickup";
 const isP=s.priority;
@@ -1328,14 +1341,22 @@ const isActiveDriverStop=activeDriverRef.current&&s.driverId===activeDriverRef.c
 const hasRouteNum=s.routeOrder>0&&!done;
 const isUnassigned=!isAssigned&&!done;
 const scale=done?4:onSite?9:hasRouteNum?10:isActiveDriverStop?9:isUnassigned?8:6;
-const fillColor=done?"#a8a29e":isUnassigned?"#d97706":"#2563eb";
+const fillColor=stopPinFill(s,{done,unassigned:isUnassigned});
 const strokeColor=onSite?"#f59e0b":isActiveDriverStop?"#1c1917":isUnassigned?"#92400e":isP?"#f59e0b":"#fff";
 const strokeWeight=onSite?3:isActiveDriverStop?3:isUnassigned?2.5:1.5;
 const fillOpacity=done?0.4:hasActive&&!isActiveDriverStop&&isAssigned?0.5:1;
 
+/* A finished stop is the green check the board already uses on the card, not
+   a symbol path — pickup or delivery, whoever it belongs to. Everything still
+   to be done keeps its shape, so the two never read as the same thing. */
+const doneIcon={
+url:"data:image/svg+xml;charset=UTF-8,"+encodeURIComponent(doneStopSvg(fillColor)),
+scaledSize:new window.google.maps.Size(DONE_PIN_PX,DONE_PIN_PX),
+anchor:new window.google.maps.Point(DONE_PIN_PX/2,DONE_PIN_PX/2),
+};
 const marker=new window.google.maps.Marker({
 position:pos,map,
-icon:{
+icon:done?doneIcon:{
 path:isPU?'M -2,-2 L 0,-4 L 2,-2 L 2,2 L -2,2 Z':window.google.maps.SymbolPath.CIRCLE,
 scale:isPU?Math.min(scale,6):scale,fillColor,fillOpacity,strokeColor,strokeWeight,
 },
@@ -1490,14 +1511,22 @@ const baseStyles=[
 {featureType:"road.local",elementType:"geometry.fill",stylers:[{color:"#f5f5f4"}]},
 {featureType:"administrative.locality",elementType:"labels.text.fill",stylers:[{color:"#1e5b92"}]},
 ];
-if(hideLabels){
-  map.setOptions({styles:[...baseStyles,
-    {elementType:"labels",stylers:[{visibility:"off"}]},
-  ]});
-}else{
-  map.setOptions({styles:baseStyles});
-}
-},[hideLabels,mapReady]);
+/* The road-map styling is painted OVER satellite imagery, not replaced by it:
+   the beige landscape fill hazes the photo, and the highway/arterial fills turn
+   it into a bright yellow spiderweb. On the photo, style nothing but the
+   clutter and let the imagery be the imagery. */
+const satStyles=[
+  {featureType:"poi",stylers:[{visibility:"off"}]},
+  {featureType:"transit",stylers:[{visibility:"off"}]},
+];
+/* Labels is carried over to the photo by the map type itself: hybrid is the
+   imagery with roads and place names on it, plain satellite is the imagery
+   alone. A labels styler would only hide the names, leaving the road lines. */
+map.setOptions({styles:satellite?satStyles
+  :hideLabels?[...baseStyles,{elementType:"labels",stylers:[{visibility:"off"}]}]
+  :baseStyles});
+map.setMapTypeId(satellite?(hideLabels?"satellite":"hybrid"):"roadmap");
+},[hideLabels,satellite,mapReady]);
 const truckDrvKey=[...visibleTruckDriverIds(drivers,stops)].sort((a,b)=>a-b).join(",");
 useEffect(()=>{
 const map=mapInstanceRef.current;
@@ -1522,12 +1551,13 @@ drivers.forEach((drv,di)=>{
   seenIds.add(drv.id);
   const col=DCOL[di]||BRAND.main;
   const initials=drv.name.split(" ").map(w=>w[0]).join("").toUpperCase();
-  /* Age in minutes. Anything older than 10m gets dimmed; over 30m is stale. */
-  const ageMs=loc.updatedAt?(typeof loc.updatedAt==="string"?Date.now()-new Date(loc.updatedAt).getTime():Date.now()-loc.updatedAt):0;
-  const ageMin=Math.round(ageMs/60000);
-  const ageLabel=ageMin<1?"just now":ageMin<60?ageMin+"m ago":Math.round(ageMin/60)+"h ago";
-  const isStale=ageMin>30;
-  const isDim=ageMin>10;
+  /* Age in minutes. Anything older than 10m gets dimmed; over 30m is stale.
+     A fix with no clock used to date itself "just now"; it now says so. */
+  const ageMs=gpsAgeMs(loc);
+  const ageMin=ageMs===null?null:Math.round(ageMs/60000);
+  const ageLabel=gpsAgeLabel(loc);
+  const isStale=ageMin!==null&&ageMin>30;
+  const isDim=ageMin!==null&&ageMin>10;
   const speedLabel=loc.speed>0?loc.speed+" mph":"";
   const truckLabel=loc.truck||"";
   const cityLabel=[loc.city,loc.locState].filter(Boolean).join(", ");
@@ -1581,7 +1611,9 @@ style={{width:"100%",padding:"10px 14px 10px 36px",border:"none",borderRadius:10
 </div>
 )}
 
-<div style={{position:"absolute",bottom:activeDriver&&onAssignStop?52:12,left:12,zIndex:5,display:"flex",gap:6}}>
+{/* Clear of Google's attribution logo in the bottom-left corner, which these
+    buttons used to sit on top of — it has to stay visible. */}
+<div style={{position:"absolute",bottom:activeDriver&&onAssignStop?74:34,left:12,zIndex:5,display:"flex",gap:6}}>
 <button onClick={()=>setUseRoadRoutes(!useRoadRoutes)} style={{background:useRoadRoutes?"#1e5b92":"#fff",color:useRoadRoutes?"#fff":"#57534e",border:"1px solid "+(useRoadRoutes?"#1e5b92":"#d6d3d1"),borderRadius:8,padding:"6px 10px",fontSize:10,fontWeight:700,cursor:"pointer",boxShadow:"0 2px 8px rgba(0,0,0,0.15)",display:"flex",alignItems:"center",gap:4}}>
 {useRoadRoutes?"🛣 Road Routes":"〰 Straight Lines"}
 </button>
@@ -1590,6 +1622,10 @@ style={{width:"100%",padding:"10px 14px 10px 36px",border:"none",borderRadius:10
 </button>
 <button onClick={()=>setHideLabels(!hideLabels)} style={{background:hideLabels?"#7c3aed":"#fff",color:hideLabels?"#fff":"#57534e",border:"1px solid "+(hideLabels?"#7c3aed":"#d6d3d1"),borderRadius:8,padding:"6px 10px",fontSize:10,fontWeight:700,cursor:"pointer",boxShadow:"0 2px 8px rgba(0,0,0,0.15)",display:"flex",alignItems:"center",gap:4}}>
 {hideLabels?"🏷 Labels OFF":"🏷 Labels"}
+</button>
+<button onClick={()=>setSatellite(!satellite)} style={{background:satellite?"#0f766e":"#fff",color:satellite?"#fff":"#57534e",border:"1px solid "+(satellite?"#0f766e":"#d6d3d1"),borderRadius:8,padding:"6px 10px",fontSize:10,fontWeight:700,cursor:"pointer",boxShadow:"0 2px 8px rgba(0,0,0,0.15)",display:"flex",alignItems:"center",gap:4}}
+  title={satellite?"Back to the road map":"Satellite imagery"+(hideLabels?"":" with road and place labels")}>
+{satellite?"🛰 Satellite ON":"🛰 Satellite"}
 </button>
 </div>
 
@@ -1621,6 +1657,23 @@ return(<div style={{position:"absolute",bottom:12,left:12,right:12,zIndex:5,back
 </div>}
 </div>
 );}
+/* The stop note was a single-line input. A real one — "Call 20 min ahead —
+   dock is behind the building, use the gravel entrance off Haynes Bridge" — is
+   390px of text in a 301px box, so the dispatcher saw the first forty
+   characters and had to scroll inside the field to read the rest. Access notes
+   are the ones a driver gets stuck without. It grows to fit. */
+function NoteInput({value,onChange,style,placeholder,...rest}){
+const ref=useRef(null);
+const fit=(el)=>{if(!el)return;el.style.height="auto";el.style.height=el.scrollHeight+"px";};
+useEffect(()=>{fit(ref.current);},[value]);
+return(<textarea ref={ref} rows={1} value={value||""}
+onChange={e=>{onChange(e.target.value);fit(e.target);}}
+onClick={e=>e.stopPropagation()}
+placeholder={placeholder||"\ud83d\udccb Add notes..."}
+{...rest}
+style={{resize:"none",overflow:"hidden",lineHeight:1.35,display:"block",...style}}/>);
+}
+
 function AddressInput({value,onChange,placeholder,style:customStyle}){
 const inputRef=useRef(null);
 const acRef=useRef(null);
@@ -1883,7 +1936,7 @@ const baseRateForManifest=liftgate?Math.max(0,total-75):total;
    in Tile etc.), store a fully-qualified pickupFrom — "Traditions - Alpharetta"
    — so the manifest card always names the specific location instead of a
    bare "Alpharetta" or, worse, just the customer name. */
-const _qualifiedPickup=qualifyPickupName(pickupName,customerName,MULTI_PICKUP);
+const _qualifiedPickup=qualifyPickupName(pickupName,customerName,MULTI_PICKUP,{pickupSources:PICKUP_SOURCES,addr:originAddr||null});
 if(pickupName&&originAddr&&onAddQuote){
   onAddQuote(cust,{puStop:_qualifiedPickup,puAddr:originAddr,puNote:`Picking up for ${stopName}`+(notes.trim()?" | "+notes.trim():"")},{delStop:stopName,delAddr:destAddr,delRate:baseRateForManifest,delNote:"from "+_qualifiedPickup+" | "+finalNote,pickupFrom:_qualifiedPickup,pickupAddr:originAddr||null,delWeight:wt,delFuelPct:0,delLiftgate:liftgate},drvId);
 }else{
@@ -2023,8 +2076,8 @@ style={{display:"flex",alignItems:"center",gap:6,padding:compact?"5px 8px":"8px"
 {!expanded&&<div style={{display:"flex",gap:6,alignItems:"center",marginTop:4,flexWrap:"wrap"}} onClick={e=>e.stopPropagation()}>
 <input type="number" inputMode="numeric" pattern="[0-9]*" value={entry.weight||""} onChange={e=>{e.stopPropagation();if(onWeight)onWeight(e.target.value);}} placeholder="lbs"
 style={{width:60,border:"1px solid #d6d3d1",borderRadius:6,padding:"3px 6px",fontSize:11,fontWeight:700,outline:"none",textAlign:"center",background:entry.weight?"#f0f5fa":"#fff"}}/>
-<input type="text" value={instrText} onChange={e=>{setInstrText(e.target.value);}} onBlur={e=>{if(onUpdateInstructions&&instrText!==(entry.instructions||""))onUpdateInstructions(instrText.trim());}} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();e.target.blur();}}} placeholder="Add notes — gate code, contact, etc."
-style={{flex:1,minWidth:140,border:"1px solid #e7e5e4",borderRadius:6,padding:"3px 8px",fontSize:11,outline:"none",background:hasI?"#eff6ff":"#fff",color:hasI?"#2563eb":"#1c1917"}}/>
+<NoteInput value={instrText} onChange={setInstrText} onBlur={()=>{if(onUpdateInstructions&&instrText!==(entry.instructions||""))onUpdateInstructions(instrText.trim());}} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();e.target.blur();}}} placeholder="Add notes — gate code, contact, etc."
+style={{flex:1,minWidth:140,border:"1px solid #e7e5e4",borderRadius:6,padding:"3px 8px",fontSize:11,outline:"none",background:hasI?"#eff6ff":"#fff",color:hasI?"#2563eb":"#1c1917",fontFamily:"inherit"}}/>
 </div>}
 {entry.shipPlan&&!expanded&&<div style={{fontSize:10,color:"#ea580c",fontWeight:700,marginTop:1}}>SP# {entry.shipPlan}</div>}
 {entry.refNum&&!expanded&&<div style={{fontSize:10,color:"#7c3aed",fontWeight:700,marginTop:1}}>Ref# {entry.refNum}</div>}
@@ -2673,7 +2726,7 @@ return(
 <div style={{height:"100%",width:pct+"%",background:col,borderRadius:4,transition:"width 0.3s"}}/>
 </div>
 <span style={{fontSize:13,fontWeight:700,color:col,fontVariantNumeric:"tabular-nums",flexShrink:0}}>{totalW.toLocaleString()}<span style={{fontSize:10,color:"#a8a29e"}}>/{(cap/1000).toFixed(0)}k</span></span>
-{totalW>cap&&<span style={{fontSize:7,background:"#dc2626",color:"#fff",padding:"0px 3px",borderRadius:2,fontWeight:700}}>OVER</span>}
+{totalW>cap&&<span style={{fontSize:8,background:"#dc2626",color:"#fff",padding:"0px 3px",borderRadius:2,fontWeight:700}}>OVER</span>}
 </div>):null;})()}
 <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
 {ids.map((id,oi)=>{
@@ -3214,9 +3267,18 @@ return stored;
 }); /* {customerName: [{s:"name",r:100,addr:"...",note:"..."}]} */
 const[mapActiveDrv,setMapActiveDrv]=useState(null); /* driver selected for click-to-assign on Live Routes map */
 const[mapActiveLoad,setMapActiveLoad]=useState(1); /* which load number for click-to-assign */
-const[driverLocs,setDriverLocs]=useState({}); /* {driverId: {lat,lng,updatedAt}} */
+/* Two independent writers, kept apart so neither can wipe the other: the
+   driver's phone (Firestore driverLocations) and the Motive gateway on the
+   truck. `driverLocs` is the merge — newest fix per driver, stale fixes and
+   GPS-off drivers dropped. See mergeDriverLocs in manifestLogic.js. */
+const[phoneLocs,setPhoneLocs]=useState({});  /* {driverId: {lat,lng,updatedAt}} */
+const[motiveLocs,setMotiveLocs]=useState({});
+const[gpsLink,setGpsLink]=useState({state:"idle",at:0,detail:"",reported:0,unnamed:0}); /* health of the Motive proxy */
+const[gpsClock,setGpsClock]=useState(()=>Date.now()); /* re-dates the panel without a new fix */
+useEffect(()=>{const t=setInterval(()=>setGpsClock(Date.now()),60000);return()=>clearInterval(t);},[]);
 const[gpsEnabled,setGpsEnabled]=useState(()=>{try{const s=localStorage.getItem("gpsEnabled");return s?JSON.parse(s):{1:true,2:true,3:true,4:true};}catch{return{1:true,2:true,3:true,4:true};}}); /* per-driver Motive GPS toggle */
 const toggleGps=(driverId)=>setGpsEnabled(prev=>{const next={...prev,[driverId]:!prev[driverId]};try{localStorage.setItem("gpsEnabled",JSON.stringify(next));}catch{}return next;});
+const driverLocs=useMemo(()=>mergeDriverLocs(phoneLocs,motiveLocs,gpsEnabled,gpsClock),[phoneLocs,motiveLocs,gpsEnabled,gpsClock]);
 const[uiCompact,setUiCompact]=useState(()=>lsGet("dd_ui_compact",false)); /* density toggle: compact vs comfortable board */
 const toggleCompact=()=>setUiCompact(p=>{const n=!p;lsSet("dd_ui_compact",n);return n;});
 const[invoices,setInvoices]=useState([]);
@@ -3225,6 +3287,7 @@ const[showInvoice,setShowInvoice]=useState(null); /* customer name to generate i
 const[rpActive,setRpActive]=useState(null);
 const[rpOrders,setRpOrders]=useState({});
 const rpOrdersRef=useRef({});
+const rpSeedRef=useRef({dk:null,ids:new Set()}); /* the day and stops the planner was opened on */
 const[rpDragSrc,setRpDragSrc]=useState(null);
 const[rpDragOver,setRpDragOver]=useState(null);
 const[rpShowUnassigned,setRpShowUnassigned]=useState(true);
@@ -3486,6 +3549,7 @@ useEffect(()=>{rpOrdersRef.current=rpOrders;},[rpOrders]);
 useEffect(()=>{
   if(view==="routes"&&!rpInited&&dl.length>0){
     const o={};drivers.forEach(d=>{o[d.id]=dl.filter(e=>e.driverId===d.id).map(e=>e.id);});
+    rpSeedRef.current={dk,ids:new Set(dl.map(e=>e.id))};
     setRpOrders(o);
     setRpInited(true);
   }
@@ -3498,6 +3562,11 @@ useEffect(()=>{
     setRpInited(false);
   }
 },[view,dl.length,rpInited]);
+/* The planner plans ONE day. Switching days in the header while it was open
+   left it holding the old day's plan; Apply then read every stop of the new
+   day as "not in the plan" and sent the whole day to Unassigned. Start over
+   for the new day instead. */
+useEffect(()=>{if(view==="routes"&&rpInited&&rpSeedRef.current.dk!==dk){setRpOrders({});setRpInited(false);}},[dk,view,rpInited]);
 
 const firebaseReady=useRef(false);
 const prevEmHRef=useRef({}); /* tracks last saved emH values */
@@ -3644,7 +3713,7 @@ useEffect(()=>{
     }));
     setSavedQuotes(clean);
   });
-  const unsubLocs=subscribeDriverLocations((locs)=>{setDriverLocs(locs);});
+  const unsubLocs=subscribeDriverLocations((locs)=>{setPhoneLocs(locs);});
   const unsubInv=subscribeInvoices((inv)=>{setInvoices(inv);});
   const unsubCustomStops=subscribeCustomStops((data)=>{
     setCustomStops(prev=>{
@@ -3722,23 +3791,30 @@ useEffect(()=>{
     });
   };
   let aborted=false;
+  /* A failed poll used to return in silence, so a dead API key and a truck
+     parked all weekend looked identical on the board — the panel just kept
+     showing whatever fix it already had. Record what the link is doing and let
+     the panel say it. */
+  const down=(state,detail)=>{if(!aborted)setGpsLink({state,at:Date.now(),detail:detail||"",reported:0,unnamed:0});};
   const poll=async()=>{
     if(aborted)return;
     try{
       const r=await fetch("/api/motive-gps");
       if(!r.ok){
-        if(r.status===401||r.status===403){console.warn("[MOTIVE] Auth failed:",r.status,"— check MOTIVE_API_KEY in Netlify env");}
-        else if(r.status>=500){console.warn("[MOTIVE] Server error:",r.status);}
+        let detail="";
+        try{const b=await r.json();detail=b&&(b.error||b.detail)||"";}catch{}
+        if(r.status===401||r.status===403){console.warn("[MOTIVE] Auth failed:",r.status,"— check MOTIVE_API_KEY in Netlify env");down("auth",detail||("HTTP "+r.status));}
+        else{console.warn("[MOTIVE] Server error:",r.status,detail);down("error",detail||("HTTP "+r.status));}
         return;
       }
       const data=await r.json();
-      if(!data.vehicles||!Array.isArray(data.vehicles))return;
+      if(!data.vehicles||!Array.isArray(data.vehicles)){down("error","malformed response");return;}
       const locs={};
+      let unmatched=0;
       data.vehicles.forEach(v=>{
         if(v.lat==null||v.lng==null)return;
         const drv=matchDriver(v.driver);
-        if(!drv)return;
-        if(gpsEnabled[drv.id]===false)return;
+        if(!drv){unmatched++;return;}
         locs[drv.id]={
           lat:v.lat,lng:v.lng,
           speed:v.speed,bearing:v.bearing,
@@ -3749,15 +3825,20 @@ useEffect(()=>{
         };
       });
       if(aborted)return;
-      /* Merge new locs into existing state. Drivers not in this poll keep
-         their last-known location (until their gpsEnabled toggles off). */
-      if(Object.keys(locs).length>0)setDriverLocs(prev=>({...prev,...locs}));
-    }catch(e){console.warn("[MOTIVE] Poll failed:",e.message);}
+      /* Replace, don't merge. A truck Motive has stopped reporting should age
+         out of this source; the merge in driverLocs is what decides whether the
+         phone's fix or this one is the newer of the two. gpsEnabled is applied
+         there too, so toggling GPS off silences both sources, not just this. */
+      setMotiveLocs(locs);
+      setGpsLink({state:"ok",at:Date.now(),detail:"",
+        reported:Number(data.reported)||data.vehicles.length,
+        unnamed:(Number(data.unnamed)||0)+unmatched});
+    }catch(e){console.warn("[MOTIVE] Poll failed:",e.message);down("offline",e.message);}
   };
   poll();
   const interval=setInterval(poll,20000);
   return()=>{aborted=true;clearInterval(interval);};
-},[drivers,gpsEnabled]);
+},[drivers]);
 useEffect(()=>{
   const unsubManifests=subscribeManifests(wo,(fbData)=>{
     _rawSetLog(prev=>{
@@ -4077,11 +4158,15 @@ useEffect(()=>{
 useEffect(()=>{
   if(!firebaseReady.current)return;
   const val=dispNotes[emDk];
-  if(val===undefined)return;
-  if(prevNotesRef.current[emDk]===val)return;
-  prevNotesRef.current[emDk]=val;
+  /* Clear deletes the key locally. That has to reach Firestore as an empty
+     note — it used to return here, so the next snapshot from any device
+     brought the "cleared" text straight back. */
+  const toSave=val===undefined?"":val;
+  if(val===undefined&&!prevNotesRef.current[emDk])return; /* nothing saved for this day, nothing to clear */
+  if(prevNotesRef.current[emDk]===toSave)return;
+  prevNotesRef.current[emDk]=toSave;
   const timer=setTimeout(()=>{
-    saveDispatchNote(emDk,val||"").catch(e=>console.error("Note save:",e));
+    saveDispatchNote(emDk,toSave).catch(e=>console.error("Note save:",e));
   },500);
   return()=>clearTimeout(timer);
 },[dispNotes,emDk]);
@@ -4092,8 +4177,8 @@ useEffect(()=>{lsSet(LS_EMH,emH);},[emH]);
 useEffect(()=>{
 const{totalMins}=getShiftSummary(emDk);
 if(!totalMins)return;
-const lgCount=dl.filter(e=>e.isHourly&&e.liftgateApplied&&!DISTANCE_BONUS_STOPS.includes(e.stop)).length;
-const distBonus=dl.filter(e=>e.isHourly&&DISTANCE_BONUS_STOPS.includes(e.stop)).length;
+const lgCount=dl.filter(e=>_hourlyBonusEligible(e)&&e.liftgateApplied&&!DISTANCE_BONUS_STOPS.includes(e.stop)).length;
+const distBonus=dl.filter(e=>_hourlyBonusEligible(e)&&DISTANCE_BONUS_STOPS.includes(e.stop)).length;
 const billedMins=totalMins+(lgCount+distBonus)*60;
 const hrs=Math.round(billedMins/15)*15/60;
 const key=`${emDk}-emser`;
@@ -4238,12 +4323,12 @@ if(editingQuoteId){
      document too. */
   const existing=savedQuotes.find(x=>x.id===editingQuoteId);
   if(!existing){showToast("Couldn't find quote to update");setEditingQuoteId(null);return;}
-  const updated={...existing,customer:qCust,stop:qStop,addr:qAddr,rate:finalRate,miles:miles||null,liftgate:qLiftgate,gravel:qGravel,extraPallets:qExtraPallets,noFuel:qNoFuel,note:qNote,pickup:qPickup||null,pickupName:qPickupName||null,pickupAddr:qPickupAddr||null,calc,updatedAt:new Date().toISOString()};
+  const updated={...existing,customer:(qCust==="__manual"?"One-Off Delivery":qCust),stop:qStop,addr:qAddr,rate:finalRate,miles:miles||null,liftgate:qLiftgate,gravel:qGravel,extraPallets:qExtraPallets,noFuel:qNoFuel,note:qNote,pickup:qPickup||null,pickupName:qPickupName||null,pickupAddr:qPickupAddr||null,calc,updatedAt:new Date().toISOString()};
   setSavedQuotes(p=>p.map(x=>x.id===editingQuoteId?updated:x));
   saveQuoteToFB(updated).catch(e=>console.error("Quote update:",e));
   showToast("Quote #"+existing.num+" updated");
 }else{
-  const q={id:genId(),num:savedQuotes.length+1,customer:qCust,stop:qStop,addr:qAddr,rate:finalRate,miles:miles||null,liftgate:qLiftgate,gravel:qGravel,extraPallets:qExtraPallets,noFuel:qNoFuel,note:qNote,pickup:qPickup||null,pickupName:qPickupName||null,pickupAddr:qPickupAddr||null,calc,createdAt:new Date().toISOString(),status:"pending"};
+  const q={id:genId(),num:savedQuotes.length+1,customer:(qCust==="__manual"?"One-Off Delivery":qCust),stop:qStop,addr:qAddr,rate:finalRate,miles:miles||null,liftgate:qLiftgate,gravel:qGravel,extraPallets:qExtraPallets,noFuel:qNoFuel,note:qNote,pickup:qPickup||null,pickupName:qPickupName||null,pickupAddr:qPickupAddr||null,calc,createdAt:new Date().toISOString(),status:"pending"};
   setSavedQuotes(p=>[q,...p]);
   saveQuoteToFB(q).catch(e=>console.error("Quote save:",e));
   showToast("Quote #"+q.num+" saved");
@@ -4286,7 +4371,9 @@ const openEditQuote=(q)=>{
 const pushQuoteToDay=(quoteId,targetDk)=>{
 const q=savedQuotes.find(x=>x.id===quoteId);
 if(!q)return;
-const cust=q.customer||"Quote Delivery";
+/* "__manual" is the form's Manual Entry sentinel, never a customer name — a
+   legacy quote saved under it reads as a one-off here. */
+const cust=(q.customer&&q.customer!=="__manual")?q.customer:"Quote Delivery";
 const wt=parseInt(q.weight)||0;
 /* Carry the quote's pickup through to the manifest. The old code dropped
    q.pickupName / q.pickupAddr entirely — the delivery entry had no
@@ -4300,9 +4387,12 @@ const wt=parseInt(q.weight)||0;
    customer for a multi-location quote is the quote customer itself, not a
    third-party vendor; pickupFor lookup matches on PICKUP_SOURCES. */
 const rawPU=q.pickupName||"";
-const qualifiedPU=qualifyPickupName(rawPU,cust,MULTI_PICKUP);
+const qualifiedPU=qualifyPickupName(rawPU,cust,MULTI_PICKUP,{pickupSources:PICKUP_SOURCES,addr:q.pickupAddr||null});
+/* pairId ties the pickup leg to its delivery so they move as one job; quoteId
+   lets unplan find everything this quote put on the day, split halves included. */
+const pairId=genId();
 const targetDkEntries=()=>{
-  const delEntry={id:genId(),customer:cust,stop:q.stop||"Quote Delivery",baseRate:q.rate||0,fuelPct:0,isHourly:false,note:q.note||(q.miles?q.miles+"mi":""),driverId:0,addr:q.addr||"",stopType:"delivery",priority:false,instructions:"BOL & Pictures must be sent back via Email",status:null,arrivedAt:null,departedAt:null,eta:null,photos:[],signature:null,dueBy:null,weight:wt,loadNum:1,pickupFrom:qualifiedPU||null,liftgateApplied:!!q.liftgate,knownLiftgate:false,liftgateFee:q.liftgate?75:0};
+  const delEntry={id:genId(),customer:cust,stop:q.stop||"Quote Delivery",baseRate:q.rate||0,fuelPct:0,isHourly:false,note:q.note||(q.miles?q.miles+"mi":""),driverId:0,addr:q.addr||"",stopType:"delivery",priority:false,instructions:"BOL & Pictures must be sent back via Email",status:null,arrivedAt:null,departedAt:null,eta:null,photos:[],signature:null,dueBy:null,weight:wt,loadNum:1,pickupFrom:qualifiedPU||null,liftgateApplied:!!q.liftgate,knownLiftgate:false,liftgateFee:q.liftgate?75:0,quoteId:q.id,pairId};
   /* q.rate is the all-in quoted total (base+fuel+LG). computeDay re-adds the
      $75 via liftgateFee, so strip it from baseRate here or the LG bills twice.
      (fuelPct:0 above keeps fuel single — it's already inside q.rate.) */
@@ -4310,7 +4400,7 @@ const targetDkEntries=()=>{
   if(rawPU&&q.pickupAddr){
     /* Quote has a real pickup location -> create the pickup leg too, so the
        driver gets a PU card at the correct address. */
-    const puEntry={id:genId(),customer:cust,stop:qualifiedPU||rawPU,baseRate:0,fuelPct:0,isHourly:false,note:"Picking up for "+(q.stop||"delivery"),driverId:0,addr:q.pickupAddr,stopType:"pickup",priority:false,instructions:"",status:null,arrivedAt:null,departedAt:null,eta:null,photos:[],signature:null,dueBy:null,weight:wt,loadNum:1,manualPickup:true};
+    const puEntry={id:genId(),customer:cust,stop:qualifiedPU||rawPU,baseRate:0,fuelPct:0,isHourly:false,note:"Picking up for "+(q.stop||"delivery"),driverId:0,addr:q.pickupAddr,stopType:"pickup",priority:false,instructions:"",status:null,arrivedAt:null,departedAt:null,eta:null,photos:[],signature:null,dueBy:null,weight:wt,loadNum:1,manualPickup:true,quoteId:q.id,pairId};
     return[puEntry,delEntry];
   }
   return[delEntry];
@@ -4332,15 +4422,47 @@ const unplanQuote=(quoteId)=>{
 const q=savedQuotes.find(x=>x.id===quoteId);
 if(!q||!q.pushedTo)return;
 const targetDk=q.pushedTo;
+const idSet=new Set(Array.isArray(q.pushedIds)?q.pushedIds:[]);
+/* Everything this quote put on the day: the ids recorded at push time, plus
+   anything stamped with its quoteId — a split-off half inherits the stamp, so
+   it goes too (it used to stay behind, and get driven). */
+const mine=(e)=>!!e&&(idSet.has(e.id)||(q.id!=null&&e.quoteId===q.id));
+const finish=()=>{
+  setSavedQuotes(p=>p.map(x=>x.id===quoteId?{...x,status:"pending",pushedTo:null,pushedIds:null}:x));
+  const updated={...q,status:"pending",pushedTo:null,pushedIds:null};
+  saveQuoteToFB(updated).catch(e=>console.error("Quote unplan:",e));
+  showToast("Quote unplanned — removed from manifest");
+};
+const fail=(e)=>{console.error("Quote unplan (remote day):",e);showToast("Couldn't unplan — open that week and try again");};
+/* The day isn't on this screen (only the current and previous weeks are
+   subscribed). Filtering an absent day produced an empty array, the empty-write
+   guard refused to save it, and the quote flipped to pending anyway — so a
+   re-push booked the job twice. Take the removal straight to Firestore, and
+   flip the quote only once it has landed. */
+if(!Array.isArray(log[targetDk])){
+  const lastDash=targetDk.lastIndexOf("-");
+  const wOff=parseInt(targetDk.slice(0,lastDash));const dIdx=parseInt(targetDk.slice(lastDash+1));
+  if(isNaN(wOff)||isNaN(dIdx)||!window._fbOps){fail("day key "+targetDk);return;}
+  window._fbOps.read("manifests/"+getFbKey(wOff,dIdx)).then(docData=>{
+    const ents=(docData?.entries||[]).map(sanitizeEntry).filter(Boolean);
+    const removed=ents.filter(mine);
+    if(!removed.length){finish();return;}
+    tombstone(removed);
+    let keep=ents.filter(e=>!mine(e));
+    new Set(removed.filter(e=>e.customer).map(e=>e.customer)).forEach(c=>{keep=rebuildPickupsFor(keep,c);});
+    return saveManifestDay(wOff,dIdx,keep,0,activeTombstones(),keep.length===0).then(r=>{
+      if(r==="blocked")throw new Error("save blocked");
+      finish();
+    });
+  }).catch(fail);
+  return;
+}
 setLog(p=>{
   const dayEntries=p[targetDk]||[];
   const removed=[];
-  let filtered;
-  if(Array.isArray(q.pushedIds)&&q.pushedIds.length){
-    /* Precise: remove exactly the entries this quote created, by id. */
-    const idSet=new Set(q.pushedIds);
-    filtered=dayEntries.filter(e=>{if(e&&idSet.has(e.id)){removed.push(e);return false;}return true;});
-  }else{
+  /* Precise: exactly the entries this quote created (by id or quoteId). */
+  let filtered=dayEntries.filter(e=>{if(mine(e)){removed.push(e);return false;}return true;});
+  if(!removed.length&&!idSet.size){
     /* Legacy quotes pushed before pushedIds was tracked: fall back to a value
        match, but remove only the FIRST matching delivery so a second
        identical-looking delivery the user never unplanned isn't dropped too. */
@@ -4358,12 +4480,13 @@ setLog(p=>{
     tombstone(removed); /* pass entries → content-signature tombstones */
     new Set(removed.filter(e=>e.customer).map(e=>e.customer)).forEach(c=>{filtered=rebuildPickupsFor(filtered,c);});
   }
+  /* Taking the only work off a day is a deliberate clear — flag it, or the
+     empty-write guard keeps the stops in Firestore, they come back on the next
+     snapshot, and a re-push doubles them. Same flag the delete path sets. */
+  if(dayEntries.length&&filtered.length===0)intentionalClearRef.current.add(targetDk);
   return{...p,[targetDk]:filtered};
 });
-setSavedQuotes(p=>p.map(x=>x.id===quoteId?{...x,status:"pending",pushedTo:null,pushedIds:null}:x));
-const updated={...q,status:"pending",pushedTo:null,pushedIds:null};
-saveQuoteToFB(updated).catch(e=>console.error("Quote unplan:",e));
-showToast("Quote unplanned — removed from manifest");
+finish();
 };
 
 const aiGenerateQuote=async(input)=>{
@@ -4404,10 +4527,11 @@ finally{setAiQuoteLoading(false);}
 };
 
 const addQuoteWithPickup=(cust,pu,del,drvId)=>{
+const pairId=genId(); /* the pickup leg and its delivery move as one job */
 setLog(p=>{
 let all=[...(p[dk]||[])];
-const puEntry={id:genId(),customer:cust,stop:pu.puStop,baseRate:0,fuelPct:0,isHourly:false,note:pu.puNote,driverId:drvId,addr:pu.puAddr,stopType:"pickup",priority:false,instructions:"",status:null,arrivedAt:null,departedAt:null,eta:null,photos:[],signature:null,dueBy:null,weight:del.delWeight||0,loadNum:1,manualPickup:true};
-const delEntry={id:genId(),customer:cust,stop:del.delStop,baseRate:del.delRate,fuelPct:del.delFuelPct||0,isHourly:false,note:del.delNote,driverId:drvId,addr:del.delAddr,stopType:"delivery",priority:false,instructions:"BOL & Pictures must be sent back via Email",status:null,arrivedAt:null,departedAt:null,eta:null,photos:[],signature:null,dueBy:null,weight:del.delWeight||0,loadNum:1,pickupFrom:del.pickupFrom,pickupAddr:del.pickupAddr||null,liftgateApplied:!!del.delLiftgate,knownLiftgate:false,liftgateFee:del.delLiftgate?75:0};
+const puEntry={id:genId(),pairId,customer:cust,stop:pu.puStop,baseRate:0,fuelPct:0,isHourly:false,note:pu.puNote,driverId:drvId,addr:pu.puAddr,stopType:"pickup",priority:false,instructions:"",status:null,arrivedAt:null,departedAt:null,eta:null,photos:[],signature:null,dueBy:null,weight:del.delWeight||0,loadNum:1,manualPickup:true};
+const delEntry={id:genId(),pairId,customer:cust,stop:del.delStop,baseRate:del.delRate,fuelPct:del.delFuelPct||0,isHourly:false,note:del.delNote,driverId:drvId,addr:del.delAddr,stopType:"delivery",priority:false,instructions:"BOL & Pictures must be sent back via Email",status:null,arrivedAt:null,departedAt:null,eta:null,photos:[],signature:null,dueBy:null,weight:del.delWeight||0,loadNum:1,pickupFrom:del.pickupFrom,pickupAddr:del.pickupAddr||null,liftgateApplied:!!del.delLiftgate,knownLiftgate:false,liftgateFee:del.delLiftgate?75:0};
 writeAuditLog({action:"create",customer:cust,stop:del.delStop,driverId:drvId,details:"quote | $"+del.delRate+(del.pickupFrom?" | from "+del.pickupFrom:"")+(del.delWeight?" | "+del.delWeight+" lbs":"")});
 if(drvId>0){const insertIdx=insertIdxForLoad(all,drvId,1);all.splice(insertIdx,0,puEntry,delEntry);}
 else{all.push(puEntry,delEntry);}
@@ -4434,11 +4558,11 @@ const autoDeliverAfter=(cust==="Specialty"&&!ex.dueBy)?"Pickup 7:30 AM — Speci
 const imetcoPU=cust==="IMETCO"&&IMETCO_PICKUP_MAP[stop]?IMETCO_PICKUP_MAP[stop]:null;
 const isQuoteCust=(cust==="Quote Delivery"||cust==="One-Off Delivery");
 const defaultInstr=isQuoteCust?"BOL & Pictures must be sent back via Email":instrForStop;
-/* selPickup is the user's Norcross/Roswell toggle — only meaningful for
-   customers that actually have multiple pickup sources (Emser Tile,
-   Traditions in Tile). For single-source customers like MM Systems or
-   Florida Tile, falling through to selPickup stamps the wrong location
-   (e.g. "MM Systems — Roswell" when MM Systems only ships from
+/* selPickup is the user's dock toggle — only meaningful for customers that
+   actually have multiple pickup sources (Traditions in Tile, IMETCO; Emser
+   left that set when Roswell closed). For single-source customers like MM
+   Systems or Florida Tile, falling through to selPickup stamps the wrong
+   location (e.g. "MM Systems — Alpharetta" when MM Systems only ships from
    Pendergrass). Gate the fallback on multi-source. */
 const custPickupSources=PICKUP_SOURCES.filter(ps=>ps.customer===cust);
 const isMultiSourceCust=custPickupSources.length>1;
@@ -4539,6 +4663,9 @@ const rmFromDriver=(id)=>{const entry=dl.find(e=>e.id===id);if(!entry)return;if(
 
 const reassign=(eid,did,newLoadNum)=>{
 const entry=dl.find(e=>e.id===eid);
+/* An auto pickup is derived from its deliveries; dragging one off the driver
+   left them with no pickup at all (applyReassign now refuses it too). */
+if(entry&&entry.stopType==="pickup"&&!entry.manualPickup){showToast("Pickup cards follow their deliveries — move the deliveries instead");return;}
 const oldDid=entry?.driverId;
 setLog(p=>{
 const before=p[dk]||[];
@@ -4572,6 +4699,7 @@ const custs=new Set();
 eids.forEach(eid=>{
   const idx=all.findIndex(e=>e.id===eid);
   if(idx<0)return;
+  if(all[idx].stopType==="pickup"&&!all[idx].manualPickup)return; /* derived — stays with its deliveries */
   const oldDid=all[idx].driverId;
   const updated={...all[idx],driverId:did};
   if(updated.stopType==="delivery"||(updated.stopType==="pickup"&&updated.manualPickup))custs.add(updated.customer);
@@ -4606,12 +4734,17 @@ notifyRouteChanges(_per);
 const assignInOrder=(eid,did,loadNum)=>{
 const entry=dl.find(e=>e.id===eid);
 if(!entry)return;
+if(entry.stopType==="pickup"&&!entry.manualPickup){showToast("Pickup cards follow their deliveries — move the deliveries instead");return;}
 const entAddr=entry.addr||getAddr(entry.stop);
 /* Siblings = duplicate orders to the SAME stop, but only ones sitting where the
    tapped entry sits (same driverId). Without the driverId scope, assigning an
    unassigned stop also captured an identically-named stop already routed on a
    DIFFERENT driver and silently ripped it off that route. */
-const siblings=dl.filter(e=>e.stop===entry.stop&&(e.addr||getAddr(e.stop))===entAddr&&e.driverId===entry.driverId);
+const _sameStop=dl.filter(e=>e.stop===entry.stop&&(e.addr||getAddr(e.stop))===entAddr&&e.driverId===entry.driverId);
+/* A quote's pickup leg and its delivery (shared pairId) are one job: whichever
+   is tapped, the partner sitting in the same place comes along, pickup first. */
+const _pairMates=entry.pairId?dl.filter(e=>e.id!==entry.id&&e.pairId===entry.pairId&&e.driverId===entry.driverId&&!_sameStop.some(x=>x.id===e.id)):[];
+const siblings=[..._sameStop,..._pairMates].sort((a,b)=>(a.stopType==="pickup"?0:1)-(b.stopType==="pickup"?0:1));
 const sibIds=siblings.map(e=>e.id);
 const driverName=(nid)=>nid===0?"Unassigned":(drivers.find(x=>x.id===nid)?.name||"Driver "+nid);
 if(entry.driverId===did){
@@ -4623,7 +4756,7 @@ if(entry.driverId===did){
        them — this branch previously skipped the rebuild, leaving an orphan
        pickup card on the driver with a stale "Load order" note. Tombstone the
        vanished pickups or the save merge resurrects them from Firebase. */
-    const custs=new Set(siblings.filter(s=>s.stopType==="delivery"&&s.customer).map(s=>s.customer));
+    const custs=new Set(siblings.filter(s=>(s.stopType==="delivery"||(s.stopType==="pickup"&&s.manualPickup))&&s.customer).map(s=>s.customer));
     custs.forEach(c=>{all=rebuildPickupsFor(all,c);});
     const vanished=vanishedAutoPickups(before,all);
     if(vanished.length)tombstone(vanished);
@@ -4649,7 +4782,10 @@ setLog(p=>{
   });
   sibIds.forEach(sid=>{
     const ent=all.find(e=>e.id===sid);
-    if(ent&&ent.stopType==="delivery")all=rebuildPickupsFor(all,ent.customer);
+    /* A manual pickup can suppress (or stop suppressing) the dock card on the
+       load it lands on — rebuild for it too, as applyReassign does; assigning
+       a quote's delivery then its pickup used to leave two dock cards. */
+    if(ent&&(ent.stopType==="delivery"||(ent.stopType==="pickup"&&ent.manualPickup))&&ent.customer)all=rebuildPickupsFor(all,ent.customer);
   });
   /* The old driver's pickup vanished in the rebuild — tombstone it or the
      save merge resurrects it from Firebase as a ghost card. */
@@ -4742,7 +4878,7 @@ setLog(p=>{
      split-off half is a no-charge continuation (a second truck for the same
      order), so zero its money fields — otherwise computeDay sums both and
      double-bills the delivery. */
-  const load2={...orig,id:genId(),weight:w2,loadNum:2,wasSplit:true,driverId:0,baseRate:0,fuelPct:0,liftgateApplied:false,liftgateFee:0,note:(orig.note?orig.note+" | ":"")+"Split 2/2: "+w2+" lbs (billed on load 1)",status:null,arrivedAt:null,departedAt:null,photos:[],signature:null};
+  const load2={...orig,id:genId(),weight:w2,loadNum:2,wasSplit:true,splitContinuation:true,driverId:0,baseRate:0,fuelPct:0,liftgateApplied:false,liftgateFee:0,note:(orig.note?orig.note+" | ":"")+"Split 2/2: "+w2+" lbs (billed on load 1)",status:null,arrivedAt:null,departedAt:null,photos:[],signature:null};
   all.push(load2);
   if(orig.stopType==="delivery"&&orig.driverId>0){
     all=rebuildPickupsFor(all,orig.customer);
@@ -4912,8 +5048,8 @@ useEffect(()=>{
   if(!shifts.length)return;
   const totalMins=shifts.reduce((sum,s)=>sum+calcShiftMins(s),0);
   if(totalMins>0){
-    const lgCount=dl.filter(e=>e.isHourly&&e.liftgateApplied&&!DISTANCE_BONUS_STOPS.includes(e.stop)).length;
-    const distBonus=dl.filter(e=>e.isHourly&&DISTANCE_BONUS_STOPS.includes(e.stop)).length;
+    const lgCount=dl.filter(e=>_hourlyBonusEligible(e)&&e.liftgateApplied&&!DISTANCE_BONUS_STOPS.includes(e.stop)).length;
+    const distBonus=dl.filter(e=>_hourlyBonusEligible(e)&&DISTANCE_BONUS_STOPS.includes(e.stop)).length;
     const billedMins=totalMins+(lgCount+distBonus)*60;
     const hours=Math.round(billedMins/15)*15/60;
     setEmH(p=>{if(p[`${emDk}-emser`]===hours)return p;return{...p,[`${emDk}-emser`]:hours};});
@@ -4994,7 +5130,11 @@ return{pu,tm,rg};
 };
 const _sParseTime=(db)=>{if(!db)return 9999;const m=db.match(/(\d{1,2})(?::(\d{2}))?\s*(AM|PM)/i);if(!m)return 9999;let h=parseInt(m[1]);const min=parseInt(m[2]||"0");const ap=(m[3]||"").toUpperCase();if(ap==="PM"&&h!==12)h+=12;if(ap==="AM"&&h===12)h=0;return h*60+min;};
 const _sApply=(drvId,sorted,msg)=>{
-setLog(p=>{const all=[...(p[dk]||[])];return{...p,[dk]:_reorderDriverBlock(all,drvId,sorted)};});
+/* Impose the order by ID against the day as it stands NOW, not the objects
+   captured at click time: the Google sort answers seconds later, and a stop
+   that moved or arrived meanwhile was duplicated or dropped by the stale list. */
+const ids=sorted.map(e=>e.id);
+setLog(p=>{const all=[...(p[dk]||[])];const cur=all.filter(e=>e&&e.driverId===drvId);return{...p,[dk]:_reorderDriverBlock(all,drvId,orderByIds(cur,ids))};});
 setSortMenuDrv(null);showToast(msg);
 };
 
@@ -5065,7 +5205,7 @@ setInsertPickupFor(null);setPickupCustomer("");setPickupStop("");setPickupAddr("
 showToast(targetLoadNum>1?`Pickup added to Load ${targetLoadNum}`:`Pickup added`);
 };
 
-const computeDay=(key,emKey)=>{const entries=log[key]||[];let base=0;let lgFees=0;if(entries.some(e=>e.isHourly)){const{totalMins}=getShiftSummary(emKey||key);const lgCount=entries.filter(e=>e.isHourly&&e.liftgateApplied&&!DISTANCE_BONUS_STOPS.includes(e.stop)).length;const distBonus=entries.filter(e=>e.isHourly&&DISTANCE_BONUS_STOPS.includes(e.stop)).length;if(totalMins>0){const billedMins=totalMins+(lgCount+distBonus)*60;base+=102.50*(Math.round(billedMins/15)*15/60);}else{base+=102.50*(emH[`${emKey||key}-emser`]||4);}}const fBC={};entries.forEach(e=>{if(e.isHourly)return;base+=e.baseRate;lgFees+=allInRate(e)-(e.baseRate||0);if(e.fuelPct>0){if(!fBC[e.customer])fBC[e.customer]={pct:e.fuelPct,base:0};fBC[e.customer].base+=e.baseRate;}});let fuel=0;Object.values(fBC).forEach(c=>{fuel+=c.base*c.pct;});return{base:base+lgFees,fuel,total:base+lgFees+fuel,fBC,lgFees};};
+const computeDay=(key,emKey)=>{const entries=log[key]||[];let base=0;let lgFees=0;if(entries.some(e=>e.isHourly)){const{totalMins}=getShiftSummary(emKey||key);const lgCount=entries.filter(e=>_hourlyBonusEligible(e)&&e.liftgateApplied&&!DISTANCE_BONUS_STOPS.includes(e.stop)).length;const distBonus=entries.filter(e=>_hourlyBonusEligible(e)&&DISTANCE_BONUS_STOPS.includes(e.stop)).length;if(totalMins>0){const billedMins=totalMins+(lgCount+distBonus)*60;base+=102.50*(Math.round(billedMins/15)*15/60);}else{base+=102.50*(emH[`${emKey||key}-emser`]||4);}}const fBC={};entries.forEach(e=>{if(e.isHourly)return;base+=e.baseRate;lgFees+=allInRate(e)-(e.baseRate||0);if(e.fuelPct>0){if(!fBC[e.customer])fBC[e.customer]={pct:e.fuelPct,base:0};fBC[e.customer].base+=e.baseRate;}});let fuel=0;Object.values(fBC).forEach(c=>{fuel+=c.base*c.pct;});return{base:base+lgFees,fuel,total:base+lgFees+fuel,fBC,lgFees};};
 
 const getDriverMiles=(drvId,dayKey)=>{const entries=(log[dayKey||dk]||[]).filter(e=>e.driverId===drvId);return calcRouteMiles(entries);};
 const getWeekDriverMiles=(drvId)=>{let total=0;for(let i=0;i<5;i++){total+=getDriverMiles(drvId,`${wo}-${i}`);}return total;};
@@ -5093,7 +5233,7 @@ DAYS.forEach((day,i)=>{
 const dayEntries=(log[`${wo}-${i}`]||[]).filter(e=>e.customer===custName);
 if(!dayEntries.length)return;
 if(cd.rate_type==="hourly"){
-const _invFbKey=getFbKey(wo,i);const{totalMins:_invMins}=getShiftSummary(_invFbKey);const _invLG=(log[`${wo}-${i}`]||[]).filter(e=>e.isHourly&&e.liftgateApplied&&!DISTANCE_BONUS_STOPS.includes(e.stop)).length;const _invDist=(log[`${wo}-${i}`]||[]).filter(e=>e.isHourly&&DISTANCE_BONUS_STOPS.includes(e.stop)).length;const hrs=_invMins>0?Math.round((_invMins+(_invLG+_invDist)*60)/15)*15/60:(emH[`${_invFbKey}-emser`]||4);
+const _invFbKey=getFbKey(wo,i);const{totalMins:_invMins}=getShiftSummary(_invFbKey);const _invLG=(log[`${wo}-${i}`]||[]).filter(e=>_hourlyBonusEligible(e)&&e.liftgateApplied&&!DISTANCE_BONUS_STOPS.includes(e.stop)).length;const _invDist=(log[`${wo}-${i}`]||[]).filter(e=>_hourlyBonusEligible(e)&&DISTANCE_BONUS_STOPS.includes(e.stop)).length;const hrs=_invMins>0?Math.round((_invMins+(_invLG+_invDist)*60)/15)*15/60:(emH[`${_invFbKey}-emser`]||4);
 const amt=102.50*hrs;
 lines.push({day:weekDates[i].name,date:weekDates[i].date,desc:`Hourly: ${hrs}h × $102.50`,stops:dayEntries.map(e=>e.stop).join(", "),base:amt,fuel:0});
 grandBase+=amt;
@@ -5198,45 +5338,6 @@ const driverHasWeekEntries=(did)=>{
   return false;
 };
 const visibleDrivers=drivers.filter(d=>d.active!==false||driverHasWeekEntries(d.id));
-/* Live-compute load-order text for auto-generated pickups.
-   Why not just read entry.note? Because entry.note is only regenerated when
-   rebuildPickupsFor runs (add/remove/reassign/loadNum change). Dragging a
-   delivery to reorder doesn't trigger a rebuild, so the stored note goes
-   stale. Computing live here means every render (card, manifest text, etc.)
-   always reflects current delivery order — no rebuild required.
-   Returns null for manual pickups, non-pickups, or when no matching dels. */
-const _computeLiveLoadOrderNote=(pickupEntry,driverEntries)=>{
-  if(pickupEntry.stopType!=="pickup"||pickupEntry.manualPickup)return null;
-  const puLoad=pickupEntry.loadNum||1;
-  const puSrcs=PICKUP_SOURCES.filter(s=>s.customer===pickupEntry.customer);
-  const multiSource=puSrcs.length>1;
-  /* Match a delivery to this pickup using a NORMALIZED location compare.
-     The stored pickupFrom field is wildly inconsistent in the real data —
-     the same physical Norcross dock appears as "Norcross", "Emser -
-     Norcross", and "Emser Tile — Norcross" across different entries. Exact
-     string compare (the old code) therefore failed constantly and the
-     "Load order: ..." note disappeared. _normLoc reduces all of those to
-     "norcross" so they compare equal.
-
-     Single-source customers (most): every delivery on the load belongs to
-     the lone pickup — no location gating. Multi-source (Emser, Traditions):
-     the delivery's normalized location must equal the pickup's. */
-  const puLoc=_normLoc(pickupEntry.pickupFrom);
-  const custDels=driverEntries.filter(e=>{
-    if(e.stopType!=="delivery")return false;
-    if(e.customer!==pickupEntry.customer)return false;
-    if((e.loadNum||1)!==puLoad)return false;
-    if(e.driverId!==pickupEntry.driverId)return false;
-    if(!multiSource)return true;
-    return _normLoc(e.pickupFrom)===puLoc;
-  });
-  if(!custDels.length)return null;
-  /* Reverse delivery order → LIFO load order (last delivered loaded first).
-     List every stop — no truncation. There's plenty of horizontal space
-     on the card row and the driver needs the full load plan at a glance. */
-  const names=custDels.slice().reverse().map(e=>e.stop);
-  return "Load order: "+names.join(", ");
-};
 const drvEntries=did=>{
   /* Display-time safety net: collapse duplicate auto-pickups and drop orphaned
      ones (dock-aware) before the next Firestore round-trip heals storage, so a
@@ -5244,14 +5345,11 @@ const drvEntries=did=>{
      dedupeAutoPickups keys on (customer, stop, driverId, loadNum); reap needs the
      deduped set so a survivor is matched to its deliveries. */
   const entries=reapOrphanAutoPickups(dedupeDeliveries(dedupeAutoPickups(dl.filter(e=>e.driverId===did),_reapOpts)),_reapOpts);
-  return entries.map(e=>{
-    if(e.stopType!=="pickup"||e.manualPickup)return e;
-    const live=_computeLiveLoadOrderNote(e,entries);
-    if(live)return {...e,note:live};
-    /* Kept auto-pickup with no live match (e.g. ambiguous-dock delivery) — clear
-       any stale "Load order:" note so it can't name a delivery that isn't here. */
-    return (typeof e.note==="string"&&e.note.startsWith("Load order:"))?{...e,note:null}:e;
-  });
+  /* The live "Load order:" on every pickup card — computed from the deliveries
+     as they stand now (a drag reorder never runs the engine, so the stored
+     note goes stale), by the rule in manifestLogic.js next to the engine that
+     makes the cards. A manual pickup standing in for the dock carries it too. */
+  return entries.map(e=>withLiveLoadOrder(e,entries,_noteDeps));
 };
 
 const handleDrop=(drvId,toIdx,toLoad)=>{
@@ -5375,7 +5473,7 @@ printContent(`Manifest \u2014 ${drv?.name} \u2014 ${wd[sd].name} ${wd[sd].date}`
 let h=`<div class="header"><div><h1 style="color:${col}">DAVIS DELIVERY SERVICE</h1><div class="sub">${drv?.name} \u2014 ${wd[sd].name} ${wd[sd].date}</div></div><div class="total">${fmt(drvRev)}</div></div>`;
 h+=`<div style="display:flex;gap:16px;margin-bottom:12px;flex-wrap:wrap">`;
 h+=`<span style="font-size:12px;font-weight:600;color:#57534e">${de.filter(e=>e.stopType!=="pickup").length} deliveries${drvMiles>0?" \xb7 ~"+drvMiles+"mi":""}${loads.length>1?" \xb7 "+loads.length+" loads":""}</span>`;
-if(de.some(e=>e.isHourly)){const{totalMins:sm}=getShiftSummary(emDk);if(sm>0){const _lg=de.filter(e=>e.isHourly&&e.liftgateApplied&&!DISTANCE_BONUS_STOPS.includes(e.stop)).length;const _d=de.filter(e=>e.isHourly&&DISTANCE_BONUS_STOPS.includes(e.stop)).length;const bil=sm+(_lg+_d)*60;const hrs=Math.round(bil/15)*15/60;h+=`<span style="font-size:12px;font-weight:700;color:#2563eb">\u23f1 Emser ${formatMins(bil)} \u2014 ${fmt(102.50*hrs)}</span>`;}}
+if(de.some(e=>e.isHourly)){const{totalMins:sm}=getShiftSummary(emDk);if(sm>0){const _lg=de.filter(e=>_hourlyBonusEligible(e)&&e.liftgateApplied&&!DISTANCE_BONUS_STOPS.includes(e.stop)).length;const _d=de.filter(e=>_hourlyBonusEligible(e)&&DISTANCE_BONUS_STOPS.includes(e.stop)).length;const bil=sm+(_lg+_d)*60;const hrs=Math.round(bil/15)*15/60;h+=`<span style="font-size:12px;font-weight:700;color:#2563eb">\u23f1 Emser ${formatMins(bil)} \u2014 ${fmt(102.50*hrs)}</span>`;}}
 h+=`</div>`;
 loads.forEach(ln=>{
   const loadStops=de.filter(e=>(e.loadNum||1)===ln);
@@ -5406,7 +5504,7 @@ const printAllManifests=()=>{
 printContent(`All Manifests \u2014 ${wd[sd].name} ${wd[sd].date}`,()=>{
 let h=`<div class="header"><div><h1>DAVIS DELIVERY SERVICE</h1><div class="sub">All Driver Manifests \u2014 ${wd[sd].name} ${wd[sd].date}</div></div><div class="total">${fmt(dc.total)}</div></div>`;
 const{totalMins:shiftMins}=getShiftSummary(emDk);
-if(shiftMins>0){const _pLG=dl.filter(e=>e.isHourly&&e.liftgateApplied&&!DISTANCE_BONUS_STOPS.includes(e.stop)).length;const _pDist=dl.filter(e=>e.isHourly&&DISTANCE_BONUS_STOPS.includes(e.stop)).length;const _pBilled=shiftMins+(_pLG+_pDist)*60;const hrs=Math.round(_pBilled/15)*15/60;h+=`<div class="emser"><span class="lbl">\u23f1 Emser: ${formatMins(_pBilled)}</span><span class="val">${fmt(102.50*hrs)}</span></div>`;}
+if(shiftMins>0){const _pLG=dl.filter(e=>_hourlyBonusEligible(e)&&e.liftgateApplied&&!DISTANCE_BONUS_STOPS.includes(e.stop)).length;const _pDist=dl.filter(e=>_hourlyBonusEligible(e)&&DISTANCE_BONUS_STOPS.includes(e.stop)).length;const _pBilled=shiftMins+(_pLG+_pDist)*60;const hrs=Math.round(_pBilled/15)*15/60;h+=`<div class="emser"><span class="lbl">\u23f1 Emser: ${formatMins(_pBilled)}</span><span class="val">${fmt(102.50*hrs)}</span></div>`;}
 drivers.forEach((drv,di)=>{
   const de=drvEntries(drv.id);
   if(!de.length)return;
@@ -5442,7 +5540,7 @@ return h;});
 const printDailyLog=()=>{printContent(`Daily Log \u2014 ${wd[sd].name} ${wd[sd].date}`,()=>{
 let h=`<div class="header"><div><h1>DAVIS DELIVERY \u2014 Daily Log</h1><div class="sub">${wd[sd].name} ${wd[sd].date}</div></div><div class="total">${fmt(dc.total)}</div></div>`;
 const{totalMins:shiftMins}=getShiftSummary(emDk);
-if(shiftMins>0){const _pLG=dl.filter(e=>e.isHourly&&e.liftgateApplied&&!DISTANCE_BONUS_STOPS.includes(e.stop)).length;const _pDist=dl.filter(e=>e.isHourly&&DISTANCE_BONUS_STOPS.includes(e.stop)).length;const _pBilled=shiftMins+(_pLG+_pDist)*60;const hrs=Math.round(_pBilled/15)*15/60;h+=`<div class="emser"><span class="lbl">\u23f1 Emser Hours: ${formatMins(_pBilled)}${_pLG>0?" (incl "+_pLG+"h LG)":""}${_pDist>0?" (incl "+_pDist+"h distance)":""}</span><span class="val">${fmt(102.50*hrs)}</span></div>`;}
+if(shiftMins>0){const _pLG=dl.filter(e=>_hourlyBonusEligible(e)&&e.liftgateApplied&&!DISTANCE_BONUS_STOPS.includes(e.stop)).length;const _pDist=dl.filter(e=>_hourlyBonusEligible(e)&&DISTANCE_BONUS_STOPS.includes(e.stop)).length;const _pBilled=shiftMins+(_pLG+_pDist)*60;const hrs=Math.round(_pBilled/15)*15/60;h+=`<div class="emser"><span class="lbl">\u23f1 Emser Hours: ${formatMins(_pBilled)}${_pLG>0?" (incl "+_pLG+"h LG)":""}${_pDist>0?" (incl "+_pDist+"h distance)":""}</span><span class="val">${fmt(102.50*hrs)}</span></div>`;}
 if(Object.keys(dc.fBC||{}).length>0){h+=`<div class="fuel"><span class="lbl">Fuel Surcharges</span><div>`;Object.entries(dc.fBC).forEach(([cu,cf])=>{h+=`<span style="margin-right:14px;font-size:11px">${cu}: ${fmt(cf.base)} \xd7 ${Math.round(cf.pct*100)}% = <b style="color:#d97706">${fmt(cf.base*cf.pct)}</b></span>`;});h+=`</div></div>`;}
 const deliveries=dl.filter(e=>e.stopType!=="pickup");
 const byCustomer={};
@@ -5473,14 +5571,14 @@ custList.forEach(cust=>{
   });
   h+=`</table></div>`;
 });
-const custRevArr=custList.map(c=>{const dels=byCustomer[c];const isHr=dels.some(e=>e.isHourly);const rev=isHr?(()=>{if(shiftMins>0){const _lg=dels.filter(e=>e.isHourly&&e.liftgateApplied&&!DISTANCE_BONUS_STOPS.includes(e.stop)).length;const _d=dels.filter(e=>e.isHourly&&DISTANCE_BONUS_STOPS.includes(e.stop)).length;const bil=shiftMins+(_lg+_d)*60;return 102.50*Math.round(bil/15)*15/60;}return 0;})():dels.reduce((s,e)=>s+allInRate(e),0);return[c,rev];}).filter(([,r])=>r>0).sort((a,b)=>b[1]-a[1]);
+const custRevArr=custList.map(c=>{const dels=byCustomer[c];const isHr=dels.some(e=>e.isHourly);const rev=isHr?(()=>{if(shiftMins>0){const _lg=dels.filter(e=>_hourlyBonusEligible(e)&&e.liftgateApplied&&!DISTANCE_BONUS_STOPS.includes(e.stop)).length;const _d=dels.filter(e=>_hourlyBonusEligible(e)&&DISTANCE_BONUS_STOPS.includes(e.stop)).length;const bil=shiftMins+(_lg+_d)*60;return 102.50*Math.round(bil/15)*15/60;}return 0;})():dels.reduce((s,e)=>s+allInRate(e),0);return[c,rev];}).filter(([,r])=>r>0).sort((a,b)=>b[1]-a[1]);
 if(custRevArr.length>1){
   h+=`<div class="section"><div class="section-title"><span>Revenue by Customer</span><span class="amt">${fmt(dc.total)}</span></div><table>`;
   custRevArr.forEach(([cu,rev])=>{h+=`<tr><td style="font-weight:600">${cu}</td><td style="text-align:right;font-weight:700;color:#16a34a">${fmt(rev)}</td></tr>`;});
   h+=`</table></div>`;
 }
 return h;});};
-const printWeekly=()=>{printContent("Weekly",()=>{let h=`<div class="header"><div><h1>DAVIS DELIVERY — Weekly Summary</h1><div class="sub">${wd[0].date} — ${wd[4].date}</div></div><div class="total">${fmt(wkT)}</div></div>`;const wkShiftByDrv2={};let wkShiftTotal2=0;let wkBonusTotal2=0;DAYS.forEach((_,i)=>{const{byDriver,totalMins}=getShiftSummary(getFbKey(wo,i));wkShiftTotal2+=totalMins;const _dayEnts=log[`${wo}-${i}`]||[];const _dayLG=_dayEnts.filter(e=>e.isHourly&&e.liftgateApplied&&!DISTANCE_BONUS_STOPS.includes(e.stop)).length;const _dayDist=_dayEnts.filter(e=>e.isHourly&&DISTANCE_BONUS_STOPS.includes(e.stop)).length;wkBonusTotal2+=(_dayLG+_dayDist)*60;Object.entries(byDriver).forEach(([did,mins])=>{wkShiftByDrv2[did]=(wkShiftByDrv2[did]||0)+mins;});});if(wkShiftTotal2>0){const _wkBilled2=wkShiftTotal2+wkBonusTotal2;const hrs2=Math.round(_wkBilled2/15)*15/60;h+=`<div class="emser"><div><span class="lbl">⏱ Emser Week Total: ${formatMins(_wkBilled2)}</span><br><span style="font-size:10px;color:#64748b">${drivers.filter(d=>wkShiftByDrv2[d.id]).map(d=>`${d.name}: ${formatMins(wkShiftByDrv2[d.id])}`).join(" · ")}</span></div><span class="val">${fmt(102.50*hrs2)}</span></div>`;}const wkFuel={};DAYS.forEach((_,i)=>{const calc=wkD[i].calc;Object.entries(calc.fBC||{}).forEach(([cu,cf])=>{if(!wkFuel[cu])wkFuel[cu]={pct:cf.pct,base:0};wkFuel[cu].base+=cf.base;});});if(Object.keys(wkFuel).length>0){h+=`<div class="fuel"><div class="lbl">Week Fuel Surcharges</div>`;Object.entries(wkFuel).forEach(([cu,cf])=>{h+=`<div style="display:flex;justify-content:space-between;padding:2px 0"><span>${cu} (${fmt(cf.base)} × ${Math.round(cf.pct*100)}%)</span><b style="color:#d97706">${fmt(cf.base*cf.pct)}</b></div>`;});h+=`</div>`;}DAYS.forEach((day,i)=>{const{entries,calc}=wkD[i];const{totalMins:shiftMins}=getShiftSummary(getFbKey(wo,i));if(!entries.length&&!shiftMins)return;h+=`<div class="section"><div class="section-title"><span>${day} — ${wd[i].date}</span><span class="amt">${fmt(calc.total)}</span></div>`;if(shiftMins>0){const _wpLG=entries.filter(e=>e.isHourly&&e.liftgateApplied&&!DISTANCE_BONUS_STOPS.includes(e.stop)).length;const _wpDist=entries.filter(e=>e.isHourly&&DISTANCE_BONUS_STOPS.includes(e.stop)).length;const _wpBilled=shiftMins+(_wpLG+_wpDist)*60;const hrs=Math.round(_wpBilled/15)*15/60;h+=`<div style="padding:3px 10px;background:#eff6ff;border-left:3px solid #2563eb;margin-bottom:4px;font-size:11px"><b style="color:#2563eb">⏱ Emser ${formatMins(_wpBilled)}</b> — ${fmt(102.50*hrs)}</div>`;}h+=`<table><tr><th>Customer</th><th>Stop</th><th>Driver</th><th>Notes</th><th style="text-align:right">Rate</th></tr>`;entries.filter(e=>e.stopType!=="pickup"||e.manualPickup).sort((a,b)=>a.customer.localeCompare(b.customer)).forEach(e=>{const drv=drivers.find(d=>d.id===e.driverId);const _cu=CUSTOMERS[e.customer];const _showFuel=_cu&&_cu.fuel_surcharge&&!_cu.fuel_included&&e.fuelPct!==0;const _pct=_showFuel?Math.round((e.fuelPct||_cu.fuel_surcharge)*100):0;const _fuelChip=_showFuel?`<span style="font-size:9px;background:#fffbeb;color:#b45309;border:1px solid #fde68a;padding:1px 5px;border-radius:4px;font-weight:700;margin-right:6px">+${_pct}% FUEL</span>`:"";const _fromLabel=e.pickupFrom?` <span style="font-size:10px;color:#64748b;font-style:italic">· from ${e.pickupFrom}</span>`:"";h+=`<tr><td style="color:#57534e">${e.customer}</td><td><b>${e.stop}</b>${_fromLabel}</td><td>${drv?drv.name:""}</td><td style="font-size:10px">${e.instructions?'<span class="instr">'+e.instructions+'</span> ':""}${e.shipPlan?'<b style="color:#ea580c">SP# '+e.shipPlan+'</b>':""}</td><td style="text-align:right;font-weight:700;white-space:nowrap">${_fuelChip}${e.isHourly?"HR":fmt(allInRate(e))}</td></tr>`;});h+=`</table></div>`;});return h;});};
+const printWeekly=()=>{printContent("Weekly",()=>{let h=`<div class="header"><div><h1>DAVIS DELIVERY — Weekly Summary</h1><div class="sub">${wd[0].date} — ${wd[4].date}</div></div><div class="total">${fmt(wkT)}</div></div>`;const wkShiftByDrv2={};let wkShiftTotal2=0;let wkBonusTotal2=0;DAYS.forEach((_,i)=>{const{byDriver,totalMins}=getShiftSummary(getFbKey(wo,i));wkShiftTotal2+=totalMins;const _dayEnts=log[`${wo}-${i}`]||[];const _dayLG=_dayEnts.filter(e=>_hourlyBonusEligible(e)&&e.liftgateApplied&&!DISTANCE_BONUS_STOPS.includes(e.stop)).length;const _dayDist=_dayEnts.filter(e=>_hourlyBonusEligible(e)&&DISTANCE_BONUS_STOPS.includes(e.stop)).length;wkBonusTotal2+=(_dayLG+_dayDist)*60;Object.entries(byDriver).forEach(([did,mins])=>{wkShiftByDrv2[did]=(wkShiftByDrv2[did]||0)+mins;});});if(wkShiftTotal2>0){const _wkBilled2=wkShiftTotal2+wkBonusTotal2;const hrs2=Math.round(_wkBilled2/15)*15/60;h+=`<div class="emser"><div><span class="lbl">⏱ Emser Week Total: ${formatMins(_wkBilled2)}</span><br><span style="font-size:10px;color:#64748b">${drivers.filter(d=>wkShiftByDrv2[d.id]).map(d=>`${d.name}: ${formatMins(wkShiftByDrv2[d.id])}`).join(" · ")}</span></div><span class="val">${fmt(102.50*hrs2)}</span></div>`;}const wkFuel={};DAYS.forEach((_,i)=>{const calc=wkD[i].calc;Object.entries(calc.fBC||{}).forEach(([cu,cf])=>{if(!wkFuel[cu])wkFuel[cu]={pct:cf.pct,base:0};wkFuel[cu].base+=cf.base;});});if(Object.keys(wkFuel).length>0){h+=`<div class="fuel"><div class="lbl">Week Fuel Surcharges</div>`;Object.entries(wkFuel).forEach(([cu,cf])=>{h+=`<div style="display:flex;justify-content:space-between;padding:2px 0"><span>${cu} (${fmt(cf.base)} × ${Math.round(cf.pct*100)}%)</span><b style="color:#d97706">${fmt(cf.base*cf.pct)}</b></div>`;});h+=`</div>`;}DAYS.forEach((day,i)=>{const{entries,calc}=wkD[i];const{totalMins:shiftMins}=getShiftSummary(getFbKey(wo,i));if(!entries.length&&!shiftMins)return;h+=`<div class="section"><div class="section-title"><span>${day} — ${wd[i].date}</span><span class="amt">${fmt(calc.total)}</span></div>`;if(shiftMins>0){const _wpLG=entries.filter(e=>_hourlyBonusEligible(e)&&e.liftgateApplied&&!DISTANCE_BONUS_STOPS.includes(e.stop)).length;const _wpDist=entries.filter(e=>_hourlyBonusEligible(e)&&DISTANCE_BONUS_STOPS.includes(e.stop)).length;const _wpBilled=shiftMins+(_wpLG+_wpDist)*60;const hrs=Math.round(_wpBilled/15)*15/60;h+=`<div style="padding:3px 10px;background:#eff6ff;border-left:3px solid #2563eb;margin-bottom:4px;font-size:11px"><b style="color:#2563eb">⏱ Emser ${formatMins(_wpBilled)}</b> — ${fmt(102.50*hrs)}</div>`;}h+=`<table><tr><th>Customer</th><th>Stop</th><th>Driver</th><th>Notes</th><th style="text-align:right">Rate</th></tr>`;entries.filter(e=>e.stopType!=="pickup"||e.manualPickup).sort((a,b)=>a.customer.localeCompare(b.customer)).forEach(e=>{const drv=drivers.find(d=>d.id===e.driverId);const _cu=CUSTOMERS[e.customer];const _showFuel=_cu&&_cu.fuel_surcharge&&!_cu.fuel_included&&e.fuelPct!==0;const _pct=_showFuel?Math.round((e.fuelPct||_cu.fuel_surcharge)*100):0;const _fuelChip=_showFuel?`<span style="font-size:9px;background:#fffbeb;color:#b45309;border:1px solid #fde68a;padding:1px 5px;border-radius:4px;font-weight:700;margin-right:6px">+${_pct}% FUEL</span>`:"";const _fromLabel=e.pickupFrom?` <span style="font-size:10px;color:#64748b;font-style:italic">· from ${e.pickupFrom}</span>`:"";h+=`<tr><td style="color:#57534e">${e.customer}</td><td><b>${e.stop}</b>${_fromLabel}</td><td>${drv?drv.name:""}</td><td style="font-size:10px">${e.instructions?'<span class="instr">'+e.instructions+'</span> ':""}${e.shipPlan?'<b style="color:#ea580c">SP# '+e.shipPlan+'</b>':""}</td><td style="text-align:right;font-weight:700;white-space:nowrap">${_fuelChip}${e.isHourly?"HR":fmt(allInRate(e))}</td></tr>`;});h+=`</table></div>`;});return h;});};
 
 const printPODEntry=(entry)=>{const w=window.open("","_blank","width=800,height=900");if(!w){showToast("Print blocked — works when published");return;}const addr=entry.addr||getAddr(entry.stop);const drvName=drivers.find(d=>d.id===entry.driverId)?.name||"—";const isSigImg=entry.signature&&(entry.signature.startsWith("data:")||entry.signature.startsWith("http"));const photos=(entry.photos||[]).filter(p=>p&&!(typeof p==="string"&&p.startsWith("photo_")));const rate=entry.isHourly?"Hourly":fmt(allInRate(entry));w.document.write(`<!DOCTYPE html><html><head><title>POD — ${entry.stop}</title><style>@media print{.no-print{display:none!important;}}body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;margin:0;padding:24px;color:#1c1917;}.header{display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid #1e5b92;padding-bottom:12px;margin-bottom:16px;}.logo{height:50px;background:#1e5b92;padding:6px 12px;border-radius:6px;}.pod-title{text-align:center;font-size:20px;font-weight:700;margin:14px 0;text-transform:uppercase;color:#1e5b92;letter-spacing:1px;}.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 28px;margin-bottom:20px;padding:14px 18px;background:#f8f8f6;border-radius:10px;}.info-grid .label{font-size:10px;color:#78716c;text-transform:uppercase;font-weight:600;letter-spacing:0.5px;}.info-grid .value{font-size:14px;font-weight:600;margin-bottom:4px;}.photos{display:flex;flex-wrap:wrap;gap:10px;margin:12px 0;}.photos img{max-width:300px;max-height:240px;border-radius:8px;border:1px solid #e7e5e4;object-fit:contain;}.sig-box{margin:20px 0;padding:16px;border:2px solid #16a34a;border-radius:10px;text-align:center;}.sig-box img{max-height:120px;}.sig-label{font-size:10px;color:#78716c;text-transform:uppercase;margin-bottom:6px;font-weight:600;}.footer{margin-top:24px;border-top:1px solid #e7e5e4;padding-top:10px;font-size:9px;color:#a8a29e;text-align:center;}</style></head><body>`);w.document.write(`<button class="no-print" onclick="window.print()" style="position:fixed;top:12px;right:12px;background:#1e5b92;color:#fff;border:none;border-radius:8px;padding:10px 24px;font-size:14px;font-weight:700;cursor:pointer;z-index:10;">Print</button>`);w.document.write(`<div class="header"><div><img class="logo" src="https://davisdelivery.com/wp-content/uploads/2025/05/davis-white2-scaled.png" onerror="this.outerHTML='<div style=\\'font-size:20px;font-weight:700;color:#1e5b92\\'>DAVIS DELIVERY SERVICE</div>'"/><div style="font-size:11px;color:#78716c;margin-top:6px;">4535 Shadburn Ferry Rd · Buford, GA 30518 · (770) 271-9498</div></div><div style="text-align:right"><div style="font-size:13px;font-weight:600;">${entry.dayName||""} ${entry.dayDate||""}</div></div></div>`);w.document.write(`<div class="pod-title">Proof of Delivery</div>`);w.document.write(`<div class="info-grid"><div><div class="label">Customer</div><div class="value">${entry.customer||""}</div></div><div><div class="label">Driver</div><div class="value">${drvName}</div></div><div><div class="label">Delivery To</div><div class="value">${entry.stop||""}</div></div><div><div class="label">Weight</div><div class="value">${entry.weight?entry.weight.toLocaleString()+" lbs":"—"}</div></div><div><div class="label">Address</div><div class="value">${addr||"—"}</div></div><div><div class="label">Rate</div><div class="value">${rate}</div></div><div><div class="label">Arrived</div><div class="value">${entry.arrivedAt||"—"}</div></div><div><div class="label">Departed</div><div class="value">${entry.departedAt||"—"}</div></div>${entry.shipPlan?`<div><div class="label">Ship Plan</div><div class="value">#${entry.shipPlan}</div></div>`:""}${entry.instructions?`<div style="grid-column:span 2"><div class="label">Instructions</div><div class="value">${entry.instructions}</div></div>`:""}</div>`);if(photos.length>0){w.document.write(`<div style="font-size:11px;color:#78716c;text-transform:uppercase;font-weight:600;margin-top:14px;">Delivery Photos</div><div class="photos">`);photos.forEach(p=>{w.document.write(`<img src="${p}" onerror="this.style.display='none'"/>`);});w.document.write(`</div>`);}if(entry.signature){if(isSigImg){w.document.write(`<div class="sig-box"><div class="sig-label">Signature</div><img src="${entry.signature}"/></div>`);}else{w.document.write(`<div class="sig-box"><div class="sig-label">Received By</div><div style="font-size:22px;font-weight:700;color:#16a34a;">${entry.signature}</div></div>`);}}w.document.write(`<div class="footer">Davis Delivery Service Inc. · Generated ${new Date().toLocaleString()}</div></body></html>`);w.document.close();};
 
@@ -5726,7 +5824,7 @@ WEIGHT FORMAT RULES:
 
 Match stop names to known customers: AFD = "Atlanta Flooring - Suwanee", ELITE = "Elite Flooring - Norcross", FWORX = "Floorworx - Norcross", IDLEWOOD = "Idlewood - Norcross", VALUFLOR = "Valufloor - Doraville", BEC = "BEC - Alpharetta", PEACHWOOD = "Peachwood Floor Covering", AMERICAN FLOORING = "American Flooring Services", DCO EATONTON or DALTON CARPET ONE EATONTON = "DCO Eatonton", DCO LAWRENCEVILLE or DALTON CARPET = "DCO Tech Dr - Lawrenceville", DCO LAKES or DCO LAKES PKWY = "DCO Lakes Pkwy", DCO SMYRNA or DALTON CARPET OUTLET = "Dalton Carpet Outlet - Smyrna", DCO ATHENS = "DCO Athens", HILLMAN = "Hillman - Sugar Hill", BRITTS = "Britts - Lawrenceville", STOCCO = "Stocco - Alpharetta", NE CORNER = "NE Corner - Flowery Branch", PREMIER = "Premier - Suwanee", PROSOURCE = varies by location, VANGUARD = "Vanguard - Norcross", SE COMMERCIAL = "SE Commercial - Woodstock", PRECISION = "Precision Flooring - Norcross", ATL WEST = "Atlanta West - Lithia Springs", ATL FLOORING = "Atlanta Flooring - Suwanee", SHERWIN = varies by location, GEL = "Gel & Associates - Atlanta", STRATHMORE = "Strathmore - Atlanta", FLOORING DESIGN = "Flooring Design Group - Doraville", D3 = "D3 - Woodstock", PRESTIGIOUS = "Prestigious - Alpharetta", MADISON = "Madison Flooring Group", CONSTRUCTION RESOURCES = "Construction Resources - Decatur", BFC = "Builders Floor Coverings - Decatur", BUILDERS = "Builders Floor Coverings - Decatur", NOCO = "NOCO Contracting", PEACHWOOD SUWANEE = "Peachwood Floor Covering", ADVANCE = "Advanced Flooring Design - Mableton", ADV FLOORING = "Advanced Flooring Design - Mableton".
 CRITICAL: The "stop" field in JSON MUST use the EXACT stop name from the lists above (e.g. "DCO Eatonton" NOT "Dalton Carpet One - Eatonton"). These exact names are required for map markers and address lookup to work.
-Note which pickup location (Norcross or Roswell) each stop comes from. Stops listed under "ROSWELL:" are from Roswell pickup; all others default to Norcross. If a stop appears under BOTH Norcross and Roswell sections, list it twice with the appropriate pickup noted.
+Emser ships from Norcross only — its Roswell branch is closed. Ignore any "ROSWELL:" heading on an older sheet and treat every stop under it as Norcross; never emit Roswell as a pickup location. A stop listed under both headings is ONE stop, not two.
 
 When suggesting route orders, ALWAYS show time constraints first, then order remaining stops by geographic proximity in the Atlanta metro.
 If two stops have conflicting time windows, flag the conflict clearly before suggesting a route.
@@ -5852,7 +5950,7 @@ const dkNote=dispNotes[emDk]||"";
 const allDriverEntries=drivers.map((drv,di)=>({drv,di,entries:drvEntries(drv.id)})).filter(({drv,entries})=>drv.active!==false||entries.length>0);
 const uaEntries=dl.filter(e=>e.driverId===0);
 const custRevenue={};dl.forEach(e=>{if(!e.isHourly){if(!custRevenue[e.customer])custRevenue[e.customer]=0;custRevenue[e.customer]+=allInRate(e);}});
-if(dl.some(e=>e.isHourly)){const{totalMins:_crMins}=getShiftSummary(emDk);const _crLG=dl.filter(e=>e.isHourly&&e.liftgateApplied&&!DISTANCE_BONUS_STOPS.includes(e.stop)).length;const _crDist=dl.filter(e=>e.isHourly&&DISTANCE_BONUS_STOPS.includes(e.stop)).length;const _crHrs=_crMins>0?Math.round((_crMins+(_crLG+_crDist)*60)/15)*15/60:(emH[`${emDk}-emser`]||4);custRevenue["Emser Tile"]=(custRevenue["Emser Tile"]||0)+102.50*_crHrs;}
+if(dl.some(e=>e.isHourly)){const{totalMins:_crMins}=getShiftSummary(emDk);const _crLG=dl.filter(e=>_hourlyBonusEligible(e)&&e.liftgateApplied&&!DISTANCE_BONUS_STOPS.includes(e.stop)).length;const _crDist=dl.filter(e=>_hourlyBonusEligible(e)&&DISTANCE_BONUS_STOPS.includes(e.stop)).length;const _crHrs=_crMins>0?Math.round((_crMins+(_crLG+_crDist)*60)/15)*15/60:(emH[`${emDk}-emser`]||4);custRevenue["Emser Tile"]=(custRevenue["Emser Tile"]||0)+102.50*_crHrs;}
 const custRevArr=Object.entries(custRevenue).sort((a,b)=>b[1]-a[1]);
 const maxCustRev=Math.max(...custRevArr.map(c=>c[1]),1);
 const statusCounts={pending:0,arrived:0,departed:0};
@@ -5896,13 +5994,18 @@ return(
 ))}
 </div>}
 
-<div style={{background:"#f7f7f6",borderBottom:"1px solid #e7e5e4",padding:"8px 28px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
-<div style={{display:"flex",alignItems:"center",gap:24}}>
+{/* The header is twelve controls wide. On a 1512px laptop the right-hand
+    group needed 1049px starting at x=530, so the week-revenue chip sat off
+    the screen with no way to scroll to it — and every view that adds the
+    "← Dashboard" button lost another 100px. It wraps now: unchanged on a wide
+    monitor, a second row rather than a severed one when it cannot fit. */}
+<div style={{background:"#f7f7f6",borderBottom:"1px solid #e7e5e4",padding:"8px 28px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0,flexWrap:"wrap",rowGap:8}}>
+<div style={{display:"flex",alignItems:"center",gap:24,flexWrap:"wrap",rowGap:8,minWidth:0}}>
 <div style={_s.flexC8}>
 <a href={window.location.pathname} onClick={e=>{e.preventDefault();setView("manifest");setSelCust(null);setQuoteMode(null);window.history.replaceState(null,"",window.location.pathname);window.scrollTo(0,0);}} style={{cursor:"pointer",display:"flex",alignItems:"center",gap:8}}>
 <img src={LOGO_URI} alt="Davis Delivery Service" style={{height:38,objectFit:"contain"}}/>
 </a>
-<span style={{fontSize:9,color:"#a8a29e",fontWeight:600,letterSpacing:"0.02em"}}>v{APP_VERSION}</span>
+<span style={{fontSize:9,color:"#a8a29e",fontWeight:600,letterSpacing:"0.02em",whiteSpace:"nowrap"}}>v{APP_VERSION}</span>
 {saveStatus&&<span style={{fontSize:9,fontWeight:700,color:saveStatus.includes("FAIL")?"#dc2626":saveStatus.includes("saving")?"#d97706":"#16a34a",marginLeft:4}}>{saveStatus}</span>}
 <span style={{display:"inline-block",width:6,height:6,borderRadius:3,background:fbConnected?"#16a34a":"#dc2626",marginLeft:6}}/>
 </div>
@@ -5916,7 +6019,7 @@ return(
 {wo!==0&&<button onClick={()=>{{const _dws=_defaultWoSd();setWo(_dws.wo);setSd(_dws.sd);}}} style={{background:"#16a34a",border:"none",borderRadius:7,padding:"4px 14px",cursor:"pointer",fontSize:11,fontWeight:600,color:"#fff",marginLeft:2}}>Today</button>}
 </div>
 </div>
-<div style={_s.flexC10}>
+<div style={{..._s.flexC10,flexWrap:"wrap",justifyContent:"flex-end",rowGap:8,minWidth:0}}>
 {view!=="manifest"&&<button onClick={()=>{setView("manifest");setSelCust(null);setQuoteMode(null);window.history.replaceState(null,"",window.location.pathname);window.scrollTo(0,0);}} style={{background:BRAND.main,border:"none",color:"#fff",borderRadius:8,padding:"7px 16px",cursor:"pointer",fontSize:12,fontWeight:700}}>{"← Dashboard"}</button>}
 {[{k:"daily",l:"Daily"},{k:"weekly",l:"Weekly"},{k:"routes",l:"Routes"},{k:"add",l:"+ Add"}].map(v=>{const delCount=v.k==="daily"?dl.filter(e=>e.stopType!=="pickup").length:0;return(<button key={v.k} onClick={()=>{setView(v.k);setSelCust(null);setQuoteMode(null);if(v.k==="routes"){setRpInited(false);}}} style={{background:view===v.k?(v.k==="add"?"#16a34a":v.k==="routes"?"#d97706":BRAND.main):v.k==="add"?"#f0fdf4":v.k==="routes"?"#fffbeb":"#fff",border:view===v.k?"none":v.k==="add"?"1px solid #bbf7d0":v.k==="routes"?"1px solid #fde68a":"1px solid #e7e5e4",color:view===v.k?"#fff":v.k==="add"?"#16a34a":v.k==="routes"?"#d97706":"#57534e",borderRadius:8,padding:"7px 14px",cursor:"pointer",fontSize:12,fontWeight:600,display:"inline-flex",alignItems:"center",gap:6}}>{v.l}{v.k==="daily"&&delCount>0&&<span style={{fontSize:10,fontWeight:800,padding:"1px 6px",borderRadius:10,background:view===v.k?"rgba(255,255,255,0.25)":BRAND.pale,color:view===v.k?"#fff":BRAND.main,minWidth:18,textAlign:"center",fontVariantNumeric:"tabular-nums"}}>{delCount}</span>}</button>);})}
 <div style={{position:"relative"}}>
@@ -6088,6 +6191,8 @@ if(ids.includes(entryId)){
 }};
 
 const rpApply=()=>{
+if(rpSeedRef.current.dk!==dk){showToast("Planner was opened on another day — reopen it");return;}
+const _seeded=rpSeedRef.current.ids;
 setLog(p=>{
   let all=[...(p[dk]||[])];
   Object.entries(rpOrders).forEach(([did,ids])=>{
@@ -6103,7 +6208,9 @@ setLog(p=>{
      drivers only), so leaving it untouched stops Apply from silently
      relocating a delivery the user never saw to Unassigned. */
   const _rosterIds=new Set(drivers.map(d=>d.id));
-  all=all.map(e=>allRouted.includes(e.id)?e:((e.driverId===0||_rosterIds.has(e.driverId))?{...e,driverId:0}:e));
+  /* …and only stops the planner was SEEDED with: one assigned by another
+     device after it opened was never in the pool, so Apply has no opinion on it. */
+  all=all.map(e=>allRouted.includes(e.id)?e:((_seeded.has(e.id)&&(e.driverId===0||_rosterIds.has(e.driverId)))?{...e,driverId:0}:e));
   Object.entries(rpOrders).forEach(([did,ids])=>{
     if(!ids.length)return;
     const drvId=Number(did);
@@ -6285,10 +6392,10 @@ style={{display:"flex",alignItems:"center",gap:6,padding:"6px 8px",marginBottom:
 <div style={{fontSize:11,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.stop}</div>
 <div style={{display:"flex",alignItems:"center",gap:3,flexWrap:"wrap"}}>
 <span style={{fontSize:9,color:c.accent}}>{e.customer}</span>
-{isPU&&<span style={{fontSize:7,background:"#2563eb",color:"#fff",padding:"0 3px",borderRadius:2,fontWeight:700}}>PU</span>}
-{!isPU&&<span style={{fontSize:7,background:"#16a34a",color:"#fff",padding:"0 3px",borderRadius:2,fontWeight:700}}>DEL</span>}
-{e.priority&&<span style={{fontSize:7,background:"#f59e0b",color:"#fff",padding:"0 3px",borderRadius:2,fontWeight:700}}>PRI</span>}
-{e.dueBy&&<span style={{fontSize:7,background:e.dueBy.includes("By")?"#dc2626":"#2563eb",color:"#fff",padding:"0 3px",borderRadius:2,fontWeight:700}}>⏰{e.dueBy}</span>}
+{isPU&&<span style={{fontSize:8,background:"#2563eb",color:"#fff",padding:"0 3px",borderRadius:2,fontWeight:700}}>PU</span>}
+{!isPU&&<span style={{fontSize:8,background:"#16a34a",color:"#fff",padding:"0 3px",borderRadius:2,fontWeight:700}}>DEL</span>}
+{e.priority&&<span style={{fontSize:8,background:"#f59e0b",color:"#fff",padding:"0 3px",borderRadius:2,fontWeight:700}}>PRI</span>}
+{e.dueBy&&<span style={{fontSize:8,background:e.dueBy.includes("By")?"#dc2626":"#2563eb",color:"#fff",padding:"0 3px",borderRadius:2,fontWeight:700}}>⏰{e.dueBy}</span>}
 <FDFlag entry={e} {...fdCtx} size="xs"/>
 {e.weight>0&&<span style={{fontSize:8,color:BRAND.main,fontWeight:700}}>{e.weight.toLocaleString()}lb</span>}
 </div>
@@ -6394,7 +6501,10 @@ return(<div style={{position:"absolute",top:12,left:12,right:60,zIndex:5}}>
 </div>
 </div>
 </div>);})()}
-{!rpActive&&<div style={{position:"absolute",top:12,left:12,right:60,zIndex:5,background:"#fff",borderRadius:14,padding:"12px 18px",fontSize:13,fontWeight:600,color:"#78716c",boxShadow:"0 8px 32px rgba(0,0,0,0.1)",display:"flex",alignItems:"center",gap:10}}>
+{/* The map's search box is absolute at top:10 on the same zIndex, so this hint
+    was drawn underneath it and the line the dispatcher needed to read was the
+    one that got covered. Sit below the search box and clear of the legend. */}
+{!rpActive&&<div style={{position:"absolute",top:64,left:12,right:60,zIndex:5,background:"#fff",borderRadius:14,padding:"12px 18px",fontSize:13,fontWeight:600,color:"#78716c",boxShadow:"0 8px 32px rgba(0,0,0,0.1)",display:"flex",alignItems:"center",gap:10}}>
 <span style={{fontSize:22}}>👈</span>
 <div><div style={{fontWeight:700,color:"#1c1917"}}>Select a driver</div><div style={{fontSize:11,marginTop:2}}>Then click stops on the map in delivery order</div></div>
 </div>}
@@ -6446,9 +6556,9 @@ activeDriver={rpActive} onStopClick={rpClick} onAssignStop={rpActive?(sid)=>rpCl
 
 {dl.some(e=>e.isHourly)&&(()=>{
 const {byDriver,totalMins}=getShiftSummary(emDk);
-const distBonusEntries=dl.filter(e=>e.isHourly&&DISTANCE_BONUS_STOPS.includes(e.stop));
+const distBonusEntries=dl.filter(e=>_hourlyBonusEligible(e)&&DISTANCE_BONUS_STOPS.includes(e.stop));
 const distBonusCount=distBonusEntries.length;
-const lgBonusEntries=dl.filter(e=>e.isHourly&&e.liftgateApplied&&!DISTANCE_BONUS_STOPS.includes(e.stop));
+const lgBonusEntries=dl.filter(e=>_hourlyBonusEligible(e)&&e.liftgateApplied&&!DISTANCE_BONUS_STOPS.includes(e.stop));
 const lgCountDesktop=lgBonusEntries.length;
 const lgMinsDesktop=lgCountDesktop*60;
 const distMinsDesktop=distBonusCount*60;
@@ -6622,7 +6732,7 @@ return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius
 </div>
 </div>
 
-{(()=>{const wkShiftByDrv={};let wkShiftTotal=0;let wkBonusMins=0;DAYS.forEach((_,i)=>{const{byDriver,totalMins}=getShiftSummary(getFbKey(wo,i));wkShiftTotal+=totalMins;const _wkDE=log[`${wo}-${i}`]||[];wkBonusMins+=(_wkDE.filter(e=>e.isHourly&&e.liftgateApplied&&!DISTANCE_BONUS_STOPS.includes(e.stop)).length+_wkDE.filter(e=>e.isHourly&&DISTANCE_BONUS_STOPS.includes(e.stop)).length)*60;Object.entries(byDriver).forEach(([did,mins])=>{wkShiftByDrv[did]=(wkShiftByDrv[did]||0)+mins;});});if(!wkShiftTotal)return null;const wkShiftHrs=Math.round((wkShiftTotal+wkBonusMins)/15)*15/60;return(<div style={{background:"#eff6ff",border:"2px solid #2563eb",borderRadius:14,padding:"16px 18px",marginBottom:16}}>
+{(()=>{const wkShiftByDrv={};let wkShiftTotal=0;let wkBonusMins=0;DAYS.forEach((_,i)=>{const{byDriver,totalMins}=getShiftSummary(getFbKey(wo,i));wkShiftTotal+=totalMins;const _wkDE=log[`${wo}-${i}`]||[];wkBonusMins+=(_wkDE.filter(e=>_hourlyBonusEligible(e)&&e.liftgateApplied&&!DISTANCE_BONUS_STOPS.includes(e.stop)).length+_wkDE.filter(e=>_hourlyBonusEligible(e)&&DISTANCE_BONUS_STOPS.includes(e.stop)).length)*60;Object.entries(byDriver).forEach(([did,mins])=>{wkShiftByDrv[did]=(wkShiftByDrv[did]||0)+mins;});});if(!wkShiftTotal)return null;const wkShiftHrs=Math.round((wkShiftTotal+wkBonusMins)/15)*15/60;return(<div style={{background:"#eff6ff",border:"2px solid #2563eb",borderRadius:14,padding:"16px 18px",marginBottom:16}}>
 <div style={_s.flexBtwMb10}>
 <span style={{fontSize:16,fontWeight:700,color:"#2563eb"}}>⏱ Emser Week Total</span>
 <span style={{fontSize:22,fontWeight:800,fontVariantNumeric:"tabular-nums",color:"#1d4ed8"}}>{fmt(102.50*wkShiftHrs)}</span>
@@ -7235,7 +7345,7 @@ style={{width:"100%",border:"1px solid #d8b4fe",borderRadius:8,padding:"8px 10px
 <div style={{height:"100%",width:pct+"%",background:col,borderRadius:4,transition:"width 0.3s"}}/>
 </div>
 <span style={{fontSize:12,fontWeight:700,color:col,fontVariantNumeric:"tabular-nums",flexShrink:0}}>{w.toLocaleString()}<span style={{fontSize:10,color:"#a8a29e"}}>/{(cap/1000).toFixed(0)}k</span></span>
-{over&&<span style={{fontSize:7,background:"#dc2626",color:"#fff",padding:"0px 3px",borderRadius:2,fontWeight:700}}>OVER</span>}
+{over&&<span style={{fontSize:8,background:"#dc2626",color:"#fff",padding:"0px 3px",borderRadius:2,fontWeight:700}}>OVER</span>}
 </div>):null;})}
 <button onClick={()=>toggleDriverCapacity(drv.id)} style={{fontSize:8,color:cap===TRUCK_LIMITS.heavy?"#d97706":"#a8a29e",background:cap===TRUCK_LIMITS.heavy?"#fef3c7":"transparent",border:"none",borderRadius:4,padding:"1px 6px",cursor:"pointer",fontWeight:600}}>
 {cap===TRUCK_LIMITS.heavy?"🚛 13.5k":"→ 13.5k"}
@@ -7353,7 +7463,7 @@ style={{background:isDrgOver?"#dcfce7":isDrgSrc?"#fef9c3":done?"#f0fdf4":onSite?
 </div>
 
 <div style={{display:"flex",gap:3,marginTop:3,alignItems:"center"}}>
-<input value={entry.instructions||""} onChange={e=>updateInstructions(entry.id,e.target.value)} onClick={e=>e.stopPropagation()} placeholder="📋 Add notes..." style={{flex:1,border:"1px solid #e7e5e4",borderRadius:4,padding:"3px 6px",fontSize:9,outline:"none",background:entry.instructions?"#eff6ff":"#fafaf9",color:"#1c1917",fontFamily:"inherit"}}/>
+<NoteInput value={entry.instructions} onChange={v=>updateInstructions(entry.id,v)} style={{flex:1,minWidth:0,border:"1px solid #e7e5e4",borderRadius:4,padding:"3px 6px",fontSize:9,outline:"none",background:entry.instructions?"#eff6ff":"#fafaf9",color:"#1c1917",fontFamily:"inherit"}}/>
 {entry.customer==="IMETCO"&&!isPU&&<input value={entry.shipPlan||""} onChange={e=>setShipPlan(entry.id,e.target.value)} onClick={e=>e.stopPropagation()} placeholder="Ship Plan #" style={{width:90,border:entry.shipPlan?"1px solid #bbf7d0":"1px solid #fed7aa",borderRadius:4,padding:"3px 6px",fontSize:9,fontWeight:700,outline:"none",background:entry.shipPlan?"#f0fdf4":"#fff7ed",color:"#9a3412",textAlign:"center"}}/>}
 </div>
 
@@ -7406,8 +7516,8 @@ style={{background:isDrgOver?"#dcfce7":isDrgSrc?"#fef9c3":done?"#f0fdf4":onSite?
 {/* Inline pickup-location picker for the Unassigned panel — same control
    ManifestStop has, but this render path (the desktop Unassigned card)
    never had it, so an ambiguous multi-location pickup showed
-   '⚠ pick location' with no way to pick. Now Chad can set Norcross vs
-   Roswell (etc.) right here before assigning. */}
+   '⚠ pick location' with no way to pick. Now Chad can set Alpharetta vs
+   Atlanta (etc.) right here before assigning. */}
 {(()=>{
   if(entry.stopType==="pickup")return null;
   const rp=resolvePickupLabel(entry,dl);
@@ -7426,7 +7536,7 @@ style={{background:isDrgOver?"#dcfce7":isDrgSrc?"#fef9c3":done?"#f0fdf4":onSite?
 <input type="number" inputMode="numeric" value={entry.weight||""} onChange={e=>setWeight(entry.id,e.target.value)} onClick={e=>e.stopPropagation()} placeholder="lbs" style={{width:52,border:"1px solid #d6d3d1",borderRadius:4,padding:"3px 4px",fontSize:9,fontWeight:700,outline:"none",textAlign:"center",background:entry.weight?"#f0f5fa":"#fff"}}/>
 <button onClick={()=>deleteDel(entry.id)} style={{marginLeft:"auto",background:"none",border:"none",color:"#dc2626",fontSize:9,cursor:"pointer",padding:"2px 4px"}}>✕</button>
 </div>
-<input value={entry.instructions||""} onChange={e=>updateInstructions(entry.id,e.target.value)} onClick={e=>e.stopPropagation()} placeholder="📋 Add notes..." style={{width:"100%",marginTop:3,border:"1px solid #e7e5e4",borderRadius:4,padding:"3px 6px",fontSize:9,outline:"none",background:entry.instructions?"#eff6ff":"#fafaf9",color:"#1c1917",fontFamily:"inherit"}}/>
+<NoteInput value={entry.instructions} onChange={v=>updateInstructions(entry.id,v)} style={{width:"100%",marginTop:3,border:"1px solid #e7e5e4",borderRadius:4,padding:"3px 6px",fontSize:9,outline:"none",background:entry.instructions?"#eff6ff":"#fafaf9",color:"#1c1917",fontFamily:"inherit"}}/>
 </div>);})}
 </div>
 </div>}
@@ -7525,15 +7635,35 @@ onAssignStop={mapActiveDrv?(stopId,drvId)=>{assignInOrder(stopId,mapActiveDrv,ma
 <span style={{fontSize:13}}>📡</span>
 <span style={{fontSize:12,fontWeight:700,color:"#1c1917"}}>Motive GPS</span>
 </div>
-<span style={{fontSize:9,color:"#a8a29e",fontWeight:500}}>1 min polling</span>
+{(()=>{
+  /* This used to read "1 min polling" whatever was happening — it polls every
+     20s, and it said the same thing with a dead API key. Say what the link is
+     actually doing, so "no GPS" can be told apart from "truck hasn't moved". */
+  const linkAge=gpsLink.at?Math.round((gpsClock-gpsLink.at)/60000):null;
+  const fresh=linkAge!==null&&linkAge<3;
+  const txt=gpsLink.state==="idle"?"connecting…"
+    :gpsLink.state==="auth"?"⚠ Motive key rejected"
+    :gpsLink.state==="offline"?"⚠ proxy unreachable"
+    :gpsLink.state==="error"?"⚠ "+(gpsLink.detail||"Motive error")
+    :fresh?"live · 20s polling":"⚠ last synced "+(linkAge<60?linkAge+"m":Math.round(linkAge/60)+"h")+" ago";
+  const bad=(gpsLink.state!=="ok"&&gpsLink.state!=="idle")||(gpsLink.state==="ok"&&!fresh);
+  return(<span title={gpsLink.detail||undefined} style={{fontSize:9,color:bad?"#dc2626":"#a8a29e",fontWeight:bad?700:500,maxWidth:190,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{txt}</span>);
+})()}
 </div>
+{gpsLink.state==="ok"&&gpsLink.unnamed>0&&<div style={{fontSize:9,color:"#92400e",background:"#fef3c7",border:"1px solid #fde68a",borderRadius:6,padding:"4px 8px",marginBottom:6,lineHeight:1.4}}>
+  {gpsLink.unnamed} of {gpsLink.reported} vehicles Motive reported carry no driver this app knows — add the truck number in netlify/functions/motive-gps.js, or assign the driver in Motive.
+</div>}
 {visibleDrivers.map(d=>({d,di:drivers.findIndex(x=>x.id===d.id)})).map(({d:drv,di})=>{
   const loc=driverLocs[drv.id];
   const on=gpsEnabled[drv.id]!==false;
   const col=DCOL[di]||BRAND.main;
-  const age=loc?.updatedAt?(typeof loc.updatedAt==="string"?Math.round((Date.now()-new Date(loc.updatedAt).getTime())/60000):Math.round((Date.now()-loc.updatedAt)/60000)):null;
-  const ageStr=age===null?"—":age<1?"just now":age<60?age+"m ago":Math.round(age/60)+"h ago";
-  const hasLoc=on&&loc&&loc.lat;
+  const ageStr=gpsAgeLabel(loc,gpsClock);
+  const ageMs=gpsAgeMs(loc,gpsClock);
+  const ageMin=ageMs===null?null:Math.round(ageMs/60000);
+  const hasLoc=on&&!!loc;
+  /* No current fix, but the driver is on record somewhere — say when, rather
+     than "No data yet", which is only true for someone who has never pinged. */
+  const stale=!hasLoc&&on?lastKnownLoc(phoneLocs,motiveLocs,drv.id):null;
   return(
   <div key={drv.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",borderRadius:10,marginBottom:4,background:on?"#fff":"#f5f5f4",border:"1px solid "+(on?"#e7e5e4":"#ebebea"),transition:"all 0.2s"}}>
     <div style={{width:28,height:28,borderRadius:8,background:on?col:"#d6d3d1",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:"#fff",fontWeight:700,flexShrink:0,transition:"background 0.2s"}}>
@@ -7547,15 +7677,15 @@ onAssignStop={mapActiveDrv?(stopId,drvId)=>{assignInOrder(stopId,mapActiveDrv,ma
           {loc.speed>0&&<span style={{color:"#2563eb",fontWeight:600,flexShrink:0}}>· {loc.speed} mph</span>}
         </div>
       ):(
-        <div style={{fontSize:10,color:"#a8a29e"}}>{on?"No data yet":"GPS off"}</div>
+        <div style={{fontSize:10,color:"#a8a29e"}}>{!on?"GPS off":stale?"Last seen "+gpsAgeLabel(stale,gpsClock):"No data yet"}</div>
       )}
     </div>
     {on&&hasLoc&&(
-      <div style={{fontSize:9,color:age!==null&&age>30?"#dc2626":"#78716c",background:age!==null&&age>30?"#fef2f2":"#f5f5f4",border:"1px solid "+(age!==null&&age>30?"#fca5a5":"#e7e5e4"),borderRadius:6,padding:"2px 6px",flexShrink:0,fontWeight:age!==null&&age>30?700:400}}>
-        {age!==null&&age>30?"⚠ ":""}{ageStr}
+      <div style={{fontSize:9,color:ageMin!==null&&ageMin>30?"#dc2626":"#78716c",background:ageMin!==null&&ageMin>30?"#fef2f2":"#f5f5f4",border:"1px solid "+(ageMin!==null&&ageMin>30?"#fca5a5":"#e7e5e4"),borderRadius:6,padding:"2px 6px",flexShrink:0,fontWeight:ageMin!==null&&ageMin>30?700:400}}>
+        {ageMin!==null&&ageMin>30?"⚠ ":""}{ageStr}
       </div>
     )}
-    <button onClick={()=>{toggleGps(drv.id);if(on){setDriverLocs(prev=>{const n={...prev};delete n[drv.id];return n;});}}}
+    <button onClick={()=>toggleGps(drv.id)}
       style={{flexShrink:0,width:36,height:20,borderRadius:10,border:"none",cursor:"pointer",background:on?col:"#d6d3d1",position:"relative",transition:"background 0.25s",padding:0}}
       title={(on?"Disable":"Enable")+" GPS for "+drv.name}>
       <span style={{position:"absolute",top:2,left:on?18:2,width:16,height:16,borderRadius:8,background:"#fff",boxShadow:"0 1px 4px rgba(0,0,0,0.25)",transition:"left 0.2s",display:"block"}}/>
@@ -7590,7 +7720,7 @@ onAssignStop={mapActiveDrv?(stopId,drvId)=>{assignInOrder(stopId,mapActiveDrv,ma
 </div>
 </div>
 
-{dl.some(e=>e.isHourly)&&(()=>{const {byDriver,totalMins}=getShiftSummary(emDk);const _mLGEntries=dl.filter(e=>e.isHourly&&e.liftgateApplied&&!DISTANCE_BONUS_STOPS.includes(e.stop));const _mLG=_mLGEntries.length;const _mDistEntries=dl.filter(e=>e.isHourly&&DISTANCE_BONUS_STOPS.includes(e.stop));const _mDist=_mDistEntries.length;const hoursUsed=totalMins>0?Math.round((totalMins+(_mLG+_mDist)*60)/15)*15/60:(emH[`${emDk}-emser`]||4);return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:10,padding:"10px 14px",marginBottom:12}}>
+{dl.some(e=>e.isHourly)&&(()=>{const {byDriver,totalMins}=getShiftSummary(emDk);const _mLGEntries=dl.filter(e=>_hourlyBonusEligible(e)&&e.liftgateApplied&&!DISTANCE_BONUS_STOPS.includes(e.stop));const _mLG=_mLGEntries.length;const _mDistEntries=dl.filter(e=>_hourlyBonusEligible(e)&&DISTANCE_BONUS_STOPS.includes(e.stop));const _mDist=_mDistEntries.length;const hoursUsed=totalMins>0?Math.round((totalMins+(_mLG+_mDist)*60)/15)*15/60:(emH[`${emDk}-emser`]||4);return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:10,padding:"10px 14px",marginBottom:12}}>
 <div style={_s.flexBtwMb6}>
 <span style={{fontSize:12,color:"#2563eb",fontWeight:600}}>Emser Hours</span>
 <span style={{fontSize:14,fontWeight:700,fontVariantNumeric:"tabular-nums"}}>{fmt(102.50*hoursUsed)}</span>
@@ -8166,7 +8296,7 @@ showToast(selected.length+" "+custName+" stops added");
 </div>}
 </div>
 {chatImage&&<div style={{padding:"8px 16px 0",display:"flex",alignItems:"center",gap:8}}>
-<div style={{position:"relative"}}>{chatImage.mediaType==="application/pdf"?<div style={{width:50,height:50,borderRadius:8,background:"#fef2f2",border:"1px solid #fca5a5",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column"}}><span style={{fontSize:18}}>📄</span><span style={{fontSize:7,color:"#dc2626",fontWeight:600}}>PDF</span></div>:<img src={chatImage.preview} alt="" style={{height:50,borderRadius:8}}/>}<button onClick={()=>setChatImage(null)} style={{position:"absolute",top:-4,right:-4,background:"#dc2626",color:"#fff",border:"none",borderRadius:10,width:18,height:18,fontSize:9,cursor:"pointer",fontWeight:700}}>✕</button></div>
+<div style={{position:"relative"}}>{chatImage.mediaType==="application/pdf"?<div style={{width:50,height:50,borderRadius:8,background:"#fef2f2",border:"1px solid #fca5a5",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column"}}><span style={{fontSize:18}}>📄</span><span style={{fontSize:8,color:"#dc2626",fontWeight:600}}>PDF</span></div>:<img src={chatImage.preview} alt="" style={{height:50,borderRadius:8}}/>}<button onClick={()=>setChatImage(null)} style={{position:"absolute",top:-4,right:-4,background:"#dc2626",color:"#fff",border:"none",borderRadius:10,width:18,height:18,fontSize:9,cursor:"pointer",fontWeight:700}}>✕</button></div>
 <div><div style={{fontSize:11,color:"#16a34a",fontWeight:600}}>Ready</div>{chatImage.fileName&&<div style={{fontSize:9,color:"#78716c"}}>{chatImage.fileName}</div>}</div>
 </div>}
 <div style={{padding:"8px 16px 16px",borderTop:"1px solid #e7e5e4",display:"flex",gap:4,flexShrink:0,alignItems:"center"}}>
@@ -8329,7 +8459,7 @@ return(
 <a href={window.location.pathname} onClick={e=>{e.preventDefault();setView("manifest");setSelCust(null);setQuoteMode(null);window.history.replaceState(null,"",window.location.pathname);window.scrollTo(0,0);}} style={{cursor:"pointer"}}><img src={LOGO_WHITE} alt="Davis Delivery" style={{height:28,objectFit:"contain"}}/></a>
 <div>
 <div style={{fontSize:8,color:"#93c5fd",fontWeight:600,opacity:0.7}}>v{APP_VERSION}</div>
-<div style={{display:"flex",alignItems:"center",gap:3}}><span style={{display:"inline-block",width:5,height:5,borderRadius:3,background:fbConnected?"#16a34a":"#dc2626"}}/><span style={{fontSize:7,color:fbConnected?"#6ee7b7":"#fca5a5"}}>{saveStatus||((fbConnected?"synced":"offline"))}</span></div>
+<div style={{display:"flex",alignItems:"center",gap:3}}><span style={{display:"inline-block",width:5,height:5,borderRadius:3,background:fbConnected?"#16a34a":"#dc2626"}}/><span style={{fontSize:8,color:fbConnected?"#6ee7b7":"#fca5a5"}}>{saveStatus||((fbConnected?"synced":"offline"))}</span></div>
 </div>
 
 </div>
@@ -8777,8 +8907,8 @@ style={{width:"100%",border:"1px solid #d8b4fe",borderRadius:8,padding:"10px 12p
 {dl.some(e=>e.isHourly)&&(()=>{
 const{byDriver,totalMins}=getShiftSummary(emDk);
 const hasShifts=totalMins>0;
-const lgCount=dl.filter(e=>e.isHourly&&e.liftgateApplied&&!DISTANCE_BONUS_STOPS.includes(e.stop)).length;
-const distBonusMob=dl.filter(e=>e.isHourly&&DISTANCE_BONUS_STOPS.includes(e.stop)).length;
+const lgCount=dl.filter(e=>_hourlyBonusEligible(e)&&e.liftgateApplied&&!DISTANCE_BONUS_STOPS.includes(e.stop)).length;
+const distBonusMob=dl.filter(e=>_hourlyBonusEligible(e)&&DISTANCE_BONUS_STOPS.includes(e.stop)).length;
 const lgMins=lgCount*60;
 const distMins=distBonusMob*60;
 const billedMins=totalMins+lgMins+distMins;
@@ -8913,7 +9043,7 @@ style={{flex:1,border:entry.shipPlan?"1px solid #bbf7d0":"1px solid #fca5a5",bor
 <div style={_s.flexC4}><div style={{width:8,height:8,borderRadius:2,background:"#16a34a"}}/><span style={{fontSize:9,color:"#a8a29e"}}>This wk</span></div>
 </div>
 </div>
-{(()=>{const wkShiftByDrv={};let wkShiftTotal=0;let wkBonusMins=0;DAYS.forEach((_,i)=>{const{byDriver,totalMins}=getShiftSummary(getFbKey(wo,i));wkShiftTotal+=totalMins;const _wkDE=log[`${wo}-${i}`]||[];wkBonusMins+=(_wkDE.filter(e=>e.isHourly&&e.liftgateApplied&&!DISTANCE_BONUS_STOPS.includes(e.stop)).length+_wkDE.filter(e=>e.isHourly&&DISTANCE_BONUS_STOPS.includes(e.stop)).length)*60;Object.entries(byDriver).forEach(([did,mins])=>{wkShiftByDrv[did]=(wkShiftByDrv[did]||0)+mins;});});if(!wkShiftTotal)return null;const wkShiftHrs=Math.round((wkShiftTotal+wkBonusMins)/15)*15/60;return(<div style={{background:"#eff6ff",border:"2px solid #2563eb",borderRadius:14,padding:"14px 16px",marginBottom:12}}>
+{(()=>{const wkShiftByDrv={};let wkShiftTotal=0;let wkBonusMins=0;DAYS.forEach((_,i)=>{const{byDriver,totalMins}=getShiftSummary(getFbKey(wo,i));wkShiftTotal+=totalMins;const _wkDE=log[`${wo}-${i}`]||[];wkBonusMins+=(_wkDE.filter(e=>_hourlyBonusEligible(e)&&e.liftgateApplied&&!DISTANCE_BONUS_STOPS.includes(e.stop)).length+_wkDE.filter(e=>_hourlyBonusEligible(e)&&DISTANCE_BONUS_STOPS.includes(e.stop)).length)*60;Object.entries(byDriver).forEach(([did,mins])=>{wkShiftByDrv[did]=(wkShiftByDrv[did]||0)+mins;});});if(!wkShiftTotal)return null;const wkShiftHrs=Math.round((wkShiftTotal+wkBonusMins)/15)*15/60;return(<div style={{background:"#eff6ff",border:"2px solid #2563eb",borderRadius:14,padding:"14px 16px",marginBottom:12}}>
 <div style={_s.flexBtwMb8}><span style={{fontSize:14,fontWeight:700,color:"#2563eb"}}>⏱ Emser Week Total</span><span style={{fontSize:20,fontWeight:800,fontVariantNumeric:"tabular-nums",color:"#1d4ed8"}}>{fmt(102.50*wkShiftHrs)}</span></div>
 <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:4}}>
 {drivers.map((drv,di)=>{const mins=wkShiftByDrv[drv.id]||0;if(!mins)return null;const initials=drv.name.split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase();const hrs=Math.round(mins/15)*15/60;return(<div key={drv.id} style={{display:"flex",alignItems:"center",gap:5,background:"#fff",border:`2px solid ${DCOL[di]}`,borderRadius:8,padding:"4px 10px"}}><div style={{width:20,height:20,borderRadius:5,background:DCOL[di],display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,color:"#fff",fontWeight:700}}>{initials}</div><div><div style={{fontSize:12,fontWeight:700}}>{formatMins(mins)}</div><div style={{fontSize:9,color:"#64748b"}}>{fmt(102.50*hrs)}</div></div></div>);})}
@@ -8934,7 +9064,7 @@ style={{width:80,border:"1px solid #e7e5e4",borderRadius:6,padding:"3px 6px",fon
 </div>}
 </div>);})}</div>);})}
 {wkD.every(d=>!d.entries.length)&&<div style={_s.emptyState}><p>No deliveries this week</p></div>}
-{(()=>{const wkShiftByDrv={};let wkShiftTotal=0;let wkBonusMins=0;DAYS.forEach((_,i)=>{const{byDriver,totalMins}=getShiftSummary(getFbKey(wo,i));wkShiftTotal+=totalMins;const _wkDE=log[`${wo}-${i}`]||[];wkBonusMins+=(_wkDE.filter(e=>e.isHourly&&e.liftgateApplied&&!DISTANCE_BONUS_STOPS.includes(e.stop)).length+_wkDE.filter(e=>e.isHourly&&DISTANCE_BONUS_STOPS.includes(e.stop)).length)*60;Object.entries(byDriver).forEach(([did,mins])=>{wkShiftByDrv[did]=(wkShiftByDrv[did]||0)+mins;});});if(!wkShiftTotal)return null;const wkShiftHrs=Math.round((wkShiftTotal+wkBonusMins)/15)*15/60;return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:14,padding:"14px 16px",marginBottom:12}}>
+{(()=>{const wkShiftByDrv={};let wkShiftTotal=0;let wkBonusMins=0;DAYS.forEach((_,i)=>{const{byDriver,totalMins}=getShiftSummary(getFbKey(wo,i));wkShiftTotal+=totalMins;const _wkDE=log[`${wo}-${i}`]||[];wkBonusMins+=(_wkDE.filter(e=>_hourlyBonusEligible(e)&&e.liftgateApplied&&!DISTANCE_BONUS_STOPS.includes(e.stop)).length+_wkDE.filter(e=>_hourlyBonusEligible(e)&&DISTANCE_BONUS_STOPS.includes(e.stop)).length)*60;Object.entries(byDriver).forEach(([did,mins])=>{wkShiftByDrv[did]=(wkShiftByDrv[did]||0)+mins;});});if(!wkShiftTotal)return null;const wkShiftHrs=Math.round((wkShiftTotal+wkBonusMins)/15)*15/60;return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:14,padding:"14px 16px",marginBottom:12}}>
 <div style={_s.flexBtwMb8}>
 <span style={{fontSize:13,fontWeight:700,color:"#2563eb"}}>⏱ Week Emser Hours</span>
 <span style={{fontSize:16,fontWeight:700,fontVariantNumeric:"tabular-nums",color:"#1d4ed8"}}>{fmt(102.50*wkShiftHrs)}</span>
@@ -9121,7 +9251,7 @@ return(<div>
 <div style={{fontSize:9,color:c.accent}}>{photo.customer}</div>
 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
 <span style={{fontSize:9,color:"#a8a29e"}}>{photo.dayName} {photo.dayDate}</span>
-<button onClick={e=>{e.stopPropagation();printPODMobile(photo);}} style={{background:"#1e5b92",color:"#fff",border:"none",borderRadius:3,padding:"2px 5px",fontSize:7,fontWeight:700,cursor:"pointer"}}>POD</button>
+<button onClick={e=>{e.stopPropagation();printPODMobile(photo);}} style={{background:"#1e5b92",color:"#fff",border:"none",borderRadius:3,padding:"2px 5px",fontSize:8,fontWeight:700,cursor:"pointer"}}>POD</button>
 </div>
 </div>
 </div>);})}
@@ -10151,7 +10281,12 @@ const showToast=useCallback(m=>{setToast(m);setTimeout(()=>setToast(null),2000);
 const drvSaveTime=useRef(0);
 const driverId=resolveDriverSlug(driverSlug,allDrivers);
 const driver=driverId?allDrivers.find(d=>d.id===driverId):null;
-const entries=driverId?reapOrphanAutoPickups(dedupeDeliveries(dedupeAutoPickups(dl.filter(e=>e.driverId===driverId),_reapOpts)),_reapOpts):[];/* Self-heal on the driver's own phone too: the dispatcher board dedupes/reaps auto-pickups AND collapses duplicate deliveries via drvEntries, but the driver app renders its own dl — without this it showed duplicate/orphaned pickups and the duplicate-delivery (BEC-on-Trevor) rows. */
+const _healed=driverId?reapOrphanAutoPickups(dedupeDeliveries(dedupeAutoPickups(dl.filter(e=>e.driverId===driverId),_reapOpts)),_reapOpts):[];
+/* The phone reads the same live "Load order:" the board does — the stored note
+   only refreshes when the engine runs, so after a drag reorder on the board the
+   driver would load the truck in yesterday's order. A card with no live match
+   has any stale stored note cleared, exactly as drvEntries does. */
+const entries=_healed.map(e=>withLiveLoadOrder(e,_healed,_noteDeps));/* Self-heal on the driver's own phone too: the dispatcher board dedupes/reaps auto-pickups AND collapses duplicate deliveries via drvEntries, but the driver app renders its own dl — without this it showed duplicate/orphaned pickups and the duplicate-delivery (BEC-on-Trevor) rows. */
 useEffect(()=>{
   const unsubDrivers=subscribeDrivers((fbDrivers)=>{
     if(fbDrivers.length>0){
@@ -10234,7 +10369,10 @@ useEffect(()=>{
     });
   });
   return()=>{unsubDrivers();unsubManifests();clearTimeout(timeout);};
-},[wo]);
+/* driverId resolves from the roster after mount; a subscription captured while
+   it was still null merged every snapshot as "not my stop" and overwrote the
+   driver's own unsaved stamps. */
+},[wo,driverId]);
 useEffect(()=>{
   if(!driverId)return;
   const unsub=subscribeNotifications(driverId,(notifs)=>{setDriverNotifs(notifs);});
@@ -10469,7 +10607,7 @@ return(
 <div>
 <h1 style={{margin:0}}><img src={LOGO_WHITE} alt="Davis Delivery" style={{height:26,objectFit:"contain"}}/></h1>
 <p style={{margin:"2px 0 0",fontSize:11,color:"#93c5fd",letterSpacing:"0.08em"}}>DRIVER MANIFEST</p>
-<div style={{display:"flex",alignItems:"center",gap:3,marginTop:2}}><span style={{display:"inline-block",width:5,height:5,borderRadius:3,background:fbLoaded?"#16a34a":"#dc2626"}}/><span style={{fontSize:7,color:fbLoaded?"#6ee7b7":"#fca5a5"}}>{fbLoaded?"synced":"connecting..."}</span>{drvSaveStatus&&<span style={{fontSize:8,marginLeft:6,color:drvSaveStatus.startsWith("⚠")?"#fca5a5":(drvSaveStatus==="✓ saved"?"#6ee7b7":"#fde68a"),fontWeight:600}}>{drvSaveStatus}</span>}</div>
+<div style={{display:"flex",alignItems:"center",gap:3,marginTop:2}}><span style={{display:"inline-block",width:5,height:5,borderRadius:3,background:fbLoaded?"#16a34a":"#dc2626"}}/><span style={{fontSize:8,color:fbLoaded?"#6ee7b7":"#fca5a5"}}>{fbLoaded?"synced":"connecting..."}</span>{drvSaveStatus&&<span style={{fontSize:8,marginLeft:6,color:drvSaveStatus.startsWith("⚠")?"#fca5a5":(drvSaveStatus==="✓ saved"?"#6ee7b7":"#fde68a"),fontWeight:600}}>{drvSaveStatus}</span>}</div>
 </div>
 <button onClick={()=>{setAuthenticated(false);setPinEntry("");}} style={{background:"#292524",border:"1px solid #44403c",color:"#a8a29e",borderRadius:8,padding:"6px 10px",cursor:"pointer",fontSize:11}}>Lock</button>
 <button onClick={()=>setShowDriverMsg(true)} style={{background:BRAND.main,border:"none",color:"#fff",borderRadius:8,padding:"6px 10px",cursor:"pointer",fontSize:11,fontWeight:600}}>{"💬"}</button>

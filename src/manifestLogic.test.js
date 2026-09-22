@@ -559,11 +559,14 @@ describe("reapOrphanAutoPickups — multi-source dock matching (pickup-without-d
       return p[p.length - 1].trim().toLowerCase();
     },
   };
-  // The screenshot: Trevor (5) Load 2 has a Norcross pickup whose delivery
-  // (American Flooring Services) is gone, plus a Roswell pickup+delivery still live.
-  const norcrossPU = pu({ id: "puN", customer: "Emser Tile", stop: "Emser - Norcross", pickupFrom: "Emser - Norcross", driverId: 5, loadNum: 2 });
-  const roswellPU  = pu({ id: "puR", customer: "Emser Tile", stop: "Emser - Roswell",  pickupFrom: "Emser - Roswell",  driverId: 5, loadNum: 2 });
-  const roswellDel = del({ id: "dR", customer: "Emser Tile", stop: "American Flooring Services", pickupFrom: "Emser - Roswell", driverId: 5, loadNum: 2 });
+  // The screenshot: Trevor (5) Load 2 has a pickup at one dock whose delivery
+  // (American Flooring Services) is gone, plus a pickup+delivery at a second
+  // dock still live. Written against Emser's Norcross/Roswell pair originally;
+  // Roswell has since closed and the live retirement folds it into Norcross,
+  // so the two docks here are Traditions', which still has three.
+  const norcrossPU = pu({ id: "puN", customer: "Traditions in Tile", stop: "Traditions - Alpharetta", pickupFrom: "Traditions - Alpharetta", driverId: 5, loadNum: 2 });
+  const roswellPU  = pu({ id: "puR", customer: "Traditions in Tile", stop: "Traditions - Atlanta",  pickupFrom: "Traditions - Atlanta",  driverId: 5, loadNum: 2 });
+  const roswellDel = del({ id: "dR", customer: "Traditions in Tile", stop: "American Flooring Services", pickupFrom: "Traditions - Atlanta", driverId: 5, loadNum: 2 });
 
   it("reaps the orphaned dock pickup while a delivery at another dock survives", () => {
     const out = reapOrphanAutoPickups([norcrossPU, roswellPU, roswellDel], MS);
@@ -573,7 +576,7 @@ describe("reapOrphanAutoPickups — multi-source dock matching (pickup-without-d
   });
 
   it("keeps a multi-source pickup that has a matching same-dock delivery", () => {
-    const del2 = del({ id: "dN", customer: "Emser Tile", stop: "Britts", pickupFrom: "Emser - Norcross", driverId: 5, loadNum: 2 });
+    const del2 = del({ id: "dN", customer: "Traditions in Tile", stop: "Britts", pickupFrom: "Traditions - Alpharetta", driverId: 5, loadNum: 2 });
     expect(reapOrphanAutoPickups([norcrossPU, del2], MS).some((e) => e.id === "puN")).toBe(true);
   });
 
@@ -583,7 +586,7 @@ describe("reapOrphanAutoPickups — multi-source dock matching (pickup-without-d
   });
 
   it("does NOT over-reap: an ambiguous multi-source delivery (no pickupFrom) covers every dock", () => {
-    const ambiguous = del({ id: "dAmb", customer: "Emser Tile", stop: "Somewhere", driverId: 5, loadNum: 2 }); // dock unknown
+    const ambiguous = del({ id: "dAmb", customer: "Traditions in Tile", stop: "Somewhere", driverId: 5, loadNum: 2 }); // dock unknown
     expect(reapOrphanAutoPickups([norcrossPU, ambiguous], MS).some((e) => e.id === "puN")).toBe(true);
   });
 
@@ -800,10 +803,13 @@ describe("dedupeAutoPickups — normalized-dock key collapses dash-drift duplica
     const pickups = out.filter((e) => e.stopType === "pickup");
     expect(pickups).toHaveLength(1); // one dock, one card
   });
-  it("keeps genuinely different docks for the same customer (Norcross vs Roswell)", () => {
-    const nor = pu({ id: "n", customer: "Emser Tile", stop: "Emser - Norcross", driverId: 5, loadNum: 1 });
-    const ros = pu({ id: "r", customer: "Emser Tile", stop: "Emser - Roswell",  driverId: 5, loadNum: 1 });
-    expect(dedupeAutoPickups([nor, ros], NL).filter((e) => e.stopType === "pickup")).toHaveLength(2);
+  it("keeps genuinely different docks for the same customer (Alpharetta vs Atlanta)", () => {
+    /* Two docks that both still exist. (Emser's Norcross/Roswell used to be the
+       example; Roswell closed, and a retired dock deliberately DOES fold into
+       the one that took its freight — see the retirement tests.) */
+    const alph = pu({ id: "n", customer: "Traditions in Tile", stop: "Traditions - Alpharetta", driverId: 5, loadNum: 1 });
+    const atl  = pu({ id: "r", customer: "Traditions in Tile", stop: "Traditions - Atlanta",  driverId: 5, loadNum: 1 });
+    expect(dedupeAutoPickups([alph, atl], NL).filter((e) => e.stopType === "pickup")).toHaveLength(2);
   });
   it("prefers pickupFrom over stop when resolving the dock", () => {
     const a = pu({ id: "a", customer: "Emser Tile", stop: "Emser - Norcross", pickupFrom: "Norcross", driverId: 5, loadNum: 1 });

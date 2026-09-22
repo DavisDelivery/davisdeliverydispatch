@@ -118,6 +118,127 @@ Several paths price or total the same job differently. Not catastrophic today (i
 
 ---
 
+## 08 · 2026-09-21 audit — pickup engine, quotes, sync, backend
+
+- **Trigger:** field report — four Emser Tile stops batch-loaded onto a driver showed "Pickup from Emser - Norcross" on every card, the Norcross pickup card carried no load order, and after a sync the card itself was gone. Asked whether a quote pushed onto the same day was involved.
+- **Method:** eight parallel finders (pickup engine · quotes · sync/merge · mutations · billing · driver app · backend · UI state), 44 raw findings deduped to 39, the top 30 each handed to one or two adversarial verifiers told to refute. 29 confirmed, 1 refuted, 9 low-ranked left unverified (listed at the end). Line numbers are from commit `54122c2`; search by symbol.
+- **The through-line:** three rules disagreed about which dock an Emser delivery with no chosen dock belongs to — the engine filed it under the default (Norcross) and made the card, the board's live note demanded an exact dock match and found nothing, and the save-path reaper (run without the dock list) read a free-typed origin as a dock and deleted the card. `deliveryDock` in `manifestLogic.js` is now the one resolution all of them share, and the scenario matrix holds the live note equal to the stored one on every manifest it builds.
+
+### Fixed in this pass
+
+- [x] 🟠 **High · FIXED — Emser card shows no load order (the field report).** `_computeLiveLoadOrderNote` matched deliveries to a card by strict dock equality, so a delivery with `pickupFrom` null (every batch-added stop, defaulted to Norcross since `pickupConfig` gained `default:true`) never matched its card; the display path then cleared the good stored note as stale. Rule moved to `liveLoadOrderNote` beside the engine; both resolve through `deliveryDock`. The driver's phone reads the same live note.
+- [x] 🟠 **High · FIXED — The card vanishes after a sync.** `saveManifestDay` ran `reapOrphanAutoPickups` without `docksFor`, unlike ingest and display; a free-typed `pickupFrom` was read as a dock constraint and the transaction deleted the card the engine had just made. `docksFor` threaded through `buildMergedEntries`.
+- [x] 🟡 **Medium · FIXED — Two cards for one dock.** `rebuildPickupsForPure` grouped on the raw normalized `pickupFrom`; two un-docked deliveries with different free text minted two default-dock cards sharing one id. Groups are keyed on the resolved dock.
+- [x] 🟠 **High · FIXED — Dragging or removing an auto pickup card strips it and nothing regenerates it.** `applyReassign` only rebuilt for deliveries/manual pickups; an auto card just took the new driverId. Auto cards are derived: `applyReassign` now refuses to move one, and `reassign` / `assignInOrder` / `reassignBulk` say so instead of moving it.
+- [x] 🟡 **Medium · FIXED — A manual pickup standing in for the dock carried no load order.** A quote for Emser Tile collected at Norcross, pushed beside four hourly Emser stops, suppressed the auto card (correctly) and left one card reading only "Picking up for …". `liveLoadOrderNote` now covers a manual pickup that `manualPickupCoversDock` matches; `withLiveLoadOrder` appends it after the dispatcher's own note, idempotently. *This is the "quoted order on the same day" mechanism.*
+- [x] 🟡 **Medium · FIXED — Map-assigning a quote's delivery then its pickup left two dock cards.** `assignInOrder` never rebuilt for a manual pickup. It does now, and a quote's paired pickup comes along with its delivery.
+- [x] 🟠 **High · FIXED — Crossville / Prolex quote grew a second auto card beside its manual pickup.** `qualifyPickupName` only consulted `MULTI_PICKUP`, which omits single-dock suppliers, so the pickup leg's stop stayed a bare "Norcross" the engine could not see as the dock. It now checks the customer's own `PICKUP_SOURCES` first.
+- [x] 🟠 **High · FIXED — `qualifyPickupName` relabelled a customer's own pickup city as a supplier branch** ("Atlanta" for Jill of All Trades → "Traditions - Atlanta", and the driver went to Traditions). The cross-supplier guess now has to match the pickup address when the caller knows it.
+- [x] 🟠 **High · FIXED — A quote's pickup leg never followed its delivery.** Both legs now share a `pairId`; `applyReassign` and `assignInOrder` move a partner sitting in the same place along with the moved leg, pickup first. Assigning the delivery alone no longer conjures a supplier dock card at an address the freight isn't at.
+- [x] 🟠 **High · FIXED — Unplanning a quote on a week that isn't loaded was a silent no-op** that still flipped the quote to pending, so a re-push double-booked the job. `unplanQuote` now reads that day from Firestore, removes the quote's entries, saves, and only then flips the quote.
+- [x] 🟠 **High · FIXED — Unplanning the only work on a day was never saved** (the empty-write guard refused it) and the stops came back. `unplanQuote` sets the same intentional-clear flag the delete path does.
+- [x] 🟡 **Medium · FIXED — Unplanning a split quote left the split-off half on the board.** Pushed entries carry `quoteId`; a split half inherits it and is removed too.
+- [x] 🟠 **High · FIXED — "Manual Entry" quotes saved with the literal customer `__manual`.** Stored as "One-Off Delivery"; a legacy `__manual` quote pushes as a one-off.
+- [x] 🟠 **High · FIXED — Splitting an hourly Emser delivery to a distance-bonus stop billed the +1h twice.** The continuation half is stamped `splitContinuation`; every bonus filter goes through `_hourlyBonusEligible`.
+- [x] 🟠 **High · FIXED — Route Planner Apply force-unassigned every stop it was not seeded with** (day switched in the header while the planner was open, or a stop assigned by another device meanwhile). The planner records the day and stops it opened on, re-seeds on a day change, and Apply only touches seeded stops.
+- [x] 🟡 **Medium · FIXED — Google-optimized sort wrote a stale, click-time stop list back** seconds later, duplicating or dropping a stop that moved in between. `_sApply` imposes the order by id against the current day.
+- [x] 🟡 **Medium · FIXED — A stop pulled to Unassigned kept its old load number** and opened a lone Load 2 on the next driver. The pool resets to Load 1 (a split-off half keeps its Load 2).
+- [x] 🟡 **Medium · FIXED — Driver page subscription captured a stale null `driverId`** for a driver not in the seed roster, so every snapshot overwrote their unsaved stamps. `driverId` is in the effect's dependencies.
+- [x] 🟠 **High · FIXED — "Clear" on a day's dispatch note never reached Firestore** and the note came back on the next snapshot. Clearing saves an empty note.
+- [x] 🟡 **Medium · FIXED — In-memory (90 s) tombstones ignored the edit clock**, so one dispatcher's delete beat another's newer edit on that screen only. `makeTombFilter` applies the same last-writer-wins rule as the doc tombstones.
+- [x] 🟠 **High · FIXED — Nightly backup silently skipped custom stops, stop overrides, hidden stops, liftgate requests, the audit log, and every `items` subcollection** (messages, notifications, orders-v2). The config docs moved to `SINGLE_DOCS`, the missing collections were added, and a `collectionGroup('items')` read captures the subcollections.
+- [x] 🟠 **High · FIXED — `backups/status` was never written after a clean run** (`errors: undefined` is rejected by Firestore; the throw was swallowed), so the health panel showed the last failure or "never". `errors` is always an array.
+- [x] 🟠 **High · FIXED — Customer Texts marked every message outbound.** `st-inbox` never read SimpleTexting's `directionType` (MO/MT).
+- [x] 🟡 **Medium · FIXED — `sms-inbound` dropped SimpleTexting webhook deliveries** (`{type:"INCOMING_MESSAGE", values:{contactPhone,text}}`) with a 200, so drivers' SMS replies never reached the chat and were never retried. The envelope is unwrapped.
+
+### Verified, still open (policy or design decisions needed)
+
+- [ ] 🟠 **High — Weekly "Emser Week Total" block disagrees with the weekly total beside it.** `App.jsx` block near `wkShiftTotal` rounds the whole week's minutes once and adds bonus hours on days with no shifts, while `computeDay` rounds per day and bills a flat `emH||4` with no bonus when no shifts are logged. Decide which is the billing rule, then derive the block from `computeDay`.
+- [ ] 🟡 **Medium — Distance bonus and the auto liftgate hour are announced but not billed on the no-shift path.** `computeDay` only adds `(lgCount+distBonus)*60` when `totalMins>0`; with manual hours the day bills `emH||4` flat while the toast says "+1h applied". Either apply the bonus in both branches or have add/delete adjust `emH` like the +1HR LG button does.
+- [ ] 🟡 **Medium — `removeLiftgate` on an hourly stop subtracts an Emser hour that was never added** when the liftgate came from `approveLiftgate` or the auto-liftgate stops. Record how the hour was added (e.g. `liftgateHourAdded`) and only reverse that path.
+- [ ] 🟡 **Medium — Printed daily "Revenue by Customer" rows exclude fuel and the 4 h hourly minimum**, so they do not sum to the header printed next to them (`custRevArr`). Build the rows from `computeDay`'s per-customer breakdown.
+- [ ] 🟠 **High — Custom-stop edits and deletions never propagate to a device that already has that customer's list.** The receive merge (`subscribeCustomStops` handler) accepts Firebase per customer only when local is empty, identical, or Firebase is strictly longer; a rate edit keeps the length, so two boards dispatch the same stop at different rates indefinitely. Use the doc's `updatedAt` as last-writer-wins.
+- [ ] 🟡 **Medium — Restoring a hidden stop never propagates** (the receive path unions the hidden-stop lists, so a removal is unrepresentable) and the next hide on another device re-hides it everywhere. Store hides with tombstones or accept Firebase by `updatedAt`.
+- [ ] 🟡 **Medium — The merge's signature fallback can collapse two DISTINCT same-signature orders** (two different Emser orders to the same stop, added on two devices within one save window) into one, losing an order and its billing. Veto the fallback when `refNum`, `baseRate` or `weight` differ, or restrict it to `d_`-prefixed ids (its stated purpose).
+- [ ] 🟡 **Medium — Roster snapshots dropped during the 5 s save-in-flight window are never re-delivered**, so the next local roster save can delete a driver another dispatcher just added (their stops vanish from the board). Buffer the last ignored payload, or merge rosters by id instead of overwriting.
+- [x] ⚪ **Checked, clean — "Notify driver" toast before the write resolves.** Refuted: Firestore persistence queues the write offline and syncs on reconnect.
+
+### Unverified, low-ranked (left over from the cap of 30)
+
+- ⚪ Driver photo upload keeps the image only in a closure; after retries fail the POD photo is discarded with no local copy (`DriverPage` upload path). *(medium, worth a look)*
+- ⚪ Quote numbers are `savedQuotes.length+1`, so deleting a quote or two devices saving at once reissues a number.
+- ⚪ Date picker: choosing a Sunday jumps to the Friday of the previous week (`jumpToDate`).
+- ⚪ A manual backup after 8 PM ET is filed under tomorrow's date (UTC) and collides with the scheduled run.
+- ⚪ Offline first load for a driver not in `DEFAULT_DRIVERS` shows "Driver not found" after 5 s.
+- ⚪ `updateHistPOD`'s direct save clears the day's dirty flag, dropping an edit made while that save was in flight.
+- ⚪ Changing a driver's load number mints a new pickup id and discards the pickup's arrived/departed/photos.
+- ⚪ An AI quote with a currency-formatted rate string ("$250") is saved as $0.
+- ⚪ AI chat "Add selected" writes the model's raw `rate`/`weight` strings into the entry with no numeric coercion.
+
+
+## 09 · 2026-09-22 — truck GPS, map pins
+
+### Why the GPS panel read 17h–258h
+
+Four separate causes, all of them code, none of them Motive being down:
+
+1. **`TRUCK_DRIVER_MAP` was an allowlist, not a fallback.** `motive-gps.js` dropped
+   every vehicle whose padded number was absent from a three-entry map — even when
+   Motive itself reported a `current_driver` for it. Three of seven drivers could
+   ever show a live fix; the rest could only be located by their own phone.
+2. **The Firestore snapshot replaced the whole location table.** `subscribeDriverLocations`
+   did `setDriverLocs(locs)`, so every Motive fix on the board was dropped the
+   moment any phone wrote, and only came back on the next 20 s poll.
+3. **Nothing expires a phone ping.** `driverLocations/{id}` is written while the
+   driver page is open and never removed. A driver who last opened the app ten days
+   ago still had a record — so the panel dated it "258h ago" and the map still drew
+   a truck pin on today's board.
+4. **A failed poll returned in silence.** A rejected `MOTIVE_API_KEY` and a truck
+   parked all weekend looked identical: the panel said "1 min polling" either way
+   (it polls every 20 s), and the last known fix stayed on screen.
+
+### Fixed in this pass
+
+- [x] 🟠 **High — roster allowlist dropped named vehicles.** The map is now a fallback
+      for trucks Motive hasn't synced a driver to. A vehicle with no name from either
+      source is still dropped, and the client's exact-match against the app roster is
+      what keeps rentals and retired units off the map.
+- [x] 🟠 **High — one source clobbered the other.** The two writers are held in separate
+      state (`phoneLocs`, `motiveLocs`) and merged by clock — newest fix per driver,
+      the same last-writer-wins rule the manifest sync runs on (`mergeDriverLocs`).
+- [x] 🟠 **High — a stale fix drew a live pin.** A fix older than `GPS_FRESH_MS` (12 h,
+      comfortably past a full shift) stops pinning and stops counting as a location.
+      Nothing is deleted: `lastKnownLoc` still dates it, and the panel reads
+      "Last seen 11d ago" instead of "No data yet".
+- [x] 🟡 **Medium — the GPS toggle didn't hold.** Turning a driver's GPS off deleted the
+      entry once; the next Firestore snapshot put the phone ping straight back.
+      `gpsEnabled` is applied in the merge, so it silences both sources.
+- [x] 🟡 **Medium — no failure signal.** The panel header reports the link: connecting,
+      live, "Motive key rejected", "proxy unreachable", or how long since the last
+      successful sync. A banner counts vehicles Motive reported that carry no driver
+      the app knows, which is the number to look at when a driver reads "no GPS".
+- [x] 🟡 **Medium — a fix with no clock dated itself "just now".** It now reads
+      "age unknown", and an age past two days reads in days rather than "258h ago".
+
+### Still needs a human
+
+- [ ] Add the missing truck numbers to `TRUCK_DRIVER_MAP` in `netlify/functions/motive-gps.js`,
+      or assign those drivers in the Motive dashboard. The banner says how many are unnamed.
+- [ ] Confirm `MOTIVE_API_KEY` is set in Netlify → Site configuration → Environment
+      variables (Functions scope). The panel now says outright when it is rejected.
+
+### Map
+
+- [x] **Emser keeps its blue.** An Emser Tile stop draws in the customer's own blue in
+      every state, not amber when unassigned or grey when done. Finished stops stay
+      legible — they draw small and faded, and that is the cue that says done.
+- [x] **Satellite toggle.** Google's native map-type bar was configured at `TOP_RIGHT`,
+      which is exactly where the Load 1 / Load 2 legend sits, so it was never reachable.
+      Replaced with a 🛰 Satellite button in the control row. Labels carries over:
+      hybrid is the photo with roads and place names, plain satellite is the photo alone.
+
+---
+
 ## Dead code / cleanup (not counted in the tally)
 
 - [ ] Delete unreferenced `netlify/functions/calc-distance.mts` and `optimize-route.mts` (no callers in `src/`) — or wire optimize-route per §6.

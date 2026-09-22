@@ -1,4 +1,4 @@
-import { MULTI_PICKUP } from "./pickupConfig.js";
+import { MULTI_PICKUP, PICKUP_SOURCES, retiredPickup, normLoc as cfgNormLoc } from "./pickupConfig.js";
 /* manifestLogic.js — pure, side-effect-free manifest data logic.
 
    Extracted from App.jsx so it can be unit-tested in isolation (App.jsx loads
@@ -51,7 +51,17 @@ export const dedupeAutoPickups=(entries,opts)=>{
      rebuildPickupsFor and the load-order note already key. With no opts it falls
      back to a lowercased raw string (back-compatible with existing callers). */
   const normLoc=opts&&typeof opts.normLoc==="function"?opts.normLoc:(s)=>String(s||"").trim().toLowerCase();
-  const dock=(e)=>normLoc(e.pickupFrom)||normLoc(e.stop);
+  /* A card at a dock that has CLOSED keys on the dock that took its freight,
+     so the leftover card and the one the supplier's open dock needs collapse
+     into one instead of standing side by side saying the same thing twice.
+     Only for cards nobody has worked: a card the driver stamped at the old
+     dock keys on that dock and is never folded into another, because it is
+     the record of a trip that was made. */
+  const dock=(e)=>{
+    const raw=e.pickupFrom||e.stop;
+    const moved=isWorked(e)?null:retiredPickup(e.customer,raw);
+    return normLoc(moved?moved.label:raw);
+  };
   const seen=new Set();
   let changed=false;
   const out=entries.filter(e=>{
@@ -400,6 +410,13 @@ export function sanitizeEntry(e){
   const safeStr=v=>typeof v==="string"?v:(v==null?"":String(v));
   const safeNum=v=>typeof v==="number"&&isFinite(v)?v:(parseFloat(v)||0);
   const safeStrOrNull=v=>typeof v==="string"?v:null;
+  /* A closed dock (RETIRED_PICKUPS) is NOT rewritten here. sanitizeEntry runs
+     on every read of Firestore, including days long finished, and whatever it
+     changes the next save persists — so healing here would quietly restate
+     where past freight was collected. A stop that already happened at a dock
+     that has since shut still says so. The retirement is applied where it
+     belongs instead: to work not yet done, at the moment it is resolved or
+     drawn (see resolvePickupLabel and deliveryDock). */
   return{
     ...e,
     id:e.id,
@@ -468,24 +485,36 @@ export const entrySig=(e)=>{
    an unrelated stop — the failure mode that erased real deliveries from the
    board. Returns { size, has(entry) }. */
 export const makeTombFilter=(deletedIds)=>{
-  const map=new Map(); /* String(id) -> Set<sig>; sig "" means id-only (match any content) */
-  const add=(id,sig)=>{
+  const map=new Map(); /* String(id) -> Map<sig, at>; sig "" means id-only (match any content); at 0 means no clock */
+  const add=(id,sig,at)=>{
     if(id==null)return;
     const k=String(id); /* coerce so a numeric tombstone id matches a string entry id */
-    if(!map.has(k))map.set(k,new Set());
-    map.get(k).add(sig==null?"":sig);
+    if(!map.has(k))map.set(k,new Map());
+    const s=sig==null?"":sig;
+    const t=Number(at)||0;
+    const cur=map.get(k);
+    if(!cur.has(s)||t>cur.get(s))cur.set(s,t);
   };
-  if(deletedIds instanceof Map){deletedIds.forEach((sig,id)=>add(id,sig));}
-  else if(deletedIds instanceof Set){deletedIds.forEach(id=>add(id,""));}
-  else if(Array.isArray(deletedIds)){deletedIds.forEach(d=>{if(d&&typeof d==="object")add(d.id,d.sig);else add(d,"");});}
+  if(deletedIds instanceof Map){deletedIds.forEach((v,id)=>{if(v&&typeof v==="object")add(id,v.sig,v.at);else add(id,v,0);});}
+  else if(deletedIds instanceof Set){deletedIds.forEach(id=>add(id,"",0));}
+  else if(Array.isArray(deletedIds)){deletedIds.forEach(d=>{if(d&&typeof d==="object")add(d.id,d.sig,d.at);else add(d,"",0);});}
   return{
     size:map.size,
     has(e){
       if(!e||e.id==null)return false;
       const sigs=map.get(String(e.id));
       if(!sigs)return false;
-      if(sigs.has(""))return true;            /* id-only tombstone */
-      return sigs.has(entrySig(e));           /* must also match content */
+      /* Same last-writer-wins rule as the durable doc tombstones: a delete that
+         is OLDER than the entry's own last edit yields to the edit. The 90-second
+         in-memory tombstone used to ignore the clock, so one dispatcher's delete
+         beat another's newer rate change on this screen while the doc tombstone
+         let it live everywhere else — two boards, two answers. A tombstone with
+         no clock (a bare id) still matches unconditionally. */
+      const edited=Number(e.updatedAt)||0;
+      const live=(t)=>!t||t>=edited;
+      if(sigs.has("")&&live(sigs.get("")))return true;   /* id-only tombstone */
+      const s=entrySig(e);
+      return sigs.has(s)&&live(sigs.get(s));            /* must also match content */
     },
   };
 };
@@ -962,7 +991,15 @@ export const orderByIds=(items,orderedIds)=>{
      - collapse duplicate auto-pickups.
    Pure: same inputs → same output, no I/O. This is the surface the concurrency
    test suite locks down. */
-export const buildMergedEntries=(fbEntriesRaw,localEntriesRaw,{isDriver=false,callerDriverId=0,deletedIds=null,docTombstones=null,multiSource=null,normLoc=null}={})=>{
+export const buildMergedEntries=(fbEntriesRaw,localEntriesRaw,{isDriver=false,callerDriverId=0,deletedIds=null,docTombstones=null,multiSource=null,normLoc=null,docksFor=null}={})=>{
+  /* The reaper needs the SAME options the display and ingest paths give it —
+     docksFor included. Without docksFor it reads a free-typed pickupFrom
+     ("Emser Tile", a warehouse the supplier doesn't own) as a dock constraint,
+     while the engine reads it as "no dock named" and files the delivery under
+     the default dock. The two disagreed here alone: the engine made the
+     "Emser - Norcross" card, the board showed it, and this transaction deleted
+     it on save — gone from every screen on the next snapshot. */
+  const reapOpts=multiSource?(docksFor?{multiSource,normLoc,docksFor}:{multiSource,normLoc}):undefined;
   const fbEntries=dedupeIds(fbEntriesRaw||[]);
   const localEntries=dedupeIds(localEntriesRaw||[]);
   /* Durable tombstones from the day doc (merged with the caller's fresh local
@@ -1026,7 +1063,7 @@ export const buildMergedEntries=(fbEntriesRaw,localEntriesRaw,{isDriver=false,ca
   /* Orphan reap LAST, after the delivery safety-net re-append, so a rescued
      delivery keeps its pickup. Self-heals any orphan already persisted in
      Firebase: the merge drops it, and the transaction write makes that stick. */
-  const reconciled=reapOrphanAutoPickups(dedupeDeliveries(dedupeGhostDeliveries(dedupeAutoPickups(merged,normLoc?{normLoc}:undefined))),multiSource?{multiSource,normLoc}:undefined);
+  const reconciled=reapOrphanAutoPickups(dedupeDeliveries(dedupeGhostDeliveries(dedupeAutoPickups(merged,normLoc?{normLoc}:undefined))),reapOpts);
   /* Persist the day in `seq` order, auto-pickups ahead of what they supply, so
      the stored array itself is the agreed order — a client that loads it cold,
      an export, and the shadow order store's `_seq` all line up without
@@ -1034,6 +1071,46 @@ export const buildMergedEntries=(fbEntriesRaw,localEntriesRaw,{isDriver=false,ca
      written before this field existed, but it never rewrites one, so a
      transaction can't invent a reorder nobody asked for. */
   return normalizeOrder(reconciled,0,multiSource?{multiSource,normLoc}:undefined);
+};
+
+/* Has a driver touched this stop yet?
+
+   This is the line between a plan and a record, and the retirement of a dock
+   turns on it. A stop nobody has worked is intention: if it still names a dock
+   that has closed, the intention is wrong and the screen must show where the
+   freight actually is. A stop with a stamp on it is history: that truck really
+   did stand at that dock, and nothing here may restate it — not the label, not
+   the card, and above all not the stored row.
+
+   Deliberately generous about what counts as touched. Any stamp at all means
+   the stop was worked, because the cost of being wrong runs one way: quietly
+   re-describing something that already happened. */
+export const isWorked=(e)=>!!e&&(e.status==="arrived"||e.status==="departed"||!!e.arrivedAt||!!e.departedAt);
+
+/* Which of a supplier's docks a delivery's freight comes off — the ONE rule the
+   engine, the live load-order note and (through the label) the card all share.
+   A delivery names its origin in `pickupFrom`; when that resolves to one of the
+   supplier's docks (normalized, so "Norcross" / "Emser - Norcross" / "Emser –
+   Norcross" all match) that dock is it. Otherwise — no origin named, or a
+   free-typed / unresolvable one ("Emser Tile", a warehouse the supplier doesn't
+   own) — the supplier's nominated default dock stands in, or its first listed
+   dock when none is nominated. Returns null only when the supplier has no docks
+   at all. Every consumer that needs to know which card a delivery belongs to
+   must go through here: the moment two of them resolve the same delivery to
+   different docks, one of them is wrong on the board. */
+export const deliveryDock=(e,puSrcs,normLoc)=>{
+  if(!Array.isArray(puSrcs)||!puSrcs.length)return null;
+  const nl=typeof normLoc==="function"?normLoc:(s)=>String(s||"").trim().toLowerCase();
+  const def=puSrcs.find(s=>s&&s.default)||puSrcs[0];
+  /* A dock the supplier has closed is not one of its docks any more, so the
+     question "which dock is this" has a different answer than it used to: the
+     one that took the closed dock's freight. Without this the freight would
+     fall to the supplier's default, which is only the same place by luck.
+     Nothing is written — this decides which card to draw, not what happened. */
+  const retired=e?retiredPickup(e.customer,e.pickupFrom):null;
+  const raw=(retired&&retired.label)||(e&&e.pickupFrom)||String(def.label||"").split(" - ").pop();
+  const loc=nl(raw);
+  return puSrcs.find(s=>s&&nl(s.label)===loc)||def;
 };
 
 /* ── The auto-pickup engine ───────────────────────────────────────────────────
@@ -1115,15 +1192,20 @@ dels.forEach(e=>{
      created a separate pickup card for each variant — more ghosts. _normLoc
      collapses them to one. We still keep a clean display label (prefer the
      matching source's short label) for the pickup's pickupFrom. */
-  /* Fall back to the nominated default dock rather than whichever happens to be
-     listed first, so the generated card names the same dock the label shows. */
-  const _defSrc=puSrcs.find(s=>s.default)||puSrcs[0];
-  const rawLoc=e.pickupFrom||_defSrc.label.split(" - ").pop();
-  const normLoc=_normLoc(rawLoc);
-  const matchSrc=puSrcs.find(s=>_normLoc(s.label)===normLoc)||_defSrc;
+  /* deliveryDock resolves the origin: a named dock wins, anything else falls
+     back to the nominated default (not whichever dock is listed first), so the
+     generated card names the same dock the label shows.
+
+     The group is keyed on the RESOLVED dock, not the raw pickupFrom. Keying on
+     the raw value put two deliveries whose origins both fall back to the
+     default ("Emser Tile" and nothing, say) in two groups, and each group
+     minted a card for the same dock — both reusing the same existingPU id — so
+     the board carried two "Emser - Norcross" cards with one id and half a load
+     order apiece. */
+  const matchSrc=deliveryDock(e,puSrcs,_normLoc);
   const loc=matchSrc.label.split(" - ").pop();
   const ln=e.loadNum||1;
-  const key=normLoc+"::"+ln;
+  const key=_normLoc(matchSrc.label)+"::"+ln;
   if(!byLocLoad[key])byLocLoad[key]={loc,loadNum:ln,dels:[]};
   byLocLoad[key].dels.push(e);
 });
@@ -1212,6 +1294,103 @@ if(_orphanPus.length)tombstone(_orphanPus); /* auto-pickups only; pass entries f
 return all;
 };
 
+/* The "Load order: …" text on an auto-pickup card, computed LIVE from the
+   deliveries currently on the board.
+
+   Why live: the stored note is written by rebuildPickupsForPure and only
+   refreshed when the engine runs (add / remove / reassign / load change). A
+   drag reorder runs no rebuild, so the stored text goes stale; every reader —
+   the card, the text and print manifests, the driver's phone — computes it
+   here instead.
+
+   Why here, and not in App.jsx where it used to live: that version matched a
+   delivery to its card by STRICT dock equality,
+   normLoc(delivery.pickupFrom) === normLoc(pickup.pickupFrom). The engine never
+   grouped that way — a delivery with no dock named, or an unresolvable one, is
+   bucketed under the supplier's default dock and gets its card there. So the
+   moment Emser started defaulting to Norcross, a delivery added without a dock
+   (the batch-add path leaves pickupFrom null) got an "Emser - Norcross" card
+   whose live note found NO deliveries; the display path then wiped the
+   perfectly good stored note as "stale", and the card sat on the board with no
+   load order at all. Matching now goes through deliveryDock, the same
+   resolution the engine groups by, so the note lists exactly the deliveries
+   the card was generated for — nothing more, nothing less. The scenario matrix
+   in pickupInvariants.test.js holds the two equal on every manifest it builds.
+
+   Returns null for anything that isn't an auto-pickup, and for a card with no
+   deliveries behind it (that is the reaper's problem, not this note's). Same
+   LIFO order as the engine's stored note: the last stop delivered is loaded
+   first. */
+export const liveLoadOrderNote=(pu,entries,deps)=>{
+  if(!pu||pu.stopType!=="pickup")return null;
+  const d=deps||{};
+  const nl=typeof d.normLoc==="function"?d.normLoc:(s)=>String(s||"").trim().toLowerCase();
+  const puSrcs=(Array.isArray(d.pickupSources)?d.pickupSources:[]).filter(s=>s&&s.customer===pu.customer);
+  const multi=puSrcs.length>1;
+  let puLoc=nl(pu.pickupFrom)||nl(pu.stop);
+  if(pu.manualPickup){
+    /* A manual pickup that COVERS a supplier dock (manualPickupCoversDock —
+       the same test the engine uses to suppress the auto card) is the dock
+       pickup for that load: the engine makes no auto card beside it, so the
+       auto card's note had nowhere to go. A quote for Emser Tile collected at
+       Norcross, pushed onto a driver's day beside four hourly Emser stops, left
+       one "Emser - Norcross" card reading only "Picking up for …" and no load
+       order for the other four. Any other manual pickup (a return at a store,
+       an off-dock warehouse) gets no load order — those deliveries are not its. */
+    const src=puSrcs.find(s=>manualPickupCoversDock(pu,String(s.label||"").split(" - ").pop(),s.label,nl));
+    if(!src)return null;
+    puLoc=nl(src.label);
+  }
+  const list=Array.isArray(entries)?entries:[];
+  const dels=list.filter(e=>{
+    if(!e||e.stopType!=="delivery")return false;
+    if(e.customer!==pu.customer)return false;
+    if((e.loadNum||1)!==(pu.loadNum||1))return false;
+    if(e.driverId!==pu.driverId)return false;
+    /* Collected somewhere that isn't a dock, with a manual pickup there: the
+       engine makes no dock card for it, so it belongs on no dock card's note. */
+    if(puSrcs.length&&deliveryCollectedOffDock(e,puSrcs,list,nl))return false;
+    if(!multi)return true; /* single dock → every delivery on the load */
+    const dock=deliveryDock(e,puSrcs,nl);
+    return !!dock&&nl(dock.label)===puLoc;
+  });
+  if(!dels.length)return null;
+  return "Load order: "+dels.slice().reverse().map(e=>e.stop).join(", ");
+};
+
+/* The pickup entry as every reader should display it: the live load order in
+   its note. An AUTO card's note IS the load order, so it is replaced (or a
+   stale stored one cleared). A MANUAL card keeps whatever the dispatcher
+   wrote ("Picking up for Smith") and gets the load order appended after
+   LOAD_ORDER_SEP — idempotently, so a display copy that finds its way back
+   into the day (a sort preset persists the driver's list) never stacks two.
+   Returns the same object when nothing changes. */
+export const LOAD_ORDER_SEP=" | ";
+const _loadOrderTail=/\s*\|\s*Load order:.*$/;
+export const withLiveLoadOrder=(e,entries,deps)=>{
+  if(!e||e.stopType!=="pickup")return e;
+  /* An auto card generated at a dock that has since closed, on a load nobody
+     has worked yet, is a trip to a shut building. It is DISPLAYED at the dock
+     that took the freight — title and address both — so neither the board nor
+     the phone can send anyone there. The stored card keeps its own name: this
+     wrapper is read-only, it runs on the way to the screen, and the save path
+     never sees its output. A card the driver already stamped is left exactly
+     as it is, because that trip was made. */
+  if(!e.manualPickup&&!isWorked(e)){
+    const moved=retiredPickup(e.customer,e.pickupFrom||e.stop);
+    if(moved&&moved.label!==e.stop)e={...e,stop:moved.label,addr:moved.addr,pickupFrom:moved.label};
+  }
+  const live=liveLoadOrderNote(e,entries,deps);
+  if(!e.manualPickup){
+    if(live)return e.note===live?e:{...e,note:live};
+    return (typeof e.note==="string"&&e.note.startsWith("Load order:"))?{...e,note:null}:e;
+  }
+  const stored=typeof e.note==="string"?e.note:"";
+  const base=(stored.startsWith("Load order:")?"":stored.replace(_loadOrderTail,"")).trim();
+  const note=live?(base?base+LOAD_ORDER_SEP+live:live):(base||null);
+  return note===(stored||null)?e:{...e,note};
+};
+
 
 /* ── Manifest mutations ──────────────────────────────────────────────────────
    The operations a dispatcher performs on a board. Extracted from App.jsx so
@@ -1262,20 +1441,45 @@ export const applyReassign=(all,eid,did,newLoadNum,deps)=>{
   const idx=out.findIndex(e=>e&&e.id===eid);
   if(idx<0)return all;
   const cur=out[idx];
+  /* An AUTO pickup is derived data — it exists because deliveries on that
+     driver and load come off that dock. Moving one is not an operation: it
+     used to just rewrite driverId, leaving the driver with deliveries and no
+     pickup, and the next save reaped the moved copy. The card stays with its
+     deliveries; move those instead. */
+  if(cur.stopType==="pickup"&&!cur.manualPickup)return all;
   /* Old driver/load read from the array being edited. The component version
      read them off the display list, which is the same for these two fields and
      one less thing to go stale mid-edit. */
   const oldDid=cur.driverId,oldLoad=cur.loadNum||1;
-  const targetLoad=newLoadNum||oldLoad;
   const driverChanged=did!==oldDid;
-  const loadChanged=!!newLoadNum&&newLoadNum!==oldLoad;
-  const updated={...cur,driverId:did,...(newLoadNum?{loadNum:newLoadNum}:{})};
+  /* A stop coming off a truck, or going onto one from the pool, starts on
+     Load 1 unless the caller named a load. The pool has no loads, so the
+     number a stop carried from its last truck means nothing there — yet it
+     travelled with the stop onto the next driver and opened a lone Load 2
+     above an empty Load 1. A split-off half keeps its Load 2: that number IS
+     what it means. */
+  const resetLoad=driverChanged&&!newLoadNum&&!cur.wasSplit&&(did===0||oldDid===0);
+  const targetLoad=newLoadNum||(resetLoad?1:oldLoad);
+  const loadChanged=targetLoad!==oldLoad;
+  const updated={...cur,driverId:did,...((newLoadNum||loadChanged)?{loadNum:targetLoad}:{})};
   if(driverChanged||loadChanged){
+    /* A quote's pickup leg and its delivery are one job (they share a pairId).
+       Whichever one is moved, a partner still sitting where this one came from
+       comes along — assigning only the delivery used to leave the real pickup
+       in the pool and let the engine conjure a supplier dock card on the
+       driver, at an address the freight isn't at. */
+    const pIdx=cur.pairId?out.findIndex((e,i)=>i!==idx&&e&&e.pairId===cur.pairId&&e.driverId===oldDid):-1;
+    const movers=[updated];
+    if(pIdx>=0)movers.push({...out[pIdx],driverId:did,loadNum:updated.loadNum||out[pIdx].loadNum||1});
+    /* pickup first, so it lands ahead of the delivery it feeds */
+    movers.sort((a,b)=>(a.stopType==="pickup"?0:1)-(b.stopType==="pickup"?0:1));
+    [idx,pIdx].filter(i=>i>=0).sort((a,b)=>b-a).forEach(i=>out.splice(i,1)); /* by position — a value filter would take a colliding-id twin too */
     /* Splice out and reinsert at the bottom of the target (driver, load) — the
        'new stops land at the bottom' contract shared with addDel. */
-    out.splice(idx,1);
-    if(did>0)out.splice(insertIdxForLoad(out,did,targetLoad),0,updated);
-    else out.push(updated);
+    movers.forEach(m=>{
+      if(did>0)out.splice(insertIdxForLoad(out,did,m.loadNum||1),0,m);
+      else out.push(m);
+    });
   }else{
     out[idx]=updated;
   }
@@ -1377,8 +1581,17 @@ export const applyDropReorder=(all,drvId,srcId,srcIdxFallback,toIdx)=>{
    answers — the "⚠ pick location" prompt with no right answer. Extracted so the
    label can be checked against the pickup cards on the same board. */
 export const resolvePickupLabel=(entry,siblings)=>{
-  const pf=entry.pickupFrom;
+  let pf=entry.pickupFrom;
   const cust=entry.customer;
+  /* A stop still to be run that names a dock which has closed reads as the
+     dock that took its freight — the driver has to be sent somewhere that is
+     open. A stop already worked keeps the name it was worked under: that trip
+     happened, and the card is the record of it. Only the reading changes;
+     `entry.pickupFrom` is never touched. */
+  if(pf&&!isWorked(entry)){
+    const moved=retiredPickup(cust,pf);
+    if(moved)pf=moved.label;
+  }
   /* Which multi-pickup customer is this stop tied to? It can be named either
      in `customer` (e.g. a Traditions delivery) or carried in `pickupFrom`
      (e.g. a Quote Delivery whose load originates at Traditions). */
@@ -1408,6 +1621,28 @@ export const resolvePickupLabel=(entry,siblings)=>{
     if(def)return{text:def.label,ambiguous:false,defaulted:true};
     return{text:multiCust+" — ⚠ pick location",ambiguous:true};
   }
+  /* ── One dock ────────────────────────────────────────────────────────────
+     A supplier with a single dock has nothing to choose, but the card should
+     still say WHERE — "Pickup from Emser - Norcross", not a bare "Emser Tile".
+     It also has to agree with the card the engine draws, which deliveryDock
+     always resolves to that one dock; a label that says less than the card is
+     how the load order went missing in the first place.
+
+     Reached when the origin is unnamed, or names this very dock in any of its
+     stored spellings ("Norcross", "Emser - Norcross", a healed retirement).
+     An origin somewhere else — a warehouse the supplier does not own — falls
+     through untouched below, because that freight genuinely is not on the
+     dock. */
+  const ownDocks=PICKUP_SOURCES.filter(s=>s&&s.customer===cust);
+  if(ownDocks.length===1&&(!pf||cfgNormLoc(pf)===cfgNormLoc(ownDocks[0].label))){
+    /* Nothing named, but a manual pickup on this load may already say where
+       the load comes from — the dispatcher's answer beats the dock. */
+    if(!pf){
+      const manualSrc=manualPickupOrigin(entry,siblings);
+      if(manualSrc)return{text:manualSrc,ambiguous:false};
+    }
+    return{text:ownDocks[0].label,ambiguous:false};
+  }
   /* Single-location or no special handling — original behavior. */
   if(pf&&pf.includes(" - "))return{text:pf,ambiguous:false};
   return{text:cust+(pf?" — "+pf:""),ambiguous:false};
@@ -1430,15 +1665,32 @@ export const resolvePickupLabel=(entry,siblings)=>{
    when exactly one owns a location by that name — "Norcross" belongs to Emser,
    Florida Tile, Specialty, IMETCO, Crossville and Prolex alike, and guessing
    between them would put a confident wrong address on a driver's card. */
-export const qualifyPickupName=(rawPU,customerName,multiPickup)=>{
+export const qualifyPickupName=(rawPU,customerName,multiPickup,opts)=>{
   const raw=String(rawPU==null?"":rawPU).trim();
   if(!raw||raw.includes(" - "))return raw;
+  const o=opts||{};
   const hit=(locs)=>Array.isArray(locs)?locs.find(l=>l&&(l.label===raw||String(l.label||"").split(" - ").pop()===raw)):null;
+  /* The customer's OWN docks first — including a single-dock supplier
+     (Crossville, Prolex), which MULTI_PICKUP leaves out by construction. A
+     quote for Crossville with pickup "Norcross" used to keep the bare name, so
+     its manual pickup card read "Norcross" and the engine, unable to see that
+     card as the dock, put a second "Crossville - Norcross" card beside it. */
+  const own=hit(Array.isArray(o.pickupSources)?o.pickupSources.filter(s=>s&&s.customer===customerName):null);
+  if(own)return own.label;
   const mine=hit(multiPickup&&multiPickup[customerName]);
   if(mine)return mine.label;
   let found=null,owners=0;
   Object.values(multiPickup||{}).forEach(locs=>{const m=hit(locs);if(m){owners++;if(!found)found=m;}});
-  return owners===1?found.label:raw;
+  if(owners!==1)return raw;
+  /* Another supplier's branch, by name alone, is a guess. When the caller
+     knows the pickup ADDRESS the guess has to match it: "Atlanta" for a
+     customer at 11 Perimeter Center East is not Traditions on Chattahoochee
+     Avenue, and relabelling it sent the driver to Traditions. */
+  if(o.addr!=null&&String(o.addr).trim()){
+    const na=(s)=>String(s||"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim();
+    if(!found.addr||na(found.addr)!==na(o.addr))return raw;
+  }
+  return found.label;
 };
 
 /* ── Finishing Dynamics dock cutoff ─────────────────────────────────────────
@@ -1598,3 +1850,125 @@ export const orderRosterRows=(drivers)=>{
   });
   return rows.filter(isActive).concat(hidden);
 };
+
+/* ═══ WHERE THE TRUCK IS ═══
+
+   Two things write a driver's position and neither owns the other: the Motive
+   gateway on the truck, polled through /api/motive-gps, and the driver's own
+   phone, which writes driverLocations/{id} while the driver page is open.
+
+   The Firestore snapshot used to replace the whole map, so every Motive fix it
+   held was dropped the moment any phone wrote, and the poll put them back
+   twenty seconds later. Merge the two by clock instead — the newer fix wins,
+   the same last-writer-wins rule the manifest sync runs on.
+
+   Nothing ever removes a phone ping. The record for a driver who last opened
+   the app ten days ago sits in Firestore reading "258h ago". That is a true
+   record of where they were; it is not where the truck is now, and a pin on
+   today's map is a claim about now. Past the cutoff a fix stops pinning and
+   stops counting as a location — the record is untouched, and the panel still
+   says when the driver was last seen. */
+export const GPS_FRESH_MS=12*60*60*1000;
+
+export const locUpdatedAtMs=(loc)=>{
+  const raw=loc&&loc.updatedAt;
+  if(raw==null)return null;
+  if(typeof raw==="number")return Number.isFinite(raw)?raw:null;
+  const t=new Date(raw).getTime();
+  return Number.isFinite(t)?t:null;
+};
+
+export const hasFix=(loc)=>{
+  if(!loc||loc.lat==null||loc.lng==null)return false;
+  return Number.isFinite(Number(loc.lat))&&Number.isFinite(Number(loc.lng));
+};
+
+export const gpsAgeMs=(loc,now)=>{
+  const t=locUpdatedAtMs(loc);
+  if(t===null)return null;
+  return Math.max(0,(now==null?Date.now():now)-t);
+};
+
+/* A fix with no clock at all is still shown — refusing to draw it would hide a
+   working truck over a missing field — but it is never dated as "just now". */
+export const gpsIsFresh=(loc,now,maxAgeMs)=>{
+  if(!hasFix(loc))return false;
+  const age=gpsAgeMs(loc,now);
+  if(age===null)return true;
+  return age<=(maxAgeMs==null?GPS_FRESH_MS:maxAgeMs);
+};
+
+export const gpsAgeLabel=(loc,now)=>{
+  const age=gpsAgeMs(loc,now);
+  if(age===null)return "age unknown";
+  const mins=Math.round(age/60000);
+  if(mins<1)return "just now";
+  if(mins<60)return mins+"m ago";
+  const hrs=Math.round(mins/60);
+  if(hrs<48)return hrs+"h ago";
+  return Math.round(hrs/24)+"d ago";
+};
+
+/* The one map the board reads. A driver whose GPS toggle is off has no
+   location from either source — the toggle used to delete the entry once, and
+   the next Firestore snapshot put the phone ping straight back. */
+export const mergeDriverLocs=(phone,motive,gpsEnabled,now,maxAgeMs)=>{
+  const out={};
+  const take=(src)=>{
+    Object.keys(src||{}).forEach(id=>{
+      const loc=src[id];
+      if(!gpsIsFresh(loc,now,maxAgeMs))return;
+      if(gpsEnabled&&gpsEnabled[id]===false)return;
+      const cur=out[id];
+      if(!cur){out[id]=loc;return;}
+      const a=locUpdatedAtMs(cur),b=locUpdatedAtMs(loc);
+      if(b!=null&&(a==null||b>a))out[id]=loc;
+    });
+  };
+  take(phone);take(motive);
+  return out;
+};
+
+/* The most recent fix on record for a driver, fresh or not, so the panel can
+   say "last seen 11d ago" where the map draws nothing. */
+export const lastKnownLoc=(phone,motive,driverId)=>{
+  const cands=[phone&&phone[driverId],motive&&motive[driverId]].filter(hasFix);
+  if(!cands.length)return null;
+  return cands.reduce((best,c)=>{
+    const a=locUpdatedAtMs(best),b=locUpdatedAtMs(c);
+    return b!=null&&(a==null||b>a)?c:best;
+  });
+};
+
+/* ═══ STOP PIN COLOUR ═══
+
+   A finished stop is green, whoever it belongs to: the map draws it as the same
+   green check the board has always used on the card, so a day's progress reads
+   off the map without opening anything. It used to be a small grey dot, a cue
+   that only worked if you already knew the size meant something.
+
+   Emser is the yard's biggest account and its live work has to read at a glance,
+   so an Emser stop that is still to be done carries the customer's own blue
+   whether or not anyone is assigned to it. */
+export const DONE_GREEN="#16a34a";
+
+export const isDoneStop=(s)=>!!s&&s.status==="departed";
+
+export const isEmserStop=(s)=>!!s&&String(s.customer==null?"":s.customer).trim().toLowerCase()==="emser tile";
+
+export const stopPinFill=(s,{done,unassigned}={})=>{
+  if(done)return DONE_GREEN;
+  if(isEmserStop(s))return "#2563eb";
+  return unassigned?"#d97706":"#2563eb";
+};
+
+/* The check itself. A white ring keeps it legible over satellite imagery, and
+   it draws at 18px — bigger than the dot it replaces, still quieter than a
+   numbered stop, and it sits at the lowest zIndex so live work stays on top. */
+export const DONE_PIN_PX=18;
+
+export const doneStopSvg=(fill)=>
+  '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 18 18">'
+  +'<circle cx="9" cy="9" r="8" fill="'+(fill||DONE_GREEN)+'" stroke="#fff" stroke-width="2"/>'
+  +'<path d="M5.2 9.3 L7.7 11.8 L12.8 6.4" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>'
+  +'</svg>';

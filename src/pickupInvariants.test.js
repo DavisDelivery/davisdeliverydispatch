@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { rebuildPickupsForPure, orderAutoPickupsFirst, orderByIds, applyReassign, applySetLoadNum, applyMoveInDriver, applyReorderDriver, applyDropReorder, resolvePickupLabel, dedupeIds, dedupeAutoPickups, reapOrphanAutoPickups, normalizeOrder } from "./manifestLogic.js";
+import { rebuildPickupsForPure, orderAutoPickupsFirst, orderByIds, applyReassign, applySetLoadNum, applyMoveInDriver, applyReorderDriver, applyDropReorder, resolvePickupLabel, dedupeIds, dedupeAutoPickups, reapOrphanAutoPickups, normalizeOrder, liveLoadOrderNote, deliveryDock } from "./manifestLogic.js";
 import { PICKUP_SOURCES, MULTI_PICKUP, normLoc } from "./pickupConfig.js";
 
 /* ── Scenario sweep over the auto-pickup engine ───────────────────────────────
@@ -111,6 +111,22 @@ const ALL = (before, after) => [
   ...vDeliveriesPreserved(before, after),
 ];
 
+/* The "Load order:" every reader shows is computed live (liveLoadOrderNote);
+   the engine also stores one on the card it generates. Straight after a
+   rebuild the two must be identical — they resolve a delivery's dock through
+   the same rule, or the board shows a card with no load order, or the wrong
+   one. (Only checked on a freshly rebuilt manifest: a nudge deliberately runs
+   no rebuild, so the stored note is allowed to go stale while the live one
+   stays right.) */
+const noteDeps = { pickupSources: PICKUP_SOURCES, normLoc };
+const vLiveNoteMatchesStored = (all) =>
+  all
+    .filter(isAuto)
+    .filter((p) => liveLoadOrderNote(p, all, noteDeps) !== p.note)
+    .map((p) => `live note for "${p.stop}" (drv ${p.driverId} load ${p.loadNum || 1}) is ${JSON.stringify(liveLoadOrderNote(p, all, noteDeps))} but the card stores ${JSON.stringify(p.note)}`);
+
+const ALL_FRESH = (before, after) => [...ALL(before, after), ...vLiveNoteMatchesStored(after)];
+
 /* ── Scenario matrix ────────────────────────────────────────────────────────── */
 
 const del = (o) => ({ id: genId(), stopType: "delivery", driverId: 1, loadNum: 1, baseRate: 0, ...o });
@@ -124,14 +140,20 @@ const CUSTS = ["MM Systems", "Emser Tile", "IMETCO", "Traditions in Tile"];
 /* The shapes a delivery's pickupFrom actually takes in stored data. */
 const PICKUP_FROMS = (cust) => {
   const d = docksFor(cust);
-  return [
+  /* "absent" is the most important row here and is deliberately undefined: the
+     batch-add path leaves pickupFrom unset, which is how the Emser day that
+     lost its load order was built. It must never be filtered out alongside a
+     dock that simply does not exist — so the optional second dock is appended
+     only when the supplier really has one, rather than filtering on value. */
+  const out = [
     ["absent", undefined],
-    ["full dock label", d[0]?.label],
-    ["short dock name", d[0]?.label.split(" - ").pop()],
-    ["second dock", d[1]?.label],
+    ["full dock label", d[0].label],
+    ["short dock name", d[0].label.split(" - ").pop()],
     ["another supplier's dock", "Southern Aluminum - Lithia Springs"],
     ["unknown place", "Some Random Warehouse - Nowhere"],
-  ].filter(([, v]) => v !== null);
+  ];
+  if (d[1]) out.push(["second dock", d[1].label]);
+  return out;
 };
 
 const scenarios = [];
@@ -163,13 +185,23 @@ CUSTS.forEach((cust) => {
 describe("auto-pickup engine — invariants across the scenario matrix", () => {
   it(`covers a broad matrix (${scenarios.length} scenarios)`, () => {
     expect(scenarios.length).toBeGreaterThan(100);
+    /* Every customer must still be exercised with NO pickupFrom at all — the
+       shape of the real board, and the one a stray filter is most likely to
+       quietly drop. */
+    CUSTS.forEach((c) => {
+      expect(scenarios.some((s) => s.name.startsWith(`${c} | pickupFrom=absent`))).toBe(true);
+      expect(
+        scenarios.filter((s) => s.name.startsWith(`${c} | pickupFrom=absent`))
+          .every((s) => s.entries.filter((e) => e.stopType === "delivery").every((e) => e.pickupFrom === undefined)),
+      ).toBe(true);
+    });
   });
 
   scenarios.forEach((sc) => {
     it(sc.name, () => {
       const d = deps({ driverLoadCount: sc.driverLoadCount });
       const after = rebuildAll(sc.entries, d);
-      expect(ALL(sc.entries, after)).toEqual([]);
+      expect(ALL_FRESH(sc.entries, after)).toEqual([]);
     });
   });
 });
@@ -200,7 +232,7 @@ describe("auto-pickup engine — multi-driver manifests", () => {
       });
     });
     const after = rebuildAll(entries, deps({ driverLoadCount: { 1: 2, 2: 2, 3: 2 } }));
-    expect(ALL(entries, after)).toEqual([]);
+    expect(ALL_FRESH(entries, after)).toEqual([]);
     after.filter(isAuto).forEach((p) => {
       expect(after.some((d) => d.stopType === "delivery" && key(d) === key(p))).toBe(true);
     });
@@ -237,7 +269,7 @@ describe("auto-pickup engine — survives the save/reload pipeline", () => {
       /* Nothing invented, nothing lost. */
       expect(back.map((e) => e.id).sort()).toEqual(built.map((e) => e.id).sort());
       /* And still a manifest a driver can actually run. */
-      expect(ALL(sc.entries, back)).toEqual([]);
+      expect(ALL_FRESH(sc.entries, back)).toEqual([]);
     });
   });
 
@@ -502,11 +534,13 @@ describe("pickup label — the contracts it actually owes", () => {
   });
 });
 
-/* ── Nominated default docks ─────────────────────────────────────────────────
+/* ── Where an unspecified load comes from ────────────────────────────────────
    A supplier may declare where its freight comes from unless told otherwise
-   (PICKUP_SOURCES `default:true`). Emser runs almost everything out of Norcross,
-   so an unspecified Emser load must resolve there rather than putting a red
-   "pick location" warning on every card. */
+   (PICKUP_SOURCES `default:true`), and a supplier with only ONE dock answers
+   the question by having no other answer. Either way an unspecified load must
+   resolve to a real dock rather than putting a red "pick location" warning on
+   every card — and the card must SAY the dock, because a label vaguer than the
+   pickup card it sits next to is how the load order went missing. */
 describe("default dock", () => {
   const emserDocks = docksFor("Emser Tile");
   const norcross = emserDocks.find((s) => s.default);
@@ -522,16 +556,32 @@ describe("default dock", () => {
     const { text, ambiguous, defaulted } = resolvePickupLabel(d, [d]);
     expect(ambiguous).toBe(false);
     expect(text).toBe("Emser - Norcross");
-    /* Flagged as defaulted so the card keeps offering the dock chips. */
-    expect(defaulted).toBe(true);
+    /* Emser has one dock since Roswell closed, so there is nothing to offer
+       chips for — the label is simply the dock, not a default standing in. */
+    expect(defaulted).toBeFalsy();
   });
 
-  it("an explicit dock still wins over the default", () => {
-    const d = emserDel({ pickupFrom: "Emser - Roswell" });
-    const { text, ambiguous, defaulted } = resolvePickupLabel(d, [d]);
-    expect(ambiguous).toBe(false);
-    expect(text).toContain("Roswell");
-    expect(defaulted).toBeUndefined();
+  it("naming the one dock, in any stored spelling, reads the same", () => {
+    ["Norcross", "Emser - Norcross", "Emser Tile — Norcross"].forEach((pf) => {
+      expect(resolvePickupLabel(emserDel({ pickupFrom: pf }), []).text).toBe("Emser - Norcross");
+    });
+  });
+
+  it("an origin the supplier does not own is shown as given, not swapped for the dock", () => {
+    expect(resolvePickupLabel(emserDel({ pickupFrom: "MTI - Sugar Hill" }), []).text).toBe("MTI - Sugar Hill");
+  });
+
+  it("an explicit dock still wins over a nominated default", () => {
+    /* No live supplier has both several docks and a nominated default — Emser
+       did until Roswell closed. The rule outlives the config, so it is held
+       here against the resolver directly, ready for the next second dock. */
+    const twoDocks = [
+      { customer: "Acme", label: "Acme - Home", addr: "1 Home St", default: true },
+      { customer: "Acme", label: "Acme - Annex", addr: "2 Annex Rd" },
+    ];
+    expect(deliveryDock({}, twoDocks, normLoc).label).toBe("Acme - Home");
+    expect(deliveryDock({ pickupFrom: "Annex" }, twoDocks, normLoc).label).toBe("Acme - Annex");
+    expect(deliveryDock({ pickupFrom: "Acme - Annex" }, twoDocks, normLoc).label).toBe("Acme - Annex");
   });
 
   it("a manual pickup on the load still wins over the default", () => {
