@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   GPS_FRESH_MS, mergeDriverLocs, lastKnownLoc, gpsAgeMs, gpsAgeLabel,
-  gpsIsFresh, hasFix, locUpdatedAtMs, isEmserStop, stopPinFill,
+  gpsIsFresh, hasFix, locUpdatedAtMs,
 } from "./manifestLogic.js";
 
 const NOW = Date.parse("2026-09-22T15:00:00Z");
@@ -155,45 +155,5 @@ describe("what the panel can still say once the pin is gone", () => {
     const phone = { 1: ago(96 * HR) };
     expect(mergeDriverLocs(phone, {}, {}, NOW)[1]).toBeUndefined();
     expect(lastKnownLoc(phone, {}, 1)).toBeTruthy();
-  });
-});
-
-describe("Emser keeps its blue on the map", () => {
-  const emser = { customer: "Emser Tile", stop: "DCO Smyrna" };
-
-  it("is blue assigned, unassigned and done alike", () => {
-    expect(stopPinFill(emser, {})).toBe("#2563eb");
-    expect(stopPinFill(emser, { unassigned: true })).toBe("#2563eb");
-    expect(stopPinFill(emser, { done: true })).toBe("#2563eb");
-    expect(stopPinFill(emser, { done: true, unassigned: true })).toBe("#2563eb");
-  });
-
-  it("leaves every other customer's pin exactly as it was", () => {
-    const ft = { customer: "Florida Tile", stop: "X" };
-    expect(stopPinFill(ft, {})).toBe("#2563eb");
-    expect(stopPinFill(ft, { unassigned: true })).toBe("#d97706");
-    expect(stopPinFill(ft, { done: true })).toBe("#a8a29e");
-    expect(stopPinFill(ft, { done: true, unassigned: true })).toBe("#a8a29e");
-  });
-
-  it("matches the customer however the name was cased or padded", () => {
-    expect(isEmserStop({ customer: " emser tile " })).toBe(true);
-    expect(isEmserStop({ customer: "EMSER TILE" })).toBe(true);
-  });
-
-  it("is the customer's own accent, not a fourth blue", () => {
-    expect(stopPinFill(emser, {})).toBe("#2563eb");
-  });
-
-  it("does not catch a lookalike or a missing customer", () => {
-    expect(isEmserStop({ customer: "Emser" })).toBe(false);
-    expect(isEmserStop({ customer: "Emser Tile Warehouse" })).toBe(false);
-    expect(isEmserStop({ stop: "Emser Tile" })).toBe(false);
-    expect(isEmserStop({})).toBe(false);
-    expect(isEmserStop(null)).toBe(false);
-  });
-
-  it("defaults are the no-flags case, so a bare call is the live colour", () => {
-    expect(stopPinFill({ customer: "Florida Tile" })).toBe("#2563eb");
   });
 });

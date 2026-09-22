@@ -1942,13 +1942,33 @@ export const lastKnownLoc=(phone,motive,driverId)=>{
 
 /* ═══ STOP PIN COLOUR ═══
 
-   Emser is the yard's biggest account and its work has to read at a glance, so
-   an Emser stop carries the customer's own blue in every state. Finished stops
-   stay legible: they draw small and faded, and that — not the grey — is the cue
-   that says done. */
+   A finished stop is green, whoever it belongs to: the map draws it as the same
+   green check the board has always used on the card, so a day's progress reads
+   off the map without opening anything. It used to be a small grey dot, a cue
+   that only worked if you already knew the size meant something.
+
+   Emser is the yard's biggest account and its live work has to read at a glance,
+   so an Emser stop that is still to be done carries the customer's own blue
+   whether or not anyone is assigned to it. */
+export const DONE_GREEN="#16a34a";
+
+export const isDoneStop=(s)=>!!s&&s.status==="departed";
+
 export const isEmserStop=(s)=>!!s&&String(s.customer==null?"":s.customer).trim().toLowerCase()==="emser tile";
 
 export const stopPinFill=(s,{done,unassigned}={})=>{
+  if(done)return DONE_GREEN;
   if(isEmserStop(s))return "#2563eb";
-  return done?"#a8a29e":unassigned?"#d97706":"#2563eb";
+  return unassigned?"#d97706":"#2563eb";
 };
+
+/* The check itself. A white ring keeps it legible over satellite imagery, and
+   it draws at 18px — bigger than the dot it replaces, still quieter than a
+   numbered stop, and it sits at the lowest zIndex so live work stays on top. */
+export const DONE_PIN_PX=18;
+
+export const doneStopSvg=(fill)=>
+  '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 18 18">'
+  +'<circle cx="9" cy="9" r="8" fill="'+(fill||DONE_GREEN)+'" stroke="#fff" stroke-width="2"/>'
+  +'<path d="M5.2 9.3 L7.7 11.8 L12.8 6.4" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>'
+  +'</svg>';

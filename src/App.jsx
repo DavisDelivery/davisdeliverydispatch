@@ -62,7 +62,7 @@ inputMb4:{width:"100%",border:"1px solid #d6d3d1",borderRadius:8,padding:"7px 10
 };
 import { useState, useCallback, useEffect, useMemo, useRef, Fragment, Component } from "react";
 import { PICKUP_SOURCES, MULTI_PICKUP, normLoc as _normLoc } from "./pickupConfig.js";
-import { dedupeIds, dedupeAutoPickups, dedupeGhostDeliveries, dedupeDeliveries, reapOrphanAutoPickups, sanitizeEntry, _mergeEntryDriver, _mergeEntryDispatcher, buildMergedEntries, entrySig, makeTombFilter, makeDocTombFilter, mergeTombstones, vanishedAutoPickups, orderByIds, reconcileDriverRoster, applyDriverRemap, normDriverName, manualPickupCoversDock, allInRate, stripLiftgateFee, resequenceEntries, sortBySeq, normalizeOrder, orderAutoPickupsFirst, manualPickupOrigin, deliveryCollectedOffDock, qualifyPickupName, rebuildPickupsForPure, withLiveLoadOrder, insertIdxForLoad, applyReassign, applySetLoadNum, reorderDriverBlock as _reorderDriverBlock, applyMoveInDriver, applyReorderDriver, applyDropReorder, resolvePickupLabel, finishingDynamicsFlag, FD_FLAG_COLORS, fdCutoffMins, fmtClock, visibleTruckDriverIds, orderRosterRows, mergeDriverLocs, lastKnownLoc, gpsAgeMs, gpsAgeLabel, stopPinFill } from "./manifestLogic.js";
+import { dedupeIds, dedupeAutoPickups, dedupeGhostDeliveries, dedupeDeliveries, reapOrphanAutoPickups, sanitizeEntry, _mergeEntryDriver, _mergeEntryDispatcher, buildMergedEntries, entrySig, makeTombFilter, makeDocTombFilter, mergeTombstones, vanishedAutoPickups, orderByIds, reconcileDriverRoster, applyDriverRemap, normDriverName, manualPickupCoversDock, allInRate, stripLiftgateFee, resequenceEntries, sortBySeq, normalizeOrder, orderAutoPickupsFirst, manualPickupOrigin, deliveryCollectedOffDock, qualifyPickupName, rebuildPickupsForPure, withLiveLoadOrder, insertIdxForLoad, applyReassign, applySetLoadNum, reorderDriverBlock as _reorderDriverBlock, applyMoveInDriver, applyReorderDriver, applyDropReorder, resolvePickupLabel, finishingDynamicsFlag, FD_FLAG_COLORS, fdCutoffMins, fmtClock, visibleTruckDriverIds, orderRosterRows, mergeDriverLocs, lastKnownLoc, gpsAgeMs, gpsAgeLabel, stopPinFill, isDoneStop, doneStopSvg, DONE_PIN_PX } from "./manifestLogic.js";
 import { diffOrderDocs, orderDocId, ordersParity } from "./ordersStore.js";
 import { FDFlag, useMinuteTick } from "./FDFlag.jsx";
 
@@ -1330,7 +1330,7 @@ bounds.extend(pos);
 
 const di=drivers.findIndex(d=>d.id===s.driverId);
 const col=di>=0?DCOL[di]:(CC[s.customer]||CC["One-Off Delivery"]).accent;
-const done=s.status==="departed";
+const done=isDoneStop(s);
 const onSite=s.status==="arrived";
 const isPU=s.stopType==="pickup";
 const isP=s.priority;
@@ -1346,9 +1346,17 @@ const strokeColor=onSite?"#f59e0b":isActiveDriverStop?"#1c1917":isUnassigned?"#9
 const strokeWeight=onSite?3:isActiveDriverStop?3:isUnassigned?2.5:1.5;
 const fillOpacity=done?0.4:hasActive&&!isActiveDriverStop&&isAssigned?0.5:1;
 
+/* A finished stop is the green check the board already uses on the card, not
+   a symbol path — pickup or delivery, whoever it belongs to. Everything still
+   to be done keeps its shape, so the two never read as the same thing. */
+const doneIcon={
+url:"data:image/svg+xml;charset=UTF-8,"+encodeURIComponent(doneStopSvg(fillColor)),
+scaledSize:new window.google.maps.Size(DONE_PIN_PX,DONE_PIN_PX),
+anchor:new window.google.maps.Point(DONE_PIN_PX/2,DONE_PIN_PX/2),
+};
 const marker=new window.google.maps.Marker({
 position:pos,map,
-icon:{
+icon:done?doneIcon:{
 path:isPU?'M -2,-2 L 0,-4 L 2,-2 L 2,2 L -2,2 Z':window.google.maps.SymbolPath.CIRCLE,
 scale:isPU?Math.min(scale,6):scale,fillColor,fillOpacity,strokeColor,strokeWeight,
 },
