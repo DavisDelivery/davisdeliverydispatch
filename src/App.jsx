@@ -1511,16 +1511,20 @@ const baseStyles=[
 {featureType:"road.local",elementType:"geometry.fill",stylers:[{color:"#f5f5f4"}]},
 {featureType:"administrative.locality",elementType:"labels.text.fill",stylers:[{color:"#1e5b92"}]},
 ];
-if(hideLabels){
-  map.setOptions({styles:[...baseStyles,
-    {elementType:"labels",stylers:[{visibility:"off"}]},
-  ]});
-}else{
-  map.setOptions({styles:baseStyles});
-}
-/* A styles array has no effect on satellite imagery, so Labels is carried over
-   there by the map type itself: hybrid is the photo with roads and place names
-   on it, plain satellite is the photo alone. */
+/* The road-map styling is painted OVER satellite imagery, not replaced by it:
+   the beige landscape fill hazes the photo, and the highway/arterial fills turn
+   it into a bright yellow spiderweb. On the photo, style nothing but the
+   clutter and let the imagery be the imagery. */
+const satStyles=[
+  {featureType:"poi",stylers:[{visibility:"off"}]},
+  {featureType:"transit",stylers:[{visibility:"off"}]},
+];
+/* Labels is carried over to the photo by the map type itself: hybrid is the
+   imagery with roads and place names on it, plain satellite is the imagery
+   alone. A labels styler would only hide the names, leaving the road lines. */
+map.setOptions({styles:satellite?satStyles
+  :hideLabels?[...baseStyles,{elementType:"labels",stylers:[{visibility:"off"}]}]
+  :baseStyles});
 map.setMapTypeId(satellite?(hideLabels?"satellite":"hybrid"):"roadmap");
 },[hideLabels,satellite,mapReady]);
 const truckDrvKey=[...visibleTruckDriverIds(drivers,stops)].sort((a,b)=>a-b).join(",");
@@ -1607,7 +1611,9 @@ style={{width:"100%",padding:"10px 14px 10px 36px",border:"none",borderRadius:10
 </div>
 )}
 
-<div style={{position:"absolute",bottom:activeDriver&&onAssignStop?52:12,left:12,zIndex:5,display:"flex",gap:6}}>
+{/* Clear of Google's attribution logo in the bottom-left corner, which these
+    buttons used to sit on top of — it has to stay visible. */}
+<div style={{position:"absolute",bottom:activeDriver&&onAssignStop?74:34,left:12,zIndex:5,display:"flex",gap:6}}>
 <button onClick={()=>setUseRoadRoutes(!useRoadRoutes)} style={{background:useRoadRoutes?"#1e5b92":"#fff",color:useRoadRoutes?"#fff":"#57534e",border:"1px solid "+(useRoadRoutes?"#1e5b92":"#d6d3d1"),borderRadius:8,padding:"6px 10px",fontSize:10,fontWeight:700,cursor:"pointer",boxShadow:"0 2px 8px rgba(0,0,0,0.15)",display:"flex",alignItems:"center",gap:4}}>
 {useRoadRoutes?"🛣 Road Routes":"〰 Straight Lines"}
 </button>
@@ -1651,6 +1657,23 @@ return(<div style={{position:"absolute",bottom:12,left:12,right:12,zIndex:5,back
 </div>}
 </div>
 );}
+/* The stop note was a single-line input. A real one — "Call 20 min ahead —
+   dock is behind the building, use the gravel entrance off Haynes Bridge" — is
+   390px of text in a 301px box, so the dispatcher saw the first forty
+   characters and had to scroll inside the field to read the rest. Access notes
+   are the ones a driver gets stuck without. It grows to fit. */
+function NoteInput({value,onChange,style,placeholder,...rest}){
+const ref=useRef(null);
+const fit=(el)=>{if(!el)return;el.style.height="auto";el.style.height=el.scrollHeight+"px";};
+useEffect(()=>{fit(ref.current);},[value]);
+return(<textarea ref={ref} rows={1} value={value||""}
+onChange={e=>{onChange(e.target.value);fit(e.target);}}
+onClick={e=>e.stopPropagation()}
+placeholder={placeholder||"\ud83d\udccb Add notes..."}
+{...rest}
+style={{resize:"none",overflow:"hidden",lineHeight:1.35,display:"block",...style}}/>);
+}
+
 function AddressInput({value,onChange,placeholder,style:customStyle}){
 const inputRef=useRef(null);
 const acRef=useRef(null);
@@ -2053,8 +2076,8 @@ style={{display:"flex",alignItems:"center",gap:6,padding:compact?"5px 8px":"8px"
 {!expanded&&<div style={{display:"flex",gap:6,alignItems:"center",marginTop:4,flexWrap:"wrap"}} onClick={e=>e.stopPropagation()}>
 <input type="number" inputMode="numeric" pattern="[0-9]*" value={entry.weight||""} onChange={e=>{e.stopPropagation();if(onWeight)onWeight(e.target.value);}} placeholder="lbs"
 style={{width:60,border:"1px solid #d6d3d1",borderRadius:6,padding:"3px 6px",fontSize:11,fontWeight:700,outline:"none",textAlign:"center",background:entry.weight?"#f0f5fa":"#fff"}}/>
-<input type="text" value={instrText} onChange={e=>{setInstrText(e.target.value);}} onBlur={e=>{if(onUpdateInstructions&&instrText!==(entry.instructions||""))onUpdateInstructions(instrText.trim());}} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();e.target.blur();}}} placeholder="Add notes — gate code, contact, etc."
-style={{flex:1,minWidth:140,border:"1px solid #e7e5e4",borderRadius:6,padding:"3px 8px",fontSize:11,outline:"none",background:hasI?"#eff6ff":"#fff",color:hasI?"#2563eb":"#1c1917"}}/>
+<NoteInput value={instrText} onChange={setInstrText} onBlur={()=>{if(onUpdateInstructions&&instrText!==(entry.instructions||""))onUpdateInstructions(instrText.trim());}} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();e.target.blur();}}} placeholder="Add notes — gate code, contact, etc."
+style={{flex:1,minWidth:140,border:"1px solid #e7e5e4",borderRadius:6,padding:"3px 8px",fontSize:11,outline:"none",background:hasI?"#eff6ff":"#fff",color:hasI?"#2563eb":"#1c1917",fontFamily:"inherit"}}/>
 </div>}
 {entry.shipPlan&&!expanded&&<div style={{fontSize:10,color:"#ea580c",fontWeight:700,marginTop:1}}>SP# {entry.shipPlan}</div>}
 {entry.refNum&&!expanded&&<div style={{fontSize:10,color:"#7c3aed",fontWeight:700,marginTop:1}}>Ref# {entry.refNum}</div>}
@@ -2703,7 +2726,7 @@ return(
 <div style={{height:"100%",width:pct+"%",background:col,borderRadius:4,transition:"width 0.3s"}}/>
 </div>
 <span style={{fontSize:13,fontWeight:700,color:col,fontVariantNumeric:"tabular-nums",flexShrink:0}}>{totalW.toLocaleString()}<span style={{fontSize:10,color:"#a8a29e"}}>/{(cap/1000).toFixed(0)}k</span></span>
-{totalW>cap&&<span style={{fontSize:7,background:"#dc2626",color:"#fff",padding:"0px 3px",borderRadius:2,fontWeight:700}}>OVER</span>}
+{totalW>cap&&<span style={{fontSize:8,background:"#dc2626",color:"#fff",padding:"0px 3px",borderRadius:2,fontWeight:700}}>OVER</span>}
 </div>):null;})()}
 <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
 {ids.map((id,oi)=>{
@@ -5971,13 +5994,18 @@ return(
 ))}
 </div>}
 
-<div style={{background:"#f7f7f6",borderBottom:"1px solid #e7e5e4",padding:"8px 28px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
-<div style={{display:"flex",alignItems:"center",gap:24}}>
+{/* The header is twelve controls wide. On a 1512px laptop the right-hand
+    group needed 1049px starting at x=530, so the week-revenue chip sat off
+    the screen with no way to scroll to it — and every view that adds the
+    "← Dashboard" button lost another 100px. It wraps now: unchanged on a wide
+    monitor, a second row rather than a severed one when it cannot fit. */}
+<div style={{background:"#f7f7f6",borderBottom:"1px solid #e7e5e4",padding:"8px 28px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0,flexWrap:"wrap",rowGap:8}}>
+<div style={{display:"flex",alignItems:"center",gap:24,flexWrap:"wrap",rowGap:8,minWidth:0}}>
 <div style={_s.flexC8}>
 <a href={window.location.pathname} onClick={e=>{e.preventDefault();setView("manifest");setSelCust(null);setQuoteMode(null);window.history.replaceState(null,"",window.location.pathname);window.scrollTo(0,0);}} style={{cursor:"pointer",display:"flex",alignItems:"center",gap:8}}>
 <img src={LOGO_URI} alt="Davis Delivery Service" style={{height:38,objectFit:"contain"}}/>
 </a>
-<span style={{fontSize:9,color:"#a8a29e",fontWeight:600,letterSpacing:"0.02em"}}>v{APP_VERSION}</span>
+<span style={{fontSize:9,color:"#a8a29e",fontWeight:600,letterSpacing:"0.02em",whiteSpace:"nowrap"}}>v{APP_VERSION}</span>
 {saveStatus&&<span style={{fontSize:9,fontWeight:700,color:saveStatus.includes("FAIL")?"#dc2626":saveStatus.includes("saving")?"#d97706":"#16a34a",marginLeft:4}}>{saveStatus}</span>}
 <span style={{display:"inline-block",width:6,height:6,borderRadius:3,background:fbConnected?"#16a34a":"#dc2626",marginLeft:6}}/>
 </div>
@@ -5991,7 +6019,7 @@ return(
 {wo!==0&&<button onClick={()=>{{const _dws=_defaultWoSd();setWo(_dws.wo);setSd(_dws.sd);}}} style={{background:"#16a34a",border:"none",borderRadius:7,padding:"4px 14px",cursor:"pointer",fontSize:11,fontWeight:600,color:"#fff",marginLeft:2}}>Today</button>}
 </div>
 </div>
-<div style={_s.flexC10}>
+<div style={{..._s.flexC10,flexWrap:"wrap",justifyContent:"flex-end",rowGap:8,minWidth:0}}>
 {view!=="manifest"&&<button onClick={()=>{setView("manifest");setSelCust(null);setQuoteMode(null);window.history.replaceState(null,"",window.location.pathname);window.scrollTo(0,0);}} style={{background:BRAND.main,border:"none",color:"#fff",borderRadius:8,padding:"7px 16px",cursor:"pointer",fontSize:12,fontWeight:700}}>{"← Dashboard"}</button>}
 {[{k:"daily",l:"Daily"},{k:"weekly",l:"Weekly"},{k:"routes",l:"Routes"},{k:"add",l:"+ Add"}].map(v=>{const delCount=v.k==="daily"?dl.filter(e=>e.stopType!=="pickup").length:0;return(<button key={v.k} onClick={()=>{setView(v.k);setSelCust(null);setQuoteMode(null);if(v.k==="routes"){setRpInited(false);}}} style={{background:view===v.k?(v.k==="add"?"#16a34a":v.k==="routes"?"#d97706":BRAND.main):v.k==="add"?"#f0fdf4":v.k==="routes"?"#fffbeb":"#fff",border:view===v.k?"none":v.k==="add"?"1px solid #bbf7d0":v.k==="routes"?"1px solid #fde68a":"1px solid #e7e5e4",color:view===v.k?"#fff":v.k==="add"?"#16a34a":v.k==="routes"?"#d97706":"#57534e",borderRadius:8,padding:"7px 14px",cursor:"pointer",fontSize:12,fontWeight:600,display:"inline-flex",alignItems:"center",gap:6}}>{v.l}{v.k==="daily"&&delCount>0&&<span style={{fontSize:10,fontWeight:800,padding:"1px 6px",borderRadius:10,background:view===v.k?"rgba(255,255,255,0.25)":BRAND.pale,color:view===v.k?"#fff":BRAND.main,minWidth:18,textAlign:"center",fontVariantNumeric:"tabular-nums"}}>{delCount}</span>}</button>);})}
 <div style={{position:"relative"}}>
@@ -6364,10 +6392,10 @@ style={{display:"flex",alignItems:"center",gap:6,padding:"6px 8px",marginBottom:
 <div style={{fontSize:11,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.stop}</div>
 <div style={{display:"flex",alignItems:"center",gap:3,flexWrap:"wrap"}}>
 <span style={{fontSize:9,color:c.accent}}>{e.customer}</span>
-{isPU&&<span style={{fontSize:7,background:"#2563eb",color:"#fff",padding:"0 3px",borderRadius:2,fontWeight:700}}>PU</span>}
-{!isPU&&<span style={{fontSize:7,background:"#16a34a",color:"#fff",padding:"0 3px",borderRadius:2,fontWeight:700}}>DEL</span>}
-{e.priority&&<span style={{fontSize:7,background:"#f59e0b",color:"#fff",padding:"0 3px",borderRadius:2,fontWeight:700}}>PRI</span>}
-{e.dueBy&&<span style={{fontSize:7,background:e.dueBy.includes("By")?"#dc2626":"#2563eb",color:"#fff",padding:"0 3px",borderRadius:2,fontWeight:700}}>⏰{e.dueBy}</span>}
+{isPU&&<span style={{fontSize:8,background:"#2563eb",color:"#fff",padding:"0 3px",borderRadius:2,fontWeight:700}}>PU</span>}
+{!isPU&&<span style={{fontSize:8,background:"#16a34a",color:"#fff",padding:"0 3px",borderRadius:2,fontWeight:700}}>DEL</span>}
+{e.priority&&<span style={{fontSize:8,background:"#f59e0b",color:"#fff",padding:"0 3px",borderRadius:2,fontWeight:700}}>PRI</span>}
+{e.dueBy&&<span style={{fontSize:8,background:e.dueBy.includes("By")?"#dc2626":"#2563eb",color:"#fff",padding:"0 3px",borderRadius:2,fontWeight:700}}>⏰{e.dueBy}</span>}
 <FDFlag entry={e} {...fdCtx} size="xs"/>
 {e.weight>0&&<span style={{fontSize:8,color:BRAND.main,fontWeight:700}}>{e.weight.toLocaleString()}lb</span>}
 </div>
@@ -6473,7 +6501,10 @@ return(<div style={{position:"absolute",top:12,left:12,right:60,zIndex:5}}>
 </div>
 </div>
 </div>);})()}
-{!rpActive&&<div style={{position:"absolute",top:12,left:12,right:60,zIndex:5,background:"#fff",borderRadius:14,padding:"12px 18px",fontSize:13,fontWeight:600,color:"#78716c",boxShadow:"0 8px 32px rgba(0,0,0,0.1)",display:"flex",alignItems:"center",gap:10}}>
+{/* The map's search box is absolute at top:10 on the same zIndex, so this hint
+    was drawn underneath it and the line the dispatcher needed to read was the
+    one that got covered. Sit below the search box and clear of the legend. */}
+{!rpActive&&<div style={{position:"absolute",top:64,left:12,right:60,zIndex:5,background:"#fff",borderRadius:14,padding:"12px 18px",fontSize:13,fontWeight:600,color:"#78716c",boxShadow:"0 8px 32px rgba(0,0,0,0.1)",display:"flex",alignItems:"center",gap:10}}>
 <span style={{fontSize:22}}>👈</span>
 <div><div style={{fontWeight:700,color:"#1c1917"}}>Select a driver</div><div style={{fontSize:11,marginTop:2}}>Then click stops on the map in delivery order</div></div>
 </div>}
@@ -7314,7 +7345,7 @@ style={{width:"100%",border:"1px solid #d8b4fe",borderRadius:8,padding:"8px 10px
 <div style={{height:"100%",width:pct+"%",background:col,borderRadius:4,transition:"width 0.3s"}}/>
 </div>
 <span style={{fontSize:12,fontWeight:700,color:col,fontVariantNumeric:"tabular-nums",flexShrink:0}}>{w.toLocaleString()}<span style={{fontSize:10,color:"#a8a29e"}}>/{(cap/1000).toFixed(0)}k</span></span>
-{over&&<span style={{fontSize:7,background:"#dc2626",color:"#fff",padding:"0px 3px",borderRadius:2,fontWeight:700}}>OVER</span>}
+{over&&<span style={{fontSize:8,background:"#dc2626",color:"#fff",padding:"0px 3px",borderRadius:2,fontWeight:700}}>OVER</span>}
 </div>):null;})}
 <button onClick={()=>toggleDriverCapacity(drv.id)} style={{fontSize:8,color:cap===TRUCK_LIMITS.heavy?"#d97706":"#a8a29e",background:cap===TRUCK_LIMITS.heavy?"#fef3c7":"transparent",border:"none",borderRadius:4,padding:"1px 6px",cursor:"pointer",fontWeight:600}}>
 {cap===TRUCK_LIMITS.heavy?"🚛 13.5k":"→ 13.5k"}
@@ -7432,7 +7463,7 @@ style={{background:isDrgOver?"#dcfce7":isDrgSrc?"#fef9c3":done?"#f0fdf4":onSite?
 </div>
 
 <div style={{display:"flex",gap:3,marginTop:3,alignItems:"center"}}>
-<input value={entry.instructions||""} onChange={e=>updateInstructions(entry.id,e.target.value)} onClick={e=>e.stopPropagation()} placeholder="📋 Add notes..." style={{flex:1,border:"1px solid #e7e5e4",borderRadius:4,padding:"3px 6px",fontSize:9,outline:"none",background:entry.instructions?"#eff6ff":"#fafaf9",color:"#1c1917",fontFamily:"inherit"}}/>
+<NoteInput value={entry.instructions} onChange={v=>updateInstructions(entry.id,v)} style={{flex:1,minWidth:0,border:"1px solid #e7e5e4",borderRadius:4,padding:"3px 6px",fontSize:9,outline:"none",background:entry.instructions?"#eff6ff":"#fafaf9",color:"#1c1917",fontFamily:"inherit"}}/>
 {entry.customer==="IMETCO"&&!isPU&&<input value={entry.shipPlan||""} onChange={e=>setShipPlan(entry.id,e.target.value)} onClick={e=>e.stopPropagation()} placeholder="Ship Plan #" style={{width:90,border:entry.shipPlan?"1px solid #bbf7d0":"1px solid #fed7aa",borderRadius:4,padding:"3px 6px",fontSize:9,fontWeight:700,outline:"none",background:entry.shipPlan?"#f0fdf4":"#fff7ed",color:"#9a3412",textAlign:"center"}}/>}
 </div>
 
@@ -7505,7 +7536,7 @@ style={{background:isDrgOver?"#dcfce7":isDrgSrc?"#fef9c3":done?"#f0fdf4":onSite?
 <input type="number" inputMode="numeric" value={entry.weight||""} onChange={e=>setWeight(entry.id,e.target.value)} onClick={e=>e.stopPropagation()} placeholder="lbs" style={{width:52,border:"1px solid #d6d3d1",borderRadius:4,padding:"3px 4px",fontSize:9,fontWeight:700,outline:"none",textAlign:"center",background:entry.weight?"#f0f5fa":"#fff"}}/>
 <button onClick={()=>deleteDel(entry.id)} style={{marginLeft:"auto",background:"none",border:"none",color:"#dc2626",fontSize:9,cursor:"pointer",padding:"2px 4px"}}>✕</button>
 </div>
-<input value={entry.instructions||""} onChange={e=>updateInstructions(entry.id,e.target.value)} onClick={e=>e.stopPropagation()} placeholder="📋 Add notes..." style={{width:"100%",marginTop:3,border:"1px solid #e7e5e4",borderRadius:4,padding:"3px 6px",fontSize:9,outline:"none",background:entry.instructions?"#eff6ff":"#fafaf9",color:"#1c1917",fontFamily:"inherit"}}/>
+<NoteInput value={entry.instructions} onChange={v=>updateInstructions(entry.id,v)} style={{width:"100%",marginTop:3,border:"1px solid #e7e5e4",borderRadius:4,padding:"3px 6px",fontSize:9,outline:"none",background:entry.instructions?"#eff6ff":"#fafaf9",color:"#1c1917",fontFamily:"inherit"}}/>
 </div>);})}
 </div>
 </div>}
@@ -8265,7 +8296,7 @@ showToast(selected.length+" "+custName+" stops added");
 </div>}
 </div>
 {chatImage&&<div style={{padding:"8px 16px 0",display:"flex",alignItems:"center",gap:8}}>
-<div style={{position:"relative"}}>{chatImage.mediaType==="application/pdf"?<div style={{width:50,height:50,borderRadius:8,background:"#fef2f2",border:"1px solid #fca5a5",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column"}}><span style={{fontSize:18}}>📄</span><span style={{fontSize:7,color:"#dc2626",fontWeight:600}}>PDF</span></div>:<img src={chatImage.preview} alt="" style={{height:50,borderRadius:8}}/>}<button onClick={()=>setChatImage(null)} style={{position:"absolute",top:-4,right:-4,background:"#dc2626",color:"#fff",border:"none",borderRadius:10,width:18,height:18,fontSize:9,cursor:"pointer",fontWeight:700}}>✕</button></div>
+<div style={{position:"relative"}}>{chatImage.mediaType==="application/pdf"?<div style={{width:50,height:50,borderRadius:8,background:"#fef2f2",border:"1px solid #fca5a5",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column"}}><span style={{fontSize:18}}>📄</span><span style={{fontSize:8,color:"#dc2626",fontWeight:600}}>PDF</span></div>:<img src={chatImage.preview} alt="" style={{height:50,borderRadius:8}}/>}<button onClick={()=>setChatImage(null)} style={{position:"absolute",top:-4,right:-4,background:"#dc2626",color:"#fff",border:"none",borderRadius:10,width:18,height:18,fontSize:9,cursor:"pointer",fontWeight:700}}>✕</button></div>
 <div><div style={{fontSize:11,color:"#16a34a",fontWeight:600}}>Ready</div>{chatImage.fileName&&<div style={{fontSize:9,color:"#78716c"}}>{chatImage.fileName}</div>}</div>
 </div>}
 <div style={{padding:"8px 16px 16px",borderTop:"1px solid #e7e5e4",display:"flex",gap:4,flexShrink:0,alignItems:"center"}}>
@@ -8428,7 +8459,7 @@ return(
 <a href={window.location.pathname} onClick={e=>{e.preventDefault();setView("manifest");setSelCust(null);setQuoteMode(null);window.history.replaceState(null,"",window.location.pathname);window.scrollTo(0,0);}} style={{cursor:"pointer"}}><img src={LOGO_WHITE} alt="Davis Delivery" style={{height:28,objectFit:"contain"}}/></a>
 <div>
 <div style={{fontSize:8,color:"#93c5fd",fontWeight:600,opacity:0.7}}>v{APP_VERSION}</div>
-<div style={{display:"flex",alignItems:"center",gap:3}}><span style={{display:"inline-block",width:5,height:5,borderRadius:3,background:fbConnected?"#16a34a":"#dc2626"}}/><span style={{fontSize:7,color:fbConnected?"#6ee7b7":"#fca5a5"}}>{saveStatus||((fbConnected?"synced":"offline"))}</span></div>
+<div style={{display:"flex",alignItems:"center",gap:3}}><span style={{display:"inline-block",width:5,height:5,borderRadius:3,background:fbConnected?"#16a34a":"#dc2626"}}/><span style={{fontSize:8,color:fbConnected?"#6ee7b7":"#fca5a5"}}>{saveStatus||((fbConnected?"synced":"offline"))}</span></div>
 </div>
 
 </div>
@@ -9220,7 +9251,7 @@ return(<div>
 <div style={{fontSize:9,color:c.accent}}>{photo.customer}</div>
 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
 <span style={{fontSize:9,color:"#a8a29e"}}>{photo.dayName} {photo.dayDate}</span>
-<button onClick={e=>{e.stopPropagation();printPODMobile(photo);}} style={{background:"#1e5b92",color:"#fff",border:"none",borderRadius:3,padding:"2px 5px",fontSize:7,fontWeight:700,cursor:"pointer"}}>POD</button>
+<button onClick={e=>{e.stopPropagation();printPODMobile(photo);}} style={{background:"#1e5b92",color:"#fff",border:"none",borderRadius:3,padding:"2px 5px",fontSize:8,fontWeight:700,cursor:"pointer"}}>POD</button>
 </div>
 </div>
 </div>);})}
@@ -10576,7 +10607,7 @@ return(
 <div>
 <h1 style={{margin:0}}><img src={LOGO_WHITE} alt="Davis Delivery" style={{height:26,objectFit:"contain"}}/></h1>
 <p style={{margin:"2px 0 0",fontSize:11,color:"#93c5fd",letterSpacing:"0.08em"}}>DRIVER MANIFEST</p>
-<div style={{display:"flex",alignItems:"center",gap:3,marginTop:2}}><span style={{display:"inline-block",width:5,height:5,borderRadius:3,background:fbLoaded?"#16a34a":"#dc2626"}}/><span style={{fontSize:7,color:fbLoaded?"#6ee7b7":"#fca5a5"}}>{fbLoaded?"synced":"connecting..."}</span>{drvSaveStatus&&<span style={{fontSize:8,marginLeft:6,color:drvSaveStatus.startsWith("⚠")?"#fca5a5":(drvSaveStatus==="✓ saved"?"#6ee7b7":"#fde68a"),fontWeight:600}}>{drvSaveStatus}</span>}</div>
+<div style={{display:"flex",alignItems:"center",gap:3,marginTop:2}}><span style={{display:"inline-block",width:5,height:5,borderRadius:3,background:fbLoaded?"#16a34a":"#dc2626"}}/><span style={{fontSize:8,color:fbLoaded?"#6ee7b7":"#fca5a5"}}>{fbLoaded?"synced":"connecting..."}</span>{drvSaveStatus&&<span style={{fontSize:8,marginLeft:6,color:drvSaveStatus.startsWith("⚠")?"#fca5a5":(drvSaveStatus==="✓ saved"?"#6ee7b7":"#fde68a"),fontWeight:600}}>{drvSaveStatus}</span>}</div>
 </div>
 <button onClick={()=>{setAuthenticated(false);setPinEntry("");}} style={{background:"#292524",border:"1px solid #44403c",color:"#a8a29e",borderRadius:8,padding:"6px 10px",cursor:"pointer",fontSize:11}}>Lock</button>
 <button onClick={()=>setShowDriverMsg(true)} style={{background:BRAND.main,border:"none",color:"#fff",borderRadius:8,padding:"6px 10px",cursor:"pointer",fontSize:11,fontWeight:600}}>{"💬"}</button>
