@@ -1972,3 +1972,66 @@ export const doneStopSvg=(fill)=>
   +'<circle cx="9" cy="9" r="8" fill="'+(fill||DONE_GREEN)+'" stroke="#fff" stroke-width="2"/>'
   +'<path d="M5.2 9.3 L7.7 11.8 L12.8 6.4" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>'
   +'</svg>';
+
+/* ═══ WHAT AN ARRIVAL WOULD CONTRADICT ═══
+
+   A truck is in one place at a time, and freight is on the truck before it is
+   delivered. Neither rule was enforced. `updateStatus` stamps the one entry it
+   was handed and looks at nothing else, so a driver could be on site at five
+   stops at once, and a delivery could be stamped arrived before the dock it
+   loads from had been left.
+
+   These are warnings, not blocks: the driver is standing there and the app is
+   not, and a stamp entered late from memory is a real thing. Nothing here
+   writes — it reports what a tap would contradict and lets the caller ask. */
+
+export const openStopsFor=(entries,driverId,exceptId)=>
+  (Array.isArray(entries)?entries:[]).filter(e=>
+    !!e&&e.id!==exceptId&&e.driverId===driverId
+    &&(e.status==="arrived"||(!!e.arrivedAt&&e.status!=="departed"))
+    &&!e.departedAt);
+
+/* The pickup a delivery loads from, by the same dock rule the load-order note
+   runs on. A paired quote leg names its partner outright. */
+export const pickupForDelivery=(del,entries,deps)=>{
+  if(!del||del.stopType==="pickup")return null;
+  const d=deps||{};
+  const nl=typeof d.normLoc==="function"?d.normLoc:(s)=>String(s||"").trim().toLowerCase();
+  const list=Array.isArray(entries)?entries:[];
+  const sameLeg=(e)=>!!e&&e.stopType==="pickup"&&e.driverId===del.driverId;
+  if(del.pairId){
+    const partner=list.find(e=>sameLeg(e)&&e.pairId===del.pairId);
+    if(partner)return partner;
+  }
+  const cands=list.filter(e=>sameLeg(e)&&e.customer===del.customer&&(e.loadNum||1)===(del.loadNum||1));
+  if(!cands.length)return null;
+  const puSrcs=(Array.isArray(d.pickupSources)?d.pickupSources:[]).filter(s=>s&&s.customer===del.customer);
+  if(puSrcs.length<2)return cands[0];
+  const dock=deliveryDock(del,puSrcs,nl);
+  const want=dock?nl(dock.label):null;
+  return cands.find(pu=>(nl(pu.pickupFrom)||nl(pu.stop))===want)||cands[0];
+};
+
+export const arrivalWarnings=(entry,entries,deps)=>{
+  const out=[];
+  if(!entry)return out;
+  const open=openStopsFor(entries,entry.driverId,entry.id);
+  if(open.length)out.push({kind:"open-stop",stops:open});
+  const pu=pickupForDelivery(entry,entries,deps);
+  /* Only a pickup that has been started and not finished, or not started at
+     all, is out of order. One already departed is exactly the right state. */
+  if(pu&&pu.id!==entry.id&&!pu.departedAt)out.push({kind:"before-pickup",pickup:pu});
+  return out;
+};
+
+/* Drivers the board should flag: two places at once is never true. */
+export const driversWithOverlap=(entries)=>{
+  const byDriver={};
+  (Array.isArray(entries)?entries:[]).forEach(e=>{
+    if(!e||!(e.driverId>0))return;
+    if(!(e.status==="arrived"||(!!e.arrivedAt&&e.status!=="departed")))return;
+    if(e.departedAt)return;
+    (byDriver[e.driverId]=byDriver[e.driverId]||[]).push(e);
+  });
+  return Object.keys(byDriver).filter(k=>byDriver[k].length>1).map(Number);
+};

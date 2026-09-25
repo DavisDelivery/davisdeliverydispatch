@@ -237,6 +237,119 @@ Four separate causes, all of them code, none of them Motive being down:
       Replaced with a 🛰 Satellite button in the control row. Labels carries over:
       hybrid is the photo with roads and place names, plain satellite is the photo alone.
 
+
+## 10 · 2026-09-22 — the truck in two places at once
+
+### What the board showed
+
+TYRESE Griffin, on site at **Precision Flooring – Norcross** (arrived 8:54) and
+**ProSource – Norcross** (arrived 8:47) at the same time, neither departed. The
+ProSource stamp is a minute *before* he reached the Emser – Norcross pickup those
+deliveries load from (8:48) and four before he left it (8:51) — the freight was
+still on Emser's dock.
+
+### Why the impossible stamp exists
+
+**The liftgate request button only existed on an arrived stop.** In both stop
+cards it sat inside the `arrived&&(…)` block, and on the driver's own page it
+was further gated on `arrived&&!departed`. A liftgate is something you see from
+the kerb; the only way to send the request was to stamp an arrival that had not
+happened. The pending request in the queue is timed **8:47 AM** — the same
+minute as the arrival. He was at the dock, saw the ProSource pallet needed a
+liftgate, and the app made him lie about his position to ask for it.
+
+Nothing else writes `arrivedAt`: it is set only by an explicit Arrived tap and
+never cleared. Emser hourly billing comes from `emserShifts` clock-in/out via
+`getShiftSummary`, so no money was affected — only the board's picture of where
+the truck was, and the "on site 30 min+" alert, which cried wolf all morning.
+
+### Fixed in this pass
+
+- [x] 🟠 **High — a liftgate could not be requested without a false arrival.**
+      The request, the pending notice and the approved notice moved out of the
+      arrived-only block in both `DriverView` and `DriverPage`. It asks for
+      nothing but the stop, and still disappears once the stop is departed.
+- [x] 🟠 **High — nothing enforced that a truck is in one place at a time.**
+      `updateStatus` stamps the one entry it was handed and looks at nothing
+      else. Arriving somewhere while another stop is open now raises a sheet
+      naming the open stops and their times, with **Depart those stops & arrive
+      here**, **Arrive anyway** and **Cancel**. The app writes no timestamp the
+      driver did not tap for.
+- [x] 🟡 **Medium — a delivery could be arrived before its dock was left.**
+      `arrivalWarnings` also reports a pickup on the same driver and load that
+      has not departed. Warn, not block: a stamp entered late from memory is a
+      real thing.
+- [x] 🟡 **Medium — the board could not see the overlap.** The triage bar gains
+      "N drivers on site at 2+ stops" and the driver row names them. The dwell
+      flag only fires at thirty minutes, so a stale stamp was invisible until
+      it was half an hour old.
+- [x] 🟠 **High — the Daily Log rendered a stale load order.** §08 made the
+      board's note live, but the Daily Log maps the raw day and rendered the
+      stored `note`, so the same pickup read two different ways in two columns
+      of one screen after any route reorder. It runs the same rule now, and a
+      test holds the whole day and one driver's slice to the same answer.
+
+### Note on the earlier reading
+
+The 8:47 stamp was first read here as a mis-tap on the wrong card. It was not —
+the liftgate gate above forced it. The fix follows the cause, not the symptom.
+
+
+## 11 · 2026-09-25 — a test copy of the driver app
+
+**More ⋯ → Driver App (test)** opens the real driver app in a phone-sized frame,
+loaded from the real day for whichever driver you pick, so driver-side features
+can be tried and developed against real work. Reset reloads the frame; Open in
+new tab gives the same fenced app full size. The route is `#/sandbox/driver/<slug>`.
+
+### The one rule: it never writes
+
+A tap on Arrived there, landing on the real manifest, would stamp a real
+driver's real record. So the fence sits at the lowest layers, where every write
+already has to pass, not at each button — a feature added to the driver app
+later is fenced the day it is written, without anyone remembering to fence it.
+
+- **Firestore** — `src/sandboxOps.js` replaces `window._fbOps` with an in-memory
+  copy of the documents the page touches, seeded from one real read of each.
+  Subscriptions deliver the real value once, then only local writes, so a tap
+  sticks and a live edit on the board can't snap a test back. The Firebase
+  bootstrap wraps the ops *before* marking Firebase ready, so nothing in the page
+  ever holds the real ones.
+- **Storage** — same origin means the same `localStorage` as the board, and every
+  save snapshots the manifest into `dd_auto_backups`, which the board can restore
+  from. The frame gets a private copy, seeded from the real one.
+- **Network** — non-GET requests to our functions (`/api/*`, `/.netlify/functions/*`)
+  are answered locally, as is the one side-effecting GET (`/api/backup-nightly`).
+  A text message cannot be sent from it.
+- **Browser** — no push-permission prompt, no location watch (it would report the
+  dispatcher's desk as the truck), no IndexedDB persistence lease taken from the
+  board, and no PIN, since the board it opens from has no login of its own.
+
+`src/sandboxBoot.js` installs all of this and is the first import in `main.jsx`,
+so it runs before `App.jsx` is evaluated. It keys off the URL at load and cannot be
+undone without a reload. The router refuses to render the sandbox route on a page
+it did not fence: arriving there by a hash change on the board reloads instead.
+
+### Proof
+
+- 30 unit tests on the firewall; all 26 mutations caught.
+- Driven in a real browser with a fake Firebase SDK served *through the app's real
+  bootstrap*, every write primitive recording itself: Arrived, Arrive anyway,
+  Departed, Liftgate and a direct `POST /api/send-sms`, both opened directly and in
+  the board's frame — zero writes reached Firebase, zero non-GET requests left the
+  page, and the board's `dd_auto_backups` and GPS toggles were untouched. 19/19.
+- **Negative control:** with the Firestore and storage fences removed, the same run
+  catches the test taps writing `manifests/2026-09-25` and a real
+  `liftgateRequests/…` document, and overwriting the board's auto-backups with a
+  snapshot carrying the test's fake stamps — which a restore would have put into
+  production.
+
+### When developing in it
+
+Anything written through `_fbOps`, `fetch` to our functions, or `localStorage` is
+fenced automatically. A new write path that bypasses all three — the Firestore REST
+API called directly, say — would not be. Keep writes on `_fbOps`.
+
 ---
 
 ## Dead code / cleanup (not counted in the tally)
