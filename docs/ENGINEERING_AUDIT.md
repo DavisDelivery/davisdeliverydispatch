@@ -294,6 +294,62 @@ the truck was, and the "on site 30 min+" alert, which cried wolf all morning.
 The 8:47 stamp was first read here as a mis-tap on the wrong card. It was not —
 the liftgate gate above forced it. The fix follows the cause, not the symptom.
 
+
+## 11 · 2026-09-25 — a test copy of the driver app
+
+**More ⋯ → Driver App (test)** opens the real driver app in a phone-sized frame,
+loaded from the real day for whichever driver you pick, so driver-side features
+can be tried and developed against real work. Reset reloads the frame; Open in
+new tab gives the same fenced app full size. The route is `#/sandbox/driver/<slug>`.
+
+### The one rule: it never writes
+
+A tap on Arrived there, landing on the real manifest, would stamp a real
+driver's real record. So the fence sits at the lowest layers, where every write
+already has to pass, not at each button — a feature added to the driver app
+later is fenced the day it is written, without anyone remembering to fence it.
+
+- **Firestore** — `src/sandboxOps.js` replaces `window._fbOps` with an in-memory
+  copy of the documents the page touches, seeded from one real read of each.
+  Subscriptions deliver the real value once, then only local writes, so a tap
+  sticks and a live edit on the board can't snap a test back. The Firebase
+  bootstrap wraps the ops *before* marking Firebase ready, so nothing in the page
+  ever holds the real ones.
+- **Storage** — same origin means the same `localStorage` as the board, and every
+  save snapshots the manifest into `dd_auto_backups`, which the board can restore
+  from. The frame gets a private copy, seeded from the real one.
+- **Network** — non-GET requests to our functions (`/api/*`, `/.netlify/functions/*`)
+  are answered locally, as is the one side-effecting GET (`/api/backup-nightly`).
+  A text message cannot be sent from it.
+- **Browser** — no push-permission prompt, no location watch (it would report the
+  dispatcher's desk as the truck), no IndexedDB persistence lease taken from the
+  board, and no PIN, since the board it opens from has no login of its own.
+
+`src/sandboxBoot.js` installs all of this and is the first import in `main.jsx`,
+so it runs before `App.jsx` is evaluated. It keys off the URL at load and cannot be
+undone without a reload. The router refuses to render the sandbox route on a page
+it did not fence: arriving there by a hash change on the board reloads instead.
+
+### Proof
+
+- 30 unit tests on the firewall; all 26 mutations caught.
+- Driven in a real browser with a fake Firebase SDK served *through the app's real
+  bootstrap*, every write primitive recording itself: Arrived, Arrive anyway,
+  Departed, Liftgate and a direct `POST /api/send-sms`, both opened directly and in
+  the board's frame — zero writes reached Firebase, zero non-GET requests left the
+  page, and the board's `dd_auto_backups` and GPS toggles were untouched. 19/19.
+- **Negative control:** with the Firestore and storage fences removed, the same run
+  catches the test taps writing `manifests/2026-09-25` and a real
+  `liftgateRequests/…` document, and overwriting the board's auto-backups with a
+  snapshot carrying the test's fake stamps — which a restore would have put into
+  production.
+
+### When developing in it
+
+Anything written through `_fbOps`, `fetch` to our functions, or `localStorage` is
+fenced automatically. A new write path that bypasses all three — the Firestore REST
+API called directly, say — would not be. Keep writes on `_fbOps`.
+
 ---
 
 ## Dead code / cleanup (not counted in the tally)

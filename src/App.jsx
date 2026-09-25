@@ -81,7 +81,10 @@ const _fbCfg={apiKey:"AIzaSyDY2OceDzBWMHPR3C3O1oxktrCIy3mKMqU",authDomain:"glory
     const app=initializeApp(${JSON.stringify(_fbCfg)});
     const db=getFirestore(app);
     const storage=getStorage(app);
-    enableIndexedDbPersistence(db).catch(e=>{console.warn("[FB] Offline persistence failed:",e.code);});
+    /* The test driver app runs in a frame beside the board. Persistence is
+       single-tab: letting the frame take the IndexedDB lease would leave the
+       board running without its offline cache. The frame reads, never writes. */
+    if(!window.__ddSandbox)enableIndexedDbPersistence(db).catch(e=>{console.warn("[FB] Offline persistence failed:",e.code);});
     console.log("[FB] SDK loaded, creating ops...");
     window._fbOps={
       write:async(path,data)=>{
@@ -140,8 +143,11 @@ const _fbCfg={apiKey:"AIzaSyDY2OceDzBWMHPR3C3O1oxktrCIy3mKMqU",authDomain:"glory
         });
       }
     };
+    /* Wrapped BEFORE Firebase is marked ready, so in the test driver app no
+       code — this page's or any added later — ever holds the real ops. */
+    if(window.__ddSandboxWrap)window._fbOps=window.__ddSandboxWrap(window._fbOps);
     window._fbLoaded=true;
-    console.log("[FB] ✓ All ops ready");
+    console.log("[FB] ✓ All ops ready"+(window.__ddSandbox?" (sandbox — nothing is written)":""));
   `;
   document.head.appendChild(s);
 })();
@@ -6040,7 +6046,7 @@ return(
 {view!=="manifest"&&<button onClick={()=>{setView("manifest");setSelCust(null);setQuoteMode(null);window.history.replaceState(null,"",window.location.pathname);window.scrollTo(0,0);}} style={{background:BRAND.main,border:"none",color:"#fff",borderRadius:8,padding:"7px 16px",cursor:"pointer",fontSize:12,fontWeight:700}}>{"← Dashboard"}</button>}
 {[{k:"daily",l:"Daily"},{k:"weekly",l:"Weekly"},{k:"routes",l:"Routes"},{k:"add",l:"+ Add"}].map(v=>{const delCount=v.k==="daily"?dl.filter(e=>e.stopType!=="pickup").length:0;return(<button key={v.k} onClick={()=>{setView(v.k);setSelCust(null);setQuoteMode(null);if(v.k==="routes"){setRpInited(false);}}} style={{background:view===v.k?(v.k==="add"?"#16a34a":v.k==="routes"?"#d97706":BRAND.main):v.k==="add"?"#f0fdf4":v.k==="routes"?"#fffbeb":"#fff",border:view===v.k?"none":v.k==="add"?"1px solid #bbf7d0":v.k==="routes"?"1px solid #fde68a":"1px solid #e7e5e4",color:view===v.k?"#fff":v.k==="add"?"#16a34a":v.k==="routes"?"#d97706":"#57534e",borderRadius:8,padding:"7px 14px",cursor:"pointer",fontSize:12,fontWeight:600,display:"inline-flex",alignItems:"center",gap:6}}>{v.l}{v.k==="daily"&&delCount>0&&<span style={{fontSize:10,fontWeight:800,padding:"1px 6px",borderRadius:10,background:view===v.k?"rgba(255,255,255,0.25)":BRAND.pale,color:view===v.k?"#fff":BRAND.main,minWidth:18,textAlign:"center",fontVariantNumeric:"tabular-nums"}}>{delCount}</span>}</button>);})}
 <div style={{position:"relative"}}>
-<button onClick={()=>setShowMoreMenu(!showMoreMenu)} style={{background:view==="history"?BRAND.main:"#fff",border:view==="history"?"none":"1px solid #e7e5e4",color:view==="history"?"#fff":"#57534e",borderRadius:8,padding:"7px 14px",cursor:"pointer",fontSize:12,fontWeight:600}}>{view==="history"?(histMode==="quotes"?"Quotes":histMode==="emser"?"Emser Hrs":"History"):"More ⋯"}</button>
+<button onClick={()=>setShowMoreMenu(!showMoreMenu)} style={{background:view==="history"?BRAND.main:"#fff",border:view==="history"?"none":"1px solid #e7e5e4",color:view==="history"?"#fff":"#57534e",borderRadius:8,padding:"7px 14px",cursor:"pointer",fontSize:12,fontWeight:600}}>{view==="history"?(histMode==="quotes"?"Quotes":histMode==="emser"?"Emser Hrs":histMode==="driverapp"?"Driver App":"History"):"More ⋯"}</button>
 {showMoreMenu&&<><div style={{position:"fixed",inset:0,zIndex:199}} onClick={()=>setShowMoreMenu(false)}/>
 <div style={{position:"absolute",top:"100%",right:0,zIndex:200,background:"#fff",border:"1px solid #e7e5e4",borderRadius:14,padding:6,marginTop:4,boxShadow:"0 12px 40px rgba(0,0,0,0.18)",width:240}}>
 {[
@@ -6048,6 +6054,7 @@ return(
 {icon:"📷",label:"Photos",desc:"Delivery photos & POD",mode:"photos"},
 {icon:"💰",label:"Quotes",desc:"Create & manage quotes",mode:"quotes"},
 {icon:"⏱",label:"Emser Hours",desc:"Track driver shift hours",mode:"emser"},
+{icon:"\ud83e\uddea",label:"Driver App (test)",desc:"Try the driver's phone \u2014 nothing saves",mode:"driverapp"},
 ].map(item=>(
 <button key={item.mode} onClick={()=>{setView("history");setHistMode(item.mode);setShowMoreMenu(false);}}
 style={{display:"flex",alignItems:"center",gap:10,width:"100%",textAlign:"left",padding:"10px 12px",marginBottom:2,borderRadius:10,border:view==="history"&&histMode===item.mode?"2px solid "+BRAND.main:"1px solid transparent",background:view==="history"&&histMode===item.mode?"#f0f5fa":"#fff",cursor:"pointer"}}
@@ -6790,6 +6797,8 @@ return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius
 {Object.keys(wkF).length>0&&<div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:14,padding:"14px 16px",marginBottom:16}}><div style={_s.loadTitle}>Week Fuel Surcharges</div>{Object.entries(wkF).map(([cu,cf])=><div key={cu} style={_s.flexBtwP4}><span style={{fontSize:13}}>{cu} <span style={{fontSize:11,color:"#a8a29e"}}>{fmt(cf.base)} × {Math.round(cf.pct*100)}%</span></span><span style={_s.loadWeight}>{fmt(cf.base*cf.pct)}</span></div>)}</div>}
 </div>}
 {view==="history"&&<div style={{maxWidth:1000,margin:"0 auto"}}>
+{histMode==="driverapp"&&<DriverAppSandbox drivers={visibleDrivers} dayEntries={dl}/>}
+{histMode!=="driverapp"&&<>
 <div style={_s.flexBtwMb16}>
 <h2 style={{margin:0,fontSize:18,fontWeight:700}}>Delivery History</h2>
 </div>
@@ -6799,6 +6808,7 @@ return(<div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius
 <button key={m.k} onClick={()=>setHistMode(m.k)} style={{padding:"8px 16px",borderRadius:8,border:"none",cursor:"pointer",fontSize:12,fontWeight:600,background:histMode===m.k?"#fff":"transparent",color:histMode===m.k?BRAND.main:"#78716c",boxShadow:histMode===m.k?"0 1px 3px rgba(0,0,0,0.08)":"none"}}>{m.l}</button>
 ))}
 </div>
+</>}
 
 {histMode==="emser"&&(()=>{
 const shifts=getEmserDayShifts();
@@ -8515,7 +8525,7 @@ style={{flex:1,border:view===v.k?"2px solid "+BRAND.main:"1px solid #d6d3d1",bor
 );})}
 <button onClick={()=>setShowMoreMenu(true)}
 style={{flex:1,border:view==="history"?"2px solid "+BRAND.main:"1px solid #d6d3d1",borderRadius:10,padding:"9px 2px",cursor:"pointer",fontSize:11,fontWeight:600,background:view==="history"?BRAND.main:"#fff",color:view==="history"?"#fff":BRAND.main}}>
-{view==="history"?(histMode==="quotes"?"Quotes":histMode==="emser"?"Emser":"History"):"More ⋯"}
+{view==="history"?(histMode==="quotes"?"Quotes":histMode==="emser"?"Emser":histMode==="driverapp"?"Driver App":"History"):"More ⋯"}
 </button>
 <button onClick={()=>{setView("add");setSelCust(null);setSelStop(null);setQuoteMode(null);setInsertPickupFor(null);setMultiSelect(false);setMultiChecked([]);setShowMoreMenu(false);}}
 style={{flex:1,border:"2px solid #16a34a",borderRadius:10,padding:"9px 2px",cursor:"pointer",fontSize:11,fontWeight:600,background:view==="add"?"#16a34a":"#fff",color:view==="add"?"#fff":"#16a34a"}}>+ Add</button>
@@ -8531,6 +8541,7 @@ style={{flex:1,border:"2px solid #16a34a",borderRadius:10,padding:"9px 2px",curs
 {icon:"📷",label:"Photos",desc:"Delivery photos & POD signatures",mode:"photos"},
 {icon:"💰",label:"Quotes",desc:"Create and manage delivery quotes",mode:"quotes"},
 {icon:"⏱",label:"Emser Hours",desc:"Track driver shift hours for Emser",mode:"emser"},
+{icon:"\ud83e\uddea",label:"Driver App (test)",desc:"Try the driver's phone and develop there \u2014 nothing you do is saved",mode:"driverapp"},
 ].map(item=>(
 <button key={item.mode} onClick={()=>{setView("history");setHistMode(item.mode);setShowMoreMenu(false);}}
 style={{display:"flex",alignItems:"center",gap:12,width:"100%",textAlign:"left",padding:"14px 12px",marginBottom:6,borderRadius:12,border:view==="history"&&histMode===item.mode?"2px solid #7c3aed":"1px solid #e7e5e4",background:view==="history"&&histMode===item.mode?"#f3e8ff":"#fff",cursor:"pointer"}}>
@@ -9105,7 +9116,8 @@ style={{width:80,border:"1px solid #e7e5e4",borderRadius:6,padding:"3px 6px",fon
 
 {}
 {view==="history"&&<div>
-<div style={{padding:"16px 4px 8px"}}><h2 style={{margin:0,fontSize:16,fontWeight:600}}>{histMode==="quotes"?"Quotes":histMode==="emser"?"Emser Hours":histMode==="photos"?"Photos":"Delivery History"}</h2><p style={{margin:"4px 0 0",fontSize:12,color:"#78716c"}}>{histMode==="emser"?"Track Emser driver hours":histMode==="quotes"?"Create and manage delivery quotes":histMode==="photos"?"Delivery photos & proof of delivery":"Search deliveries and proof of delivery"}</p></div>
+{histMode==="driverapp"&&<DriverAppSandbox drivers={visibleDrivers} dayEntries={dl}/>}
+{histMode!=="driverapp"&&<div style={{padding:"16px 4px 8px"}}><h2 style={{margin:0,fontSize:16,fontWeight:600}}>{histMode==="quotes"?"Quotes":histMode==="emser"?"Emser Hours":histMode==="photos"?"Photos":"Delivery History"}</h2><p style={{margin:"4px 0 0",fontSize:12,color:"#78716c"}}>{histMode==="emser"?"Track Emser driver hours":histMode==="quotes"?"Create and manage delivery quotes":histMode==="photos"?"Delivery photos & proof of delivery":"Search deliveries and proof of delivery"}</p></div>}
 
 {histMode==="emser"&&(()=>{
 const shifts=getEmserDayShifts();
@@ -10269,7 +10281,53 @@ style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,width:"
 </div>
 );
 }
-function DriverPage({driverSlug}){
+/* More ⋯ → Driver App (test). The real driver app in a phone-sized frame,
+   loaded from the real day, fenced so nothing tapped in it is written, sent or
+   seen (sandboxOps.js, sandboxBoot.js). Pick whose phone to look through;
+   Reset throws the test away and loads the day fresh. Built for trying and
+   developing driver-side features against real work without touching it. */
+function DriverAppSandbox({drivers,dayEntries}){
+const list=drivers||[];
+const day=dayEntries||[];
+const stopsFor=(id)=>day.filter(e=>e.driverId===id&&e.stopType!=="pickup").length;
+const[pick,setPick]=useState(()=>{const busy=list.find(d=>stopsFor(d.id)>0);return(busy||list[0]||{}).id;});
+const[resetN,setResetN]=useState(0);
+const drv=list.find(d=>d.id===pick)||list[0];
+if(!drv)return <div style={{padding:24,color:"#78716c",fontSize:13}}>No drivers on the roster yet.</div>;
+/* The id suffix resolves the right person when two drivers share a first name. */
+const src=window.location.pathname+"#/sandbox/driver/"+getDriverSlug(drv.name)+"-"+drv.id;
+const first=drv.name.split(" ")[0];
+const btn={background:"#fff",border:"1px solid #d6d3d1",borderRadius:9,padding:"8px 14px",cursor:"pointer",fontSize:12,fontWeight:700,color:"#44403c",textDecoration:"none",display:"inline-flex",alignItems:"center",gap:6,whiteSpace:"nowrap"};
+return(<div style={{maxWidth:960,margin:"0 auto",padding:"12px 4px 24px"}}>
+<div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12,flexWrap:"wrap",marginBottom:12}}>
+<div style={{minWidth:0,flex:"1 1 320px"}}>
+<h2 style={{margin:0,fontSize:18,fontWeight:800,letterSpacing:"-0.01em"}}>{"\ud83e\uddea"} Driver App (test)</h2>
+<p style={{margin:"6px 0 0",fontSize:12.5,color:"#57534e",lineHeight:1.5,maxWidth:560}}>The driver app exactly as {first} sees it, loaded from the real manifest. <b style={{color:"#9a3412"}}>Nothing you tap here is saved, sent, or seen by anyone</b> {"\u2014"} Arrived, Departed, liftgate requests, photos and texts all stay in this frame. Reset throws the test away.</p>
+</div>
+<div style={{display:"flex",gap:6,flexShrink:0}}>
+<button onClick={()=>setResetN(n=>n+1)} style={btn} title="Throw this test away and load the day fresh">{"\u21bb"} Reset</button>
+<a href={src} target="_blank" rel="noopener" style={btn} title="The same fenced test app, full size">{"\u2197"} Open in new tab</a>
+</div>
+</div>
+<div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:16}}>
+{list.map((d,di)=>{const on=d.id===drv.id;const n=stopsFor(d.id);const col=DCOL[di]||BRAND.main;return(
+<button key={d.id} onClick={()=>setPick(d.id)} style={{display:"inline-flex",alignItems:"center",gap:6,padding:"6px 12px",borderRadius:9,cursor:"pointer",fontSize:12,fontWeight:700,border:on?"2px solid "+col:"1px solid #e7e5e4",background:on?col:"#fff",color:on?"#fff":"#44403c"}}>
+<span style={{width:8,height:8,borderRadius:3,background:on?"#fff":col}}/>{d.name.split(" ")[0]}
+{n>0&&<span style={{fontSize:10,fontWeight:800,padding:"0 6px",borderRadius:8,background:on?"rgba(255,255,255,0.25)":"#f5f5f4",color:on?"#fff":"#78716c"}}>{n}</span>}
+</button>);})}
+</div>
+<div style={{display:"flex",justifyContent:"center"}}>
+<div style={{width:"100%",maxWidth:410,borderRadius:38,padding:11,background:"#1c1917",boxShadow:"0 24px 60px rgba(0,0,0,0.28)"}}>
+{/* A new key is a new frame: switching drivers or pressing Reset reloads it,
+    and a reload is what re-reads the day and throws the test away. */}
+<iframe key={drv.id+"-"+resetN} src={src} title={"Driver app test \u2014 "+drv.name}
+style={{display:"block",width:"100%",height:"min(780px, calc(100vh - 220px))",minHeight:520,border:"none",borderRadius:28,background:"#f5f5f4"}}/>
+</div>
+</div>
+</div>);
+}
+
+function DriverPage({driverSlug,sandbox=false}){
 const[wo,setWo]=useState(()=>_defaultWoSd().wo);
 const[sd,setSd]=useState(()=>_defaultWoSd().sd);
 /* Day context for the Finishing Dynamics cutoff badge. `sd` IS the weekday
@@ -10282,7 +10340,9 @@ const fdCtx={day:sd,today:fdToday,now:fdNow};
 const[log,setLog]=useState({});
 const[toast,setToast]=useState(null);
 const[pinEntry,setPinEntry]=useState("");
-const[authenticated,setAuthenticated]=useState(false);
+/* The test app is opened from the board, which has no login of its own, so
+   a PIN in front of it protects nothing the board doesn't already show. */
+const[authenticated,setAuthenticated]=useState(!!sandbox);
 const getPin=(phone)=>{const digits=(phone||"").replace(/\D/g,"");return digits.length>=4?digits.slice(-4):"0000";};
 const[sigStop,setSigStop]=useState(null);
 const[shipPlanInputs,setShipPlanInputs]=useState({});
@@ -10412,15 +10472,22 @@ useEffect(()=>{
   return()=>unsubs.forEach(u=>u());
 },[driverId]);
 useEffect(()=>{
+  /* The test app would register the DISPATCHER's browser as this driver's
+     phone for push. Fenced writes make that harmless, but the permission
+     prompt isn't. */
+  if(sandbox)return;
   if(authenticated&&driverId){
     requestPushPermission().then(token=>{
       if(token)saveDriverToken(driverId,token);
     });
   }
-},[authenticated,driverId]);
+},[authenticated,driverId,sandbox]);
 
 useEffect(()=>{
   if(!authenticated||!driverId)return;
+  /* In the test app this would report the dispatcher's desk as the truck.
+     The manual Refresh GPS button still works, and still writes nowhere. */
+  if(sandbox)return;
   let watchId=null;
   const sendPos=(pos)=>{
     driverPosRef.current={lat:pos.coords.latitude,lng:pos.coords.longitude,ts:Date.now()};
@@ -10434,7 +10501,7 @@ useEffect(()=>{
     if(navigator.geolocation){navigator.geolocation.getCurrentPosition(sendPos,()=>{},{enableHighAccuracy:false,timeout:10000});}
   },60000);
   return()=>{if(watchId!==null)navigator.geolocation.clearWatch(watchId);clearInterval(interval);};
-},[authenticated,driverId]);
+},[authenticated,driverId,sandbox]);
 const[drvSaveStatus,setDrvSaveStatus]=useState("");
 const drvPendingRef=useRef(null);
 const saveDriverLog=useCallback((newLog)=>{
@@ -10626,7 +10693,11 @@ const needsShipPlan=(e)=>e.customer==="IMETCO";
 return(
 <div style={{fontFamily:"'DM Sans',system-ui,sans-serif",background:"#f5f5f4",color:"#1c1917",minHeight:"100vh",maxWidth:480,margin:"0 auto"}}>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet"/>
-{toast&&<div style={{position:"fixed",top:20,left:"50%",transform:"translateX(-50%)",background:"#16a34a",color:"#fff",padding:"10px 24px",borderRadius:12,fontWeight:600,fontSize:14,zIndex:999,boxShadow:"0 8px 32px rgba(22,163,74,0.3)",animation:"slideDown 0.3s ease"}}>✓ {toast}</div>}
+{sandbox&&<div style={{position:"sticky",top:0,zIndex:998,background:"repeating-linear-gradient(135deg,#7c2d12 0 14px,#9a3412 14px 28px)",color:"#fff",padding:"8px 14px",fontSize:12,fontWeight:700,display:"flex",alignItems:"center",gap:8,boxShadow:"0 2px 8px rgba(0,0,0,0.25)"}}>
+<span style={{fontSize:15}}>{"\ud83e\uddea"}</span>
+<span style={{flex:1,lineHeight:1.3}}>TEST MODE — nothing you do here is saved, sent, or seen by anyone</span>
+</div>}
+{toast&&<div style={{position:"fixed",top:sandbox?64:20,left:"50%",transform:"translateX(-50%)",background:"#16a34a",color:"#fff",padding:"10px 24px",borderRadius:12,fontWeight:600,fontSize:14,zIndex:999,boxShadow:"0 8px 32px rgba(22,163,74,0.3)",animation:"slideDown 0.3s ease"}}>✓ {toast}</div>}
 
 {arriveGuard&&(()=>{
 /* The app never stamps a time on the driver's behalf. Every button here is a
@@ -11043,6 +11114,18 @@ class ErrorBoundary extends Component {
 
 export default function App(){
 const hash=useHashRoute();
+const sandboxMatch=hash.match(/^#\/sandbox\/driver\/([a-z0-9-]+)$/i);
+if(sandboxMatch){
+  /* The fence is decided once, at load (sandboxBoot.js). Arriving here by a
+     hash change on an unfenced page — the board, a real driver link — would
+     render the test app with REAL writes. Reload instead, so the boot module
+     runs and fences the page before anything mounts. */
+  if(!window.__ddSandbox||window.__ddSandboxBroken){
+    if(!window.__ddSandboxBroken)window.location.reload();
+    return <div style={{padding:24,fontFamily:"system-ui",color:"#b91c1c"}}>{window.__ddSandboxBroken?"Test mode could not isolate this page ("+window.__ddSandboxBroken+"), so it will not open.":"Opening test mode\u2026"}</div>;
+  }
+  return <ErrorBoundary><DriverPage driverSlug={sandboxMatch[1].toLowerCase()} sandbox/></ErrorBoundary>;
+}
 const driverMatch=hash.match(/^#\/driver\/([a-z0-9-]+)$/i);
 if(driverMatch){
 const slug=driverMatch[1].toLowerCase();
