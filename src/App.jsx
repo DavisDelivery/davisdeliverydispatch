@@ -65,6 +65,8 @@ import { PICKUP_SOURCES, MULTI_PICKUP, normLoc as _normLoc } from "./pickupConfi
 import { dedupeIds, dedupeAutoPickups, dedupeGhostDeliveries, dedupeDeliveries, reapOrphanAutoPickups, sanitizeEntry, _mergeEntryDriver, _mergeEntryDispatcher, buildMergedEntries, entrySig, makeTombFilter, makeDocTombFilter, mergeTombstones, vanishedAutoPickups, orderByIds, reconcileDriverRoster, applyDriverRemap, normDriverName, manualPickupCoversDock, allInRate, stripLiftgateFee, resequenceEntries, sortBySeq, normalizeOrder, orderAutoPickupsFirst, manualPickupOrigin, deliveryCollectedOffDock, qualifyPickupName, rebuildPickupsForPure, withLiveLoadOrder, insertIdxForLoad, applyReassign, applySetLoadNum, reorderDriverBlock as _reorderDriverBlock, applyMoveInDriver, applyReorderDriver, applyDropReorder, resolvePickupLabel, finishingDynamicsFlag, FD_FLAG_COLORS, fdCutoffMins, fmtClock, visibleTruckDriverIds, orderRosterRows, mergeDriverLocs, lastKnownLoc, gpsAgeMs, gpsAgeLabel, stopPinFill, isDoneStop, doneStopSvg, DONE_PIN_PX, arrivalWarnings, openStopsFor, driversWithOverlap } from "./manifestLogic.js";
 import { diffOrderDocs, orderDocId, ordersParity } from "./ordersStore.js";
 import { FDFlag, useMinuteTick } from "./FDFlag.jsx";
+import { classifyGoogleStatus, geocodeDecision, nextFailure, nominatimQuery, mapStatusLabel, LOOKUP_TIMEOUT_MS } from "./geocodePolicy.js";
+import { fanOutOffsets, symbolAnchorFor, imageAnchorFor } from "./mapLayout.js";
 
 const _SplitUI=({splitEntry,setSplitEntry})=>{const tw=splitEntry.totalWeight||0;const t1w=splitEntry.truck1Weight!==undefined?splitEntry.truck1Weight:Math.round(tw*(splitEntry.ratio/100));const t2w=tw-t1w;return(<><div style={_s.flexG6Mb6}><div style={_s.f1}><label style={_s.labelSm}>Total</label><input type="number" inputMode="numeric" value={tw||""} onChange={e=>{const newTw=parseInt(e.target.value)||0;setSplitEntry(p=>({...p,totalWeight:newTw,truck1Weight:Math.min(p.truck1Weight||Math.round(newTw/2),newTw)}));}} style={_s.splitTotal}/></div><div style={_s.f1}><label style={_s.labelBlue}>Truck 1</label><input type="number" inputMode="numeric" value={splitEntry.truck1Weight!==undefined?splitEntry.truck1Weight:""} onChange={e=>{const v=e.target.value;setSplitEntry(p=>({...p,truck1Weight:v===""?0:parseInt(v)||0}));}} style={_s.splitInput}/></div><div style={_s.f1}><label style={_s.labelGray}>Truck 2</label><div style={_s.splitT2}>{t2w.toLocaleString()}</div></div></div><input type="range" min={0} max={tw} step={100} value={t1w} onChange={e=>{const v=parseInt(e.target.value)||0;setSplitEntry(p=>({...p,truck1Weight:v}));}} style={_s.slider}/></>);};
 
@@ -1184,7 +1186,7 @@ try{
 const s=document.createElement("script");
 s.src="https://maps.googleapis.com/maps/api/js?key=AIzaSyB29mVeZXedDhLVT3eMVgl07EsOneWCUu4&libraries=places,geometry";
 s.async=true;
-s.onload=()=>{_gmpState="ready";};
+s.onload=()=>{_gmpState="ready";/* addresses that were waiting for Google get asked now */if(_geocodeNotify)_geocodeNotify();};
 s.onerror=()=>{_gmpState="failed";};
 document.head.appendChild(s);
 }catch(e){_gmpState="failed";}
@@ -1269,7 +1271,8 @@ markersRef.current.forEach(({marker,infoWindow,labelDiv})=>{marker.setMap(null);
 polylinesRef.current.forEach(p=>p.setMap(null));
 };
 },[]);/* eslint-disable-line react-hooks/exhaustive-deps */
-const makeDueLabel=(map,pos,text)=>{
+const makeDueLabel=(map,pos,text,off)=>{
+const _odx=(off&&off.dx)||0,_ody=(off&&off.dy)||0;
 if(!window.google?.maps?.OverlayView)return null;
 const isWindow=text.includes("–")||text.includes("-")&&text.match(/\d.*–.*\d/);
 const isPickupBy=text.toLowerCase().startsWith("pickup by");
@@ -1296,8 +1299,8 @@ const proj=this.getProjection();
 const pt=proj.fromLatLngToDivPixel(new window.google.maps.LatLng(this.pos.lat,this.pos.lng));
 if(!pt)return;
 const w=this.div.offsetWidth||60;
-this.div.style.left=(pt.x-w/2)+"px";
-this.div.style.top=(pt.y-32)+"px";
+this.div.style.left=(pt.x-w/2+_odx)+"px";
+this.div.style.top=(pt.y-32+_ody)+"px";
 }
 onRemove(){if(this.div&&this.div.parentNode){this.div.parentNode.removeChild(this.div);this.div=null;}}
 }
@@ -1328,10 +1331,14 @@ if(!stops||stops.length===0)return;
 
 const bounds=new window.google.maps.LatLngBounds();
 const drvStops={};
+/* Stops at one building share one point; fan their pins out so none hides
+   another (mapLayout.js). The true point is kept for bounds and route lines. */
+const _fan=fanOutOffsets(stops);
 
 stops.forEach(s=>{
 if(!s.coords)return;
 const pos={lat:s.coords.lat,lng:s.coords.lng};
+const off=_fan.get(String(s.id))||{dx:0,dy:0};
 bounds.extend(pos);
 
 const di=drivers.findIndex(d=>d.id===s.driverId);
@@ -1358,13 +1365,15 @@ const fillOpacity=done?0.4:hasActive&&!isActiveDriverStop&&isAssigned?0.5:1;
 const doneIcon={
 url:"data:image/svg+xml;charset=UTF-8,"+encodeURIComponent(doneStopSvg(fillColor)),
 scaledSize:new window.google.maps.Size(DONE_PIN_PX,DONE_PIN_PX),
-anchor:new window.google.maps.Point(DONE_PIN_PX/2,DONE_PIN_PX/2),
+anchor:(()=>{const a=imageAnchorFor(off,DONE_PIN_PX,DONE_PIN_PX);return new window.google.maps.Point(a.x,a.y);})(),
 };
+const symScale=isPU?Math.min(scale,6):scale;
+const symAnchor=(()=>{const a=symbolAnchorFor(off,symScale);return new window.google.maps.Point(a.x,a.y);})();
 const marker=new window.google.maps.Marker({
 position:pos,map,
 icon:done?doneIcon:{
 path:isPU?'M -2,-2 L 0,-4 L 2,-2 L 2,2 L -2,2 Z':window.google.maps.SymbolPath.CIRCLE,
-scale:isPU?Math.min(scale,6):scale,fillColor,fillOpacity,strokeColor,strokeWeight,
+scale:symScale,fillColor,fillOpacity,strokeColor,strokeWeight,anchor:symAnchor,
 },
 zIndex:done?1:onSite?10:isActiveDriverStop?9:isP?8:5,
 title:s.stop,
@@ -1373,12 +1382,12 @@ label:s.routeOrder>0&&!done?{text:String(s.routeOrder),color:"#fff",fontSize:"10
 });
 let labelOverlay=null;
 if(s.dueBy){
-labelOverlay=makeDueLabel(map,pos,s.dueBy);
+labelOverlay=makeDueLabel(map,pos,s.dueBy,off);
 }
 let pickupLabelOverlay=null;
 if(s.pickupDueBy&&s.stopType!=="pickup"){
 const puPos={lat:pos.lat+(s.dueBy?0.008:0),lng:pos.lng};
-pickupLabelOverlay=makeDueLabel(map,puPos,s.pickupDueBy);
+pickupLabelOverlay=makeDueLabel(map,puPos,s.pickupDueBy,off);
 }
 const addr=s.addr||getAddr(s.stop);
 const drvName=drivers.find(d=>d.id===s.driverId)?.name?.split(" ")[0]||"";
@@ -1424,7 +1433,7 @@ if(onStopClick)onStopClick(s.id);
 if(onSite&&!done){
 const pulse=new window.google.maps.Marker({
 position:pos,map,
-icon:{path:window.google.maps.SymbolPath.CIRCLE,scale:20,fillColor:"#f59e0b",fillOpacity:0.12,strokeColor:"#f59e0b",strokeWeight:1.5,strokeOpacity:0.4},
+icon:{path:window.google.maps.SymbolPath.CIRCLE,scale:20,fillColor:"#f59e0b",fillOpacity:0.12,strokeColor:"#f59e0b",strokeWeight:1.5,strokeOpacity:0.4,anchor:(()=>{const a=symbolAnchorFor(off,20);return new window.google.maps.Point(a.x,a.y);})()},
 zIndex:0,clickable:false,
 });
 markersRef.current.push({marker:pulse,labelOverlay:null});
@@ -2425,36 +2434,57 @@ function _normalizeAddr(addr){
   return s;
 }
 
-/* Kick off a Google geocode for an address. Caches result under normalized key.
-   Only caches HIGH-CONFIDENCE results (ROOFTOP, RANGE_INTERPOLATED, GEOMETRIC_CENTER).
-   APPROXIMATE results (city centroids) are rejected because they produce wrong pins. */
+/* Look an address up, by the rules in geocodePolicy.js: wait for Google rather
+   than spend the address on Nominatim while Maps is still loading; ask Nominatim
+   only when Google has answered that it can't find the place; back off after a
+   failure instead of asking again on every redraw; and never let a lookup that
+   doesn't answer lock the address out. Caches under the normalized key.
+   APPROXIMATE (city-centroid) and Nominatim answers are kept but flagged
+   low-confidence, so the pin says it may be off. */
+const _geoFail={}; /* normalized address -> {tries, retryAt}. In memory: a reload asks afresh. */
+let _googleWait=null;
+function _whenGoogleReady(){
+  if(_googleWait)return;
+  const started=Date.now();
+  _googleWait=setInterval(()=>{
+    if(window.google?.maps?.Geocoder){clearInterval(_googleWait);_googleWait=null;if(_geocodeNotify)_geocodeNotify();}
+    else if(Date.now()-started>60000){clearInterval(_googleWait);_googleWait=null;}
+  },250);
+}
 function _kickoffGeocode(addr){
   if(!addr||typeof addr!=="string")return;
   const nk=_normalizeAddr(addr);
   if(!nk)return;
-  if(_dynamicCoords["_pending_"+nk])return;
+  const decision=geocodeDecision({googleReady:!!window.google?.maps?.Geocoder,pending:!!_dynamicCoords["_pending_"+nk],failure:_geoFail[nk],now:Date.now()});
+  if(decision==="wait-for-google"){loadGoogleMaps();_whenGoogleReady();return;}
+  if(decision!=="google")return;
   _dynamicCoords["_pending_"+nk]=true;
   /* Append ", USA" if missing so Google doesn't misinterpret US addresses as foreign */
   const query=/\busa\b|\bunited states\b/i.test(addr)?addr:addr+", USA";
-  const finish=()=>{delete _dynamicCoords["_pending_"+nk];};
+  let done=false;
+  let guard=null;
+  const finish=()=>{done=true;if(guard)clearTimeout(guard);delete _dynamicCoords["_pending_"+nk];};
+  /* A real answer is always taken, even one that lands after the timeout. */
+  const store=(v)=>{_dynamicCoords[nk]=v;delete _geoFail[nk];_saveGeoCache();finish();if(_geocodeNotify)_geocodeNotify();};
+  const fail=()=>{if(done)return;_geoFail[nk]=nextFailure(_geoFail[nk],Date.now());finish();if(_geocodeNotify)_geocodeNotify();};
+  guard=setTimeout(fail,LOOKUP_TIMEOUT_MS);
   const nominatimFallback=()=>{
-    fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1&countrycodes=us`,{headers:{"Accept":"application/json"}})
-      .then(r=>r.json())
+    const q2=nominatimQuery(addr);
+    const nq=/\busa\b|\bunited states\b/i.test(q2)?q2:q2+", USA";
+    fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(nq)}&limit=1&countrycodes=us`,{headers:{"Accept":"application/json"}})
+      .then(r=>r.ok?r.json():[])
       .then(data=>{
-        if(data[0]){
-          _dynamicCoords[nk]={lat:parseFloat(data[0].lat),lng:parseFloat(data[0].lon),type:"NOMINATIM",at:Date.now()};
-          _saveGeoCache();
-          if(_geocodeNotify)_geocodeNotify();
-        }
-        finish();
+        if(Array.isArray(data)&&data[0])store({lat:parseFloat(data[0].lat),lng:parseFloat(data[0].lon),type:"NOMINATIM",lowConfidence:true,at:Date.now()});
+        else fail();
       })
-      .catch(()=>{finish();});
+      .catch(fail);
   };
   try{
-    if(window.google?.maps?.Geocoder){
-      const geocoder=new window.google.maps.Geocoder();
-      geocoder.geocode({address:query,componentRestrictions:{country:"US"}},(results,status)=>{
-        if(status==="OK"&&results&&results[0]){
+    const geocoder=new window.google.maps.Geocoder();
+    geocoder.geocode({address:query,componentRestrictions:{country:"US"}},(results,status)=>{
+      try{
+        const cls=classifyGoogleStatus(status);
+        if(cls==="ok"&&results&&results[0]){
           const r=results[0];
           const loc=r.geometry.location;
           const lt=r.geometry.location_type;
@@ -2462,26 +2492,27 @@ function _kickoffGeocode(addr){
              somewhere, but flag low-confidence so UI can warn the user. */
           if(lt==="APPROXIMATE"){
             console.warn("[Geocode] Low-confidence (APPROXIMATE) result for:",addr,"— address needs street-level detail to be accurate");
-            _dynamicCoords[nk]={lat:loc.lat(),lng:loc.lng(),type:"APPROXIMATE",lowConfidence:true,at:Date.now(),formatted:r.formatted_address};
-            _saveGeoCache();
-            if(_geocodeNotify)_geocodeNotify();
-            finish();
+            store({lat:loc.lat(),lng:loc.lng(),type:"APPROXIMATE",lowConfidence:true,at:Date.now(),formatted:r.formatted_address});
             return;
           }
-          _dynamicCoords[nk]={lat:loc.lat(),lng:loc.lng(),type:lt,at:Date.now(),formatted:r.formatted_address};
-          _saveGeoCache();
-          if(_geocodeNotify)_geocodeNotify();
-          finish();
-        }else{
-          nominatimFallback();
+          store({lat:loc.lat(),lng:loc.lng(),type:lt,at:Date.now(),formatted:r.formatted_address});
         }
-      });
-    }else{
-      nominatimFallback();
-    }
-  }catch(e){
-    nominatimFallback();
-  }
+        else if(cls==="retry")fail();
+        else nominatimFallback();
+      }catch(e){fail();}
+    });
+  }catch(e){fail();}
+}
+
+/* Where a stop's lookup stands, for the board to say so. Call after getCoords. */
+function _geocodeState(addr){
+  if(!addr||typeof addr!=="string"||!addr.trim())return "no-address";
+  const nk=_normalizeAddr(addr);
+  if(_dynamicCoords[nk]&&_dynamicCoords[nk].lat)return "ok";
+  if(_dynamicCoords["_pending_"+nk])return "pending";
+  if(_geoFail[nk])return "failed";
+  if(!window.google?.maps?.Geocoder)return "waiting";
+  return "pending";
 }
 
 /* Force re-geocode for an address — clears cache entry and re-queries Google.
@@ -2491,10 +2522,12 @@ function _refreshCoords(addr){
   const nk=_normalizeAddr(addr);
   delete _dynamicCoords[nk];
   delete _dynamicCoords["_pending_"+nk];
+  delete _geoFail[nk]; /* a person asked — the backoff doesn't apply */
   /* Also clear any legacy exact-match entries */
   delete _dynamicCoords[addr];
   _saveGeoCache();
   _kickoffGeocode(addr);
+  if(_geocodeNotify)_geocodeNotify();
 }
 if(typeof window!=="undefined"){window._ddRefreshCoords=_refreshCoords;}
 
@@ -3433,7 +3466,12 @@ const renderTextInbox=()=>{
   );
 };
 
-useEffect(()=>{_geocodeNotify=()=>{};return()=>{_geocodeNotify=null;};},[]);
+/* Redraw when a lookup lands. This was an empty function from the day it was
+   written (b86e265), so a stop's coordinates could arrive and sit in the cache
+   until something unrelated redrew the board — the pin missing the whole time.
+   Coalesced: thirty addresses answering in a burst are one redraw, not thirty. */
+const[,setGeoTick]=useState(0);
+useEffect(()=>{let t=null;_geocodeNotify=()=>{if(t)return;t=setTimeout(()=>{t=null;setGeoTick(n=>n+1);},150);};return()=>{if(t)clearTimeout(t);_geocodeNotify=null;};},[]);
 const[msgChannel,setMsgChannel]=useState(null); /* null=group, driverId=private */
 const[msgInput,setMsgInput]=useState("");
 const[allMessages,setAllMessages]=useState({}); /* {channelKey: [{id,from,text,time,fromName},...]} */
@@ -5953,6 +5991,8 @@ const renderTriageBar=()=>{
      never tapped or an arrival was tapped from somewhere else — either way one
      of those stamps is wrong, and the dwell flag above won't say so until the
      stale one crosses thirty minutes. */
+  const unmapped=dl.filter(e=>!getCoords(e.addr||getAddr(e.stop))).length;
+  if(unmapped)flags.push({key:"unmapped",label:unmapped>1?"stops not on the map":"stop not on the map",count:unmapped,level:"warn"});
   const overlap=driversWithOverlap(dl);
   if(overlap.length)flags.push({key:"overlap",label:overlap.length>1?"drivers on site at 2+ stops":"driver on site at 2+ stops",count:overlap.length,level:"crit"});
   let over=0;drivers.forEach(d=>{getDriverLoads(d.id).forEach(ln=>{if(getLoadWeight(d.id,ln)>getDriverCapacity(d.id))over++;});});
@@ -7608,6 +7648,23 @@ style={{display:"flex",alignItems:"center",gap:4,padding:"4px 8px",borderRadius:
 {mapActiveDrv&&<button onClick={()=>{setMapActiveDrv(null);setMapActiveLoad(1);}} style={{fontSize:10,color:"#78716c",background:"none",border:"none",cursor:"pointer",padding:"4px 6px"}}>✕ Clear</button>}
 {!mapActiveDrv&&<span style={{fontSize:10,color:"#a8a29e",fontStyle:"italic"}}>or click any stop to see details</span>}
 </div>
+{(()=>{
+/* A stop without coordinates is dropped from the map, and it used to vanish
+   without a word — the only Fix Location button lives on a pin, which is the
+   one thing such a stop doesn't have. Name them, and say where each one stands. */
+const miss=dl.filter(e=>!getCoords(e.addr||getAddr(e.stop)));
+if(!miss.length)return null;
+return(<div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:10,padding:"8px 12px",marginBottom:8}}>
+<div style={{fontSize:12,fontWeight:700,color:"#92400e",marginBottom:4}}>{"\ud83d\udccd"} {miss.length} stop{miss.length>1?"s aren't":" isn't"} on the map</div>
+{miss.map(e=>{const a=e.addr||getAddr(e.stop);const st=_geocodeState(a);return(
+<div key={e.id} style={{display:"flex",alignItems:"center",gap:8,fontSize:11,color:"#78350f",padding:"2px 0",minWidth:0}}>
+<span style={{fontWeight:700,flexShrink:0}}>{e.stop}</span>
+<span style={{color:"#a16207",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",minWidth:0}}>{a}</span>
+<span style={{marginLeft:"auto",flexShrink:0,fontStyle:"italic",color:st==="failed"?"#b91c1c":"#a16207"}}>{mapStatusLabel(st)}</span>
+{a&&st==="failed"&&<button onClick={()=>_refreshCoords(a)} style={{flexShrink:0,background:"#fff",border:"1px solid #fcd34d",borderRadius:6,padding:"2px 8px",cursor:"pointer",fontSize:10,fontWeight:700,color:"#92400e"}}>Locate</button>}
+</div>);})}
+</div>);
+})()}
 <GoogleMapView stops={stopsWithCoords2} drivers={drivers} fdCtx={fdCtx} height={Math.max(500,window.innerHeight-280)} showSearch={true} searchLabel="Search address on map…"
 activeDriver={mapActiveDrv} activeLoad={mapActiveLoad}
 onAssignStop={mapActiveDrv?(stopId,drvId)=>{assignInOrder(stopId,mapActiveDrv,mapActiveLoad);}:null} driverLocs={driverLocs}/>

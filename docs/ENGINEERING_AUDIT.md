@@ -350,6 +350,64 @@ Anything written through `_fbOps`, `fetch` to our functions, or `localStorage` i
 fenced automatically. A new write path that bypasses all three — the Firestore REST
 API called directly, say — would not be. Keep writes on `_fbOps`.
 
+
+## 12 · 2026-09-29 — a delivery with no pin
+
+### The report
+
+Precision Flooring – Norcross, 1750 Corporate Drive, Suite 740 — unassigned —
+showed on the board with no pin on the map.
+
+### What it was
+
+**Not the address.** Google geocodes it ROOFTOP, exact match, and it is already in
+the built-in `COORDS` table with the right coordinates, so this stop gets a marker
+on every load with or without Google. The card and the map read the same string
+(`entry.addr||getAddr(entry.stop)`, the unassigned card and `stopsWithCoords2`).
+
+**It was drawn underneath another stop.** Vanguard – Norcross is Suite 700 of the
+same building, and `COORDS` gives both suites the identical point. A routed pin is
+20px across and an unassigned one 16px, so the unassigned Precision pin vanished
+completely under Vanguard's. Reproduced: four stops, three pins; Precision under
+pin 2. (Confirming that Vanguard, or another stop in that building, was on the
+reported day needed a read of production data, which was not available here.)
+
+- [x] 🟠 **High — stops in one building drew as one pin.** `mapLayout.js`
+      fans co-located pins out on a small ring in screen pixels around the true
+      point, at every zoom, deterministically so they don't swap on redraw. It
+      applies to stop circles, pickup markers, done checks, the on-site pulse and
+      the due labels. Route lines and bounds keep the true point. Both pins verified
+      clickable, each opening its own stop.
+
+### Found on the way, fixed too
+
+The geocoder had three ways to leave a *valid* address with no pin at all — none of
+them this stop's, all of them real:
+
+- [x] 🟠 **High — the redraw hook was an empty function.** `_geocodeNotify` has been
+      `()=>{}` since it was written (b86e265). A lookup's answer landed in the cache
+      and nothing redrew until something unrelated did (the GPS poll, up to 20s).
+      It now triggers a coalesced redraw, and Maps finishing its load does too.
+- [x] 🟠 **High — every page load spent the first lookup on Nominatim.** Maps loads
+      after the first render, so every uncached address went to OpenStreetMap's
+      Nominatim first. Nominatim can't find 1750 Corporate Drive at all — with or
+      without the suite — and what it does find was cached for good, never re-asked
+      of Google: the same low-quality entries the v3.11.62 migration once purged.
+      Measured on a page load: two Nominatim lookups at 0.8s before; none after.
+      Google is now waited for, and Nominatim is asked only when Google has answered
+      that it can't find a place — with the suite stripped, since it can't parse one.
+- [x] 🟡 **Medium — a lookup that never answered locked the address out.** It stayed
+      marked in-progress for the rest of the session. Lookups now time out at 20s.
+- [x] 🟡 **Medium — a failed lookup was retried on every redraw.** It now backs off
+      15s, 30s, 1m … up to 30 minutes; a person pressing Locate skips the wait.
+- [x] 🟡 **Medium — a pinless stop disappeared without a word.** The Live Routes map
+      now lists stops that aren't on it, with where each lookup stands ("waiting for
+      the map to load", "locating…", "address not found" with Locate, "no address on
+      file"), and the triage bar counts them. The only Fix Location button used to
+      live on a pin, which is the one thing such a stop doesn't have.
+
+19 policy tests and 17 layout tests; all 33 mutations caught.
+
 ---
 
 ## Dead code / cleanup (not counted in the tally)
