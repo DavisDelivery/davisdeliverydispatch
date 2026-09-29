@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { fanOutOffsets, spotKey, ringRadius, symbolAnchorFor, imageAnchorFor, MIN_GAP_PX } from "./mapLayout.js";
+import { fanOutOffsets, spotKey, ringRadius, symbolAnchorFor, imageAnchorFor, MIN_GAP_PX, buildingMates } from "./mapLayout.js";
 
 /* The field report: Precision Flooring (Suite 740) and Vanguard (Suite 700) are
    both 1750 Corporate Drive, Norcross, at identical coordinates. The routed
@@ -128,5 +128,67 @@ describe("junk in, nothing out", () => {
   it("survives no stops at all", () => {
     expect(fanOutOffsets(null).size).toBe(0);
     expect(fanOutOffsets([]).size).toBe(0);
+  });
+});
+
+describe("one click on a building takes the building", () => {
+  /* The follow-up report: in click-to-assign, a click on 1750 Corporate Drive
+     put one stop on the driver and left the other unassigned, hidden under it. */
+  const OTHER = { lat: 33.95, lng: -84.2 };
+  const D = (id, o = {}) => ({ id, coords: CORP, driverId: 0, stopType: "delivery", status: null, ...o });
+
+  it("takes the other unassigned stop at the same building", () => {
+    const precision = D("precision"), vanguard = D("vanguard");
+    expect(buildingMates(vanguard, [precision, vanguard])).toEqual(["precision"]);
+    expect(buildingMates(precision, [precision, vanguard])).toEqual(["vanguard"]);
+  });
+
+  it("takes every unassigned stop there, in a fixed order", () => {
+    const all = [D("c"), D("a"), D("b")];
+    expect(buildingMates(all[0], all)).toEqual(["a", "b"]);
+    expect(buildingMates(all[0], [...all].reverse())).toEqual(["a", "b"]);
+  });
+
+  it("never takes a stop another driver already has", () => {
+    /* A click never moves someone else's work. */
+    expect(buildingMates(D("precision"), [D("precision"), D("vanguard", { driverId: 3 })])).toEqual([]);
+  });
+
+  it("never takes a finished stop", () => {
+    expect(buildingMates(D("precision"), [D("vanguard", { status: "departed" })])).toEqual([]);
+  });
+
+  it("leaves auto pickups to follow their deliveries, but takes a manual one", () => {
+    const auto = D("pu", { stopType: "pickup" });
+    const manual = D("mpu", { stopType: "pickup", manualPickup: true });
+    expect(buildingMates(D("x"), [auto, manual])).toEqual(["mpu"]);
+  });
+
+  it("leaves the building next door alone", () => {
+    expect(buildingMates(D("precision"), [D("elsewhere", { coords: OTHER })])).toEqual([]);
+  });
+
+  it("never lists the clicked stop, however its id is spelled", () => {
+    expect(buildingMates(D(7), [D("7"), D(8)])).toEqual([8]);
+  });
+
+  it("lists a stop once even if the day carries it twice", () => {
+    expect(buildingMates(D("x"), [D("y"), D("y")])).toEqual(["y"]);
+  });
+
+  it("uses whatever 'already assigned' means to the caller", () => {
+    /* The planners keep assignment in their own route lists, not on driverId. */
+    const planned = new Set(["vanguard"]);
+    expect(buildingMates(D("precision"), [D("vanguard")], (s) => planned.has(s.id))).toEqual([]);
+    expect(buildingMates(D("precision"), [D("vanguard")], () => false)).toEqual(["vanguard"]);
+  });
+
+  it("has nothing to say about a stop with no coordinates", () => {
+    expect(buildingMates(D("x", { coords: null }), [D("y")])).toEqual([]);
+    /* Two stops with no location are not one building: without the guard,
+       null === null and a click on one address-less stop took all the others. */
+    expect(buildingMates(D("x", { coords: null }), [D("y", { coords: null }), D("z", { coords: undefined })])).toEqual([]);
+    expect(buildingMates(null, [D("y")])).toEqual([]);
+    expect(buildingMates(D("x"), null)).toEqual([]);
   });
 });

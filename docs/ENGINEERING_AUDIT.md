@@ -408,6 +408,33 @@ them this stop's, all of them real:
 
 19 policy tests and 17 layout tests; all 33 mutations caught.
 
+### Follow-up: one click took one stop
+
+In click-to-assign, a click on 1750 Corporate Drive put one stop on the driver and
+left the other unassigned, still hidden under it. All three maps' handlers —
+`assignInOrder` (Live Routes), `rpClick` (Route Planner), `handleStopClick`
+(RouteBuilder) — only moved "siblings" with the same stop name *and* the same
+address, which is duplicate orders to one customer. Precision and Vanguard are two
+customers with two suite numbers.
+
+- [x] 🟠 **High — one click on a building now takes every stop there that nobody
+      has yet** (`buildingMates` in `mapLayout.js`), in one state update, only when
+      adding. A stop already on a driver is never taken, a finished one never
+      moved, an auto pickup left to follow its deliveries. Taking a stop *off* a
+      route still takes only that stop and its duplicates. Verified on the board
+      and in the Route Planner: one click puts both on Trevor as stops 3 and 4; a
+      third tenant already on Brent's truck stays on Brent's.
+- [x] 🟠 **High — in the Route Planner and RouteBuilder, tapping one half of a split
+      order pulled the other half off another truck.** Their sibling rule wasn't
+      limited to the route the tapped stop sits on — the bug `assignInOrder` had
+      already fixed and documented. All three now agree. Negative control: under the
+      old rule, clicking the unassigned half of a split DCO Smyrna put both halves on
+      Trevor and emptied Brent's route; with the fix Brent keeps his.
+
+The building rule: 11 tests, all 11 mutations caught — including the one that
+mattered, two stops with no coordinates at all (`null === null`) being read as the
+same building.
+
 ---
 
 ## Dead code / cleanup (not counted in the tally)

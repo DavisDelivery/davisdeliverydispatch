@@ -66,7 +66,7 @@ import { dedupeIds, dedupeAutoPickups, dedupeGhostDeliveries, dedupeDeliveries, 
 import { diffOrderDocs, orderDocId, ordersParity } from "./ordersStore.js";
 import { FDFlag, useMinuteTick } from "./FDFlag.jsx";
 import { classifyGoogleStatus, geocodeDecision, nextFailure, nominatimQuery, mapStatusLabel, LOOKUP_TIMEOUT_MS } from "./geocodePolicy.js";
-import { fanOutOffsets, symbolAnchorFor, imageAnchorFor } from "./mapLayout.js";
+import { fanOutOffsets, symbolAnchorFor, imageAnchorFor, buildingMates } from "./mapLayout.js";
 
 const _SplitUI=({splitEntry,setSplitEntry})=>{const tw=splitEntry.totalWeight||0;const t1w=splitEntry.truck1Weight!==undefined?splitEntry.truck1Weight:Math.round(tw*(splitEntry.ratio/100));const t2w=tw-t1w;return(<><div style={_s.flexG6Mb6}><div style={_s.f1}><label style={_s.labelSm}>Total</label><input type="number" inputMode="numeric" value={tw||""} onChange={e=>{const newTw=parseInt(e.target.value)||0;setSplitEntry(p=>({...p,totalWeight:newTw,truck1Weight:Math.min(p.truck1Weight||Math.round(newTw/2),newTw)}));}} style={_s.splitTotal}/></div><div style={_s.f1}><label style={_s.labelBlue}>Truck 1</label><input type="number" inputMode="numeric" value={splitEntry.truck1Weight!==undefined?splitEntry.truck1Weight:""} onChange={e=>{const v=e.target.value;setSplitEntry(p=>({...p,truck1Weight:v===""?0:parseInt(v)||0}));}} style={_s.splitInput}/></div><div style={_s.f1}><label style={_s.labelGray}>Truck 2</label><div style={_s.splitT2}>{t2w.toLocaleString()}</div></div></div><input type="range" min={0} max={tw} step={100} value={t1w} onChange={e=>{const v=parseInt(e.target.value)||0;setSplitEntry(p=>({...p,truck1Weight:v}));}} style={_s.slider}/></>);};
 
@@ -2625,9 +2625,15 @@ if(!activeDriver)return;
 const entry=deliveryEntries.find(e=>e.id===entryId);
 if(!entry)return;
 const addr=entry.addr||getAddr(entry.stop);
+/* Which route a stop is on, 0 for none. */
+const routeOf=(id)=>{for(const[d,a]of Object.entries(routeOrders)){if((a||[]).includes(id))return Number(d);}return 0;};
+const here=routeOf(entryId);
+/* Duplicates move together — only ones sitting where the tapped stop sits, as
+   on the board; otherwise one half of a split order pulled the other half off
+   another truck. */
 const siblings=deliveryEntries.filter(e=>{
   const ea=e.addr||getAddr(e.stop);
-  return e.stop===entry.stop&&ea===addr;
+  return e.stop===entry.stop&&ea===addr&&routeOf(e.id)===here;
 });
 const idsToAdd=siblings.map(e=>e.id);
 if(driverRoute.includes(entryId)){
@@ -2636,17 +2642,20 @@ if(driverRoute.includes(entryId)){
   else idsToAdd.forEach(id=>onAssign(id,0));
   return;
 }
+/* one click, one building (mapLayout.js) */
+const _wc=(e)=>({...e,coords:getCoords(e.addr||getAddr(e.stop))});
+const takeIds=[...idsToAdd,...buildingMates(_wc(entry),deliveryEntries.map(_wc),e=>routeOf(e.id)>0).filter(id=>!idsToAdd.includes(id))];
 setRouteOrders(p=>{
   const updated={...p};
   Object.entries(updated).forEach(([did,ids])=>{
-    if(Number(did)!==activeDriver){updated[did]=ids.filter(id=>!idsToAdd.includes(id));}
+    if(Number(did)!==activeDriver){updated[did]=ids.filter(id=>!takeIds.includes(id));}
   });
   const cur=updated[activeDriver]||[];
-  const ni=idsToAdd.filter(id=>!cur.includes(id));
+  const ni=takeIds.filter(id=>!cur.includes(id));
   updated[activeDriver]=[...cur,...ni];
   return updated;
 });
-const newIds=idsToAdd.filter(id=>!(routeOrders[activeDriver]||[]).includes(id));
+const newIds=takeIds.filter(id=>!(routeOrders[activeDriver]||[]).includes(id));
 if(newIds.length>0){
   if(onAssignBulk)onAssignBulk(newIds,activeDriver);
   else newIds.forEach(id=>onAssign(id,activeDriver));
@@ -4794,7 +4803,13 @@ const _sameStop=dl.filter(e=>e.stop===entry.stop&&(e.addr||getAddr(e.stop))===en
 /* A quote's pickup leg and its delivery (shared pairId) are one job: whichever
    is tapped, the partner sitting in the same place comes along, pickup first. */
 const _pairMates=entry.pairId?dl.filter(e=>e.id!==entry.id&&e.pairId===entry.pairId&&e.driverId===entry.driverId&&!_sameStop.some(x=>x.id===e.id)):[];
-const siblings=[..._sameStop,..._pairMates].sort((a,b)=>(a.stopType==="pickup"?0:1)-(b.stopType==="pickup"?0:1));
+/* One click on a building takes the other stops there that nobody has yet
+   (mapLayout.js). Only when adding: a click that takes a stop off a route takes
+   off that stop and its duplicates, nothing else. */
+const _wc=(e)=>({...e,coords:getCoords(e.addr||getAddr(e.stop))});
+const _bIds=entry.driverId===did?[]:buildingMates(_wc(entry),dl.map(_wc),e=>e.driverId>0);
+const _building=dl.filter(e=>_bIds.includes(e.id)&&!_sameStop.some(x=>x.id===e.id)&&!_pairMates.some(x=>x.id===e.id));
+const siblings=[..._sameStop,..._pairMates,..._building].sort((a,b)=>(a.stopType==="pickup"?0:1)-(b.stopType==="pickup"?0:1));
 const sibIds=siblings.map(e=>e.id);
 const driverName=(nid)=>nid===0?"Unassigned":(drivers.find(x=>x.id===nid)?.name||"Driver "+nid);
 if(entry.driverId===did){
@@ -6244,13 +6259,23 @@ svc.route({origin,destination:dest,waypoints,travelMode:window.google.maps.Trave
 const rpClick=(entryId)=>{if(!rpActive)return;
 const entry=dl.find(e=>e.id===entryId);
 const addr=entry?(entry.addr||getAddr(entry.stop)):"";
-const siblings=entry?dl.filter(e=>(e.addr||getAddr(e.stop))===addr&&e.stop===entry.stop).map(e=>e.id):[entryId];
+/* Which plan route a stop is on, 0 for none. */
+const routeOf=(id)=>{for(const[d,a]of Object.entries(rpOrders)){if((a||[]).includes(id))return Number(d);}return 0;};
+const here=routeOf(entryId);
+/* Duplicates move together — but only ones sitting where the tapped stop sits.
+   The board's handler learned this (assignInOrder); without it, tapping one
+   half of a split order pulled the other half off another truck. */
+const siblings=entry?dl.filter(e=>(e.addr||getAddr(e.stop))===addr&&e.stop===entry.stop&&routeOf(e.id)===here).map(e=>e.id):[entryId];
 const ids=rpOrders[rpActive]||[];
 if(ids.includes(entryId)){
   setRpOrders(p=>({...p,[rpActive]:ids.filter(x=>!siblings.includes(x))}));
 }else{
-  const cl={};Object.entries(rpOrders).forEach(([d,a])=>{cl[d]=a.filter(x=>!siblings.includes(x));});
-  cl[rpActive]=[...(cl[rpActive]||[]),...siblings.filter(s=>!(cl[rpActive]||[]).includes(s))];
+  /* one click, one building (mapLayout.js) */
+  const _wc=(e)=>({...e,coords:getCoords(e.addr||getAddr(e.stop))});
+  const mates=entry?buildingMates(_wc(entry),dl.map(_wc),e=>routeOf(e.id)>0).filter(id=>!siblings.includes(id)):[];
+  const take=[...siblings,...mates];
+  const cl={};Object.entries(rpOrders).forEach(([d,a])=>{cl[d]=a.filter(x=>!take.includes(x));});
+  cl[rpActive]=[...(cl[rpActive]||[]),...take.filter(s=>!(cl[rpActive]||[]).includes(s))];
   setRpOrders(cl);
 }};
 

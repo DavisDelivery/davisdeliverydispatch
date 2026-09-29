@@ -67,3 +67,28 @@ export const imageAnchorFor = (off, w, h) => ({
   x: w / 2 - ((off && off.dx) || 0),
   y: h / 2 - ((off && off.dy) || 0),
 });
+
+/* ═══ ONE CLICK, ONE BUILDING ═══
+
+   In click-to-assign, one click on a building takes every stop there that
+   nobody has yet — the truck is going to that door anyway. The rule used to be
+   "same stop name and same address", which only ever matched duplicate orders
+   to one customer: Precision (Suite 740) and Vanguard (Suite 700) share 1750
+   Corporate Drive, and a click took whichever pin was on top and left the other
+   unassigned, hidden underneath it.
+
+   Never taken: a stop already on a driver (a click never moves someone else's
+   work), a finished stop, and an auto pickup (those follow their deliveries on
+   their own). Returns the mates' ids, not the clicked stop's, in a fixed order. */
+export const buildingMates = (clicked, stops, isTaken) => {
+  if (!clicked) return [];
+  const k = spotKey(clicked.coords);
+  if (!k) return [];
+  const taken = typeof isTaken === "function" ? isTaken : (s) => Number(s && s.driverId) > 0;
+  return (Array.isArray(stops) ? stops : [])
+    .filter((s) => s && s.id != null && String(s.id) !== String(clicked.id) && spotKey(s.coords) === k)
+    .filter((s) => !taken(s) && s.status !== "departed" && !(s.stopType === "pickup" && !s.manualPickup))
+    .map((s) => s.id)
+    .filter((id, i, a) => a.findIndex((x) => String(x) === String(id)) === i)
+    .sort((a, b) => String(a).localeCompare(String(b)));
+};
